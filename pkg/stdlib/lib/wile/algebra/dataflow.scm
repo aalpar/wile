@@ -164,6 +164,18 @@ Keywords: reverse postorder, DFS, worklist, dataflow
 See also: `run-analysis'."
   (unless (cfg-protocol? protocol)
     (error "reverse-postorder: expected cfg-protocol" protocol))
+  (if (null? blocks)
+      '()
+      (%reverse-postorder-from blocks protocol
+                               (list (cfg-index-of protocol (car blocks))))))
+
+;; Reverse postorder of the DFS forest grown from each of ROOTS in turn, one
+;; visited set shared across them. A later root's tree is prepended, so it
+;; lands BEFORE every earlier tree: an edge between trees can only run from a
+;; later tree into an earlier one (anything an earlier tree reaches is already
+;; in it), so every such edge still goes from a lower rank to a higher one and
+;; rank(pred) >= rank(block) keeps meaning "back edge".
+(define (%reverse-postorder-from blocks protocol roots)
   (let ((block-map (map (lambda (b) (cons (cfg-index-of protocol b) b)) blocks)))
     (define (succs-of-idx idx)
       (let ((entry (assv idx block-map)))
@@ -176,10 +188,8 @@ See also: `run-analysis'."
           (set! visited (cons idx visited))
           (for-each dfs (succs-of-idx idx))
           (set! result (cons idx result))))
-      (if (null? blocks)
-          '()
-          (begin (dfs (cfg-index-of protocol (car blocks)))
-                 result)))))
+      (for-each dfs roots)
+      result)))
 
 ;; ─── Result accessors ─────────────────────
 
@@ -271,7 +281,8 @@ Optional args may appear in any order:
     are symbols (e.g. `sign-lattice`) can safely use this API.
   - `'check-monotone` — enable monotonicity-violation detection
     during iteration; raises if `transfer` produces a lower out-state
-    on re-visit.
+    on re-visit. Without it, monotonicity is the caller's contract: a
+    transfer that oscillates surfaces only as the revisit-cap error.
   - `(widen OP)` — tagged widening operator `(lambda (cur next) widened)`
     applied at loop headers (back-edge targets) in place of raw join.
     Required for termination on infinite-height lattices such as the
@@ -283,10 +294,17 @@ Returns a per-block result alist shaped `((idx in out) ...)`. Use
 `analysis-in` / `analysis-out` / `analysis-states` to query.
 
 Terminates when no block's out-state changes across a worklist pass.
-Every block reachable from a seed block (in the analysis direction) is
-visited at least once.
+Forward, the worklist starts from the entry, and every block reachable
+from it is visited at least once; a block the entry cannot reach is
+never transferred and reports bottom for both states. Backward, the
+worklist starts from every block, so a block with no path to an exit
+(a loop that never leaves, or a CFG with no exit at all) is still
+transferred; `initial-state` lands on the exit blocks only.
 Worklist is rank-ordered by reverse postorder (forward) or reverse
-of reverse postorder (backward) for efficient propagation.
+of reverse postorder (backward) for efficient propagation. Blocks the
+entry cannot reach are ranked too, by a DFS from each in turn, ahead
+of the reachable ones in forward order, so a cycle among them has a
+widening point when it runs backward.
 
 Parameters:
   direction : symbol
@@ -341,7 +359,11 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
                           (unless e
                             (error "run-analysis: index referenced by preds/succs is not in blocks (malformed CFG)" idx))
                           (cdr e))))
-           (rpo (reverse-postorder blocks protocol))
+           ;; Every block is ranked, the entry's RPO plus a DFS from each block
+           ;; it missed (see %reverse-postorder-from for why those land first).
+           (rpo (%reverse-postorder-from
+                  blocks protocol
+                  (map (lambda (b) (cfg-index-of protocol b)) blocks)))
            (order (if forward? rpo (reverse rpo)))
            (rank-map (let loop ((os order) (r 0) (m '()))
                        (if (null? os) m
@@ -366,15 +388,18 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
            ;; of the natural-loop headers (RPO-rank back-edges), which costs
            ;; precision but never termination.
            ;;
-           ;; rank-or-false tolerates indices absent from the RPO rank-map —
-           ;; blocks (or predecessors) unreachable from entry. Forward, such an
-           ;; orphan is never enqueued, its out-state stays bottom and joins
-           ;; harmlessly. Backward, orphans ARE dequeued and processed (a
-           ;; generator at an orphan gives out = top); they cannot leak into
-           ;; ranked states because the orphan set is closed under backward
-           ;; flow. An orphan is never a widening point, so an orphan cycle
-           ;; run backward is not widened (filed under "Filed by the P6.8
-           ;; crosscheck").
+           ;; Blocks the entry cannot reach (orphans) rank before every
+           ;; reachable block in forward order. Forward, an orphan is never
+           ;; enqueued, its out-state stays bottom and joins harmlessly; an
+           ;; orphan predecessor ranks below its reachable successor, so it
+           ;; never turns that successor into a widening point. Backward,
+           ;; orphans are processed like any other block (a generator at an
+           ;; orphan gives out = top); they cannot leak into reachable states
+           ;; because the orphan set is closed under backward flow, and an
+           ;; orphan cycle has its own back edge, so it is widened.
+           ;;
+           ;; rank-or-false still answers #f for an index that names no block
+           ;; (a malformed CFG), so the widening scan does not crash on it.
            (rank-or-false (lambda (idx)
                             (let ((e (assv idx rank-map)))
                               (and e (cdr e)))))
@@ -428,10 +453,9 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
                      (list idx in-val out-val)
                      entry))
                states)))
-      ;; The rank map is built from the FORWARD RPO in both directions, so only a
-      ;; backward run reaches an index absent from it (a block unreachable from
-      ;; the entry, reached as a flow successor or seeded as an exit). Such an
-      ;; index sorts after every ranked one.
+      ;; Every block is ranked, so an unranked index names no block (a
+      ;; malformed CFG); it sorts after every ranked one and block-ref
+      ;; reports it when it is dequeued.
       (define (worklist-insert wl idx)
         (if (memv idx wl) wl
             (let ((ri (rank-or-false idx)))
@@ -459,7 +483,11 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
       ;; only the cap): the convergence test below never suppresses vc = 1.
       (define max-revisits 100000)
       (define visits (make-equal-hashtable))
-      (let loop ((wl (worklist-insert-all '() seed-idxs)))
+      ;; Backward starts from every block: seeding only the exits leaves a
+      ;; block with no path to an exit untransferred, so a liveness-style
+      ;; analysis would call it all-bottom (dead) when it is not. Forward keeps
+      ;; the entry seed: seeding every block there may cost precision, unmeasured.
+      (let loop ((wl (worklist-insert-all '() (if forward? seed-idxs order))))
         (if (null? wl)
             states
             (let* ((idx (car wl))
@@ -468,12 +496,16 @@ See also: `make-cfg-protocol', `init-state', `analysis-in',
                 ;; idx is the caller's protocol index — an opaque value (symbol,
                 ;; integer, …), so it goes in the irritants, not the message
                 ;; (mirrors the monotonicity-violation error below).
+                ;; The solver cannot tell the three causes apart here, so the
+                ;; message names all of them.
                 (error (string-append
                         "run-analysis: a block exceeded "
                         (number->string max-revisits)
-                        " revisits without converging — the lattice likely has"
-                        " infinite height (e.g. interval); supply (widen OP) to"
-                        " bound the ascending chain at loop headers")
+                        " revisits without converging. Causes: an infinite-"
+                        "height lattice (e.g. interval) with no (widen OP) to"
+                        " bound the ascending chain at loop headers; a"
+                        " non-monotone transfer (rerun with 'check-monotone to"
+                        " locate it); or a widen OP that does not bound the chain")
                        (list 'block idx 'direction direction)))
               (hashtable-set! visits idx vc)
               (let* ((rest-wl (cdr wl))
