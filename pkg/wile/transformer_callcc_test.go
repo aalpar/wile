@@ -677,8 +677,9 @@ func TestStaleRuntimeContinuationAtTopLevelExpansionIsAnError(t *testing.T) {
 // what a library remembers of a body that invoked a runtime continuation. The
 // first instantiation, run by a runtime form, hands the resume to that form's
 // driver, which resumes the continuation (count 2). The memoized failure a later
-// import receives is a continuation barrier error, not the signal: remembered as
-// is, every later import resumed the continuation again (count 3, 4, ...).
+// import receives is ErrLibraryInstantiationEscaped, not the signal: remembered
+// as is, every later import resumed the continuation again (count 3, 4, ...). It
+// is not a continuation barrier error either, since no barrier was crossed.
 func TestLibraryBodyThatExitedThroughAContinuationIsNotReplayedByLaterImports(t *testing.T) {
 	t.Parallel()
 
@@ -707,11 +708,12 @@ func TestLibraryBodyThatExitedThroughAContinuationIsNotReplayedByLaterImports(t 
 	                                    (if (< (vector-ref cell 1) 4) (environment '(probe user)))
 	                                    (vector-ref cell 1)))`)
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, errors.Is(err, werr.ErrContinuationBarrier), qt.IsTrue, qt.Commentf("%v", err))
+	qt.Assert(t, errors.Is(err, werr.ErrLibraryInstantiationEscaped), qt.IsTrue, qt.Commentf("%v", err))
+	qt.Assert(t, errors.Is(err, werr.ErrContinuationBarrier), qt.IsFalse, qt.Commentf("%v", err))
 	var resumeErr *machine.ErrResumeContinuation
 	qt.Assert(t, errors.As(err, &resumeErr), qt.IsFalse)
 	qt.Assert(t, err.Error(), qt.Contains, "exited through a continuation")
-	// The barrier error keeps the library's location reachable, as the first
+	// The remembered error keeps the library's location reachable, as the first
 	// importer's error does: the cut chain must not take it along.
 	var se *compilation.SourcedError
 	qt.Assert(t, errors.As(err, &se), qt.IsTrue, qt.Commentf("%v", err))
@@ -726,9 +728,9 @@ func TestLibraryBodyThatExitedThroughAContinuationIsNotReplayedByLaterImports(t 
 // hands the body's abort to that prompt: its handler runs once and the body's
 // after thunk runs once. A later import must not re-deliver the remembered
 // abort: the body did not run again, so neither may its after thunk nor the
-// handler of whichever prompt the later import runs under. It receives a
-// continuation barrier error instead. Remembered as is, every later import ran
-// both again (cell #(2 2), #(3 3), ...).
+// handler of whichever prompt the later import runs under. It receives
+// ErrLibraryInstantiationEscaped instead. Remembered as is, every later import
+// ran both again (cell #(2 2), #(3 3), ...).
 func TestLibraryBodyThatExitedThroughAnAbortIsNotReplayedByLaterImports(t *testing.T) {
 	t.Parallel()
 
@@ -775,14 +777,15 @@ func TestLibraryBodyThatExitedThroughAnAbortIsNotReplayedByLaterImports(t *testi
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, cell.SchemeString(), qt.Equals, "#(1 1)")
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, errors.Is(err, werr.ErrContinuationBarrier), qt.IsTrue, qt.Commentf("%v", err))
+	qt.Assert(t, errors.Is(err, werr.ErrLibraryInstantiationEscaped), qt.IsTrue, qt.Commentf("%v", err))
+	qt.Assert(t, errors.Is(err, werr.ErrContinuationBarrier), qt.IsFalse, qt.Commentf("%v", err))
 	var abortErr *machine.ErrPromptAbort
 	qt.Assert(t, errors.As(err, &abortErr), qt.IsFalse, qt.Commentf("%v", err))
 	var se *compilation.SourcedError
 	qt.Assert(t, errors.As(err, &se), qt.IsTrue, qt.Commentf("%v", err))
 	qt.Assert(t, se.Source.Location(), qt.Equals, "probe/user.sld:1:0")
 	qt.Assert(t, se.Cause.Error(), qt.Equals,
-		"library (probe user): its body exited through an abort to prompt #<continuation-prompt-tag:p> when it was first instantiated: continuation barrier violation")
+		"library (probe user): its body exited through an abort to prompt #<continuation-prompt-tag:p> when it was first instantiated: library instantiation exited through a control transfer")
 }
 
 // TestAbortAtTopLevelExpansionIsAnError is the abort form of the stale-resume
@@ -818,6 +821,38 @@ func TestAbortAtTopLevelExpansionIsAnError(t *testing.T) {
 	qt.Assert(t, ce.Source, qt.Equals, ":2:41")
 	qt.Assert(t, err.Error(), qt.Equals,
 		"expand/compile error: :2:41: abort-current-continuation: no prompt found for tag #<continuation-prompt-tag:nowhere> at expansion time: invalid argument")
+}
+
+// TestTopLevelImportOfAnAbortingLibraryBodyIsRememberedAsEscaped pins what a
+// later top-level import reports for a body that aborted to a tag nothing
+// holds. The first import fails as any expansion-time abort with no prompt does
+// ("no prompt found"); a later one gets the remembered
+// ErrLibraryInstantiationEscaped at the library's form, and the body does not
+// run again. It used to get ErrContinuationBarrier, although nothing crossed a
+// barrier and the first import reported none.
+func TestTopLevelImportOfAnAbortingLibraryBodyIsRememberedAsEscaped(t *testing.T) {
+	t.Parallel()
+
+	eng := newLibraryBodyProbeEngine(t, `(abort-current-continuation (make-continuation-prompt-tag 'nowhere) 'v)`)
+	_, err := eng.EvalMultiple(context.Background(), `(import (probe box))`)
+	qt.Assert(t, err, qt.IsNil)
+	_, err = eng.EvalMultiple(context.Background(), `(import (probe user))`)
+	qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue, qt.Commentf("%v", err))
+	qt.Assert(t, errors.Is(err, werr.ErrLibraryInstantiationEscaped), qt.IsFalse, qt.Commentf("%v", err))
+	qt.Assert(t, err.Error(), qt.Contains, "no prompt found")
+	for range 2 {
+		_, err = eng.EvalMultiple(context.Background(), `(import (probe user))`)
+		qt.Assert(t, errors.Is(err, werr.ErrLibraryInstantiationEscaped), qt.IsTrue, qt.Commentf("%v", err))
+		qt.Assert(t, errors.Is(err, werr.ErrContinuationBarrier), qt.IsFalse, qt.Commentf("%v", err))
+		var abortErr *machine.ErrPromptAbort
+		qt.Assert(t, errors.As(err, &abortErr), qt.IsFalse, qt.Commentf("%v", err))
+		// Located at the library's form, inside the import's own location.
+		qt.Assert(t, err.Error(), qt.Contains,
+			"probe/user.sld:1:0: library (probe user): its body exited through an abort to prompt #<continuation-prompt-tag:nowhere>")
+	}
+	cell, ok := eng.Get("cell")
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, cell.SchemeString(), qt.Equals, "#(1 0)")
 }
 
 // TestBootstrapBodyHasADriver pins the third expansion-time root: a bootstrap
@@ -999,7 +1034,7 @@ func TestLibraryBodyFailingAfterItsCtxEndedIsRememberedAsIs(t *testing.T) {
 // TestLibraryBodyThatRaisedIsRememberedAsTheSameRaise pins the rule
 // memoizableInstantiateError's resume and abort conversions stop short of: an
 // uncaught raise is the body's ordinary failure, and a later import sees the
-// same raise, not a continuation barrier error.
+// same raise, not ErrLibraryInstantiationEscaped.
 func TestLibraryBodyThatRaisedIsRememberedAsTheSameRaise(t *testing.T) {
 	t.Parallel()
 
@@ -1009,7 +1044,7 @@ func TestLibraryBodyThatRaisedIsRememberedAsTheSameRaise(t *testing.T) {
 	var msgs []string
 	for range 2 {
 		_, err = eng.EvalMultiple(context.Background(), `(environment '(probe user))`)
-		qt.Assert(t, errors.Is(err, werr.ErrContinuationBarrier), qt.IsFalse, qt.Commentf("%v", err))
+		qt.Assert(t, errors.Is(err, werr.ErrLibraryInstantiationEscaped), qt.IsFalse, qt.Commentf("%v", err))
 		var escape *machine.ErrExceptionEscape
 		qt.Assert(t, errors.As(err, &escape), qt.IsTrue, qt.Commentf("%v", err))
 		qt.Assert(t, escape.Source.Location(), qt.Equals, "probe/user.sld:5:10")

@@ -29,6 +29,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **BREAKING (Go API): a later import of a library whose body exited through a
+  continuation or an abort fails with the new `werr.ErrLibraryInstantiationEscaped`,
+  not `werr.ErrContinuationBarrier`.** The body runs once and its exit is
+  remembered; no barrier was crossed, and a top-level `(import ...)` whose body
+  aborts to a tag nothing holds reported "no prompt found" the first time and
+  a barrier violation after. The first import's error is unchanged; the later
+  one still names how the body exited and is located at the library's form.
+
 - **BREAKING (behavior): `char-ready?` requires a textual input port.** It
   answered `#t` without looking at its argument, so `(char-ready? 5)`, a binary
   input port and an output port all answered `#t`; each is now an error, as
