@@ -29,20 +29,26 @@ import (
 // it in the exhaustiveness set tools/cmd/typeswitchlint derives from this package,
 // which enumerates the types a Scheme datum can be.
 //
-// The three int fields make it comparable, so == is the equality operator;
-// there is no EqualTo.
+// The three fields make it comparable, so == is the equality operator; there
+// is no EqualTo.
+//
+// column and line are int32 so a SourceContext, which carries two of these,
+// stays in the 96-byte allocation class (TestSourceContextFitsItsSizeClass).
+// The accessors still speak int. A line past 2^31-1 characters, or a stream
+// past 2^31-1 lines, wraps; index stays int because a long-lived port stream
+// can pass 2 GiB.
 type SourceIndexes struct {
 	index  int
-	column int
-	line   int
+	column int32
+	line   int32
 }
 
 // NewSourceIndexes creates a new SourceIndexes with the given position.
 func NewSourceIndexes(index, column, line int) SourceIndexes {
 	q := SourceIndexes{
 		index:  index,
-		column: column,
-		line:   line,
+		column: int32(column),
+		line:   int32(line),
 	}
 	return q
 }
@@ -54,18 +60,18 @@ func (p SourceIndexes) Index() int {
 
 // Column returns the column number within the current line (0-based).
 func (p SourceIndexes) Column() int {
-	return p.column
+	return int(p.column)
 }
 
 // Line returns the line number (1-based).
 func (p SourceIndexes) Line() int {
-	return p.line
+	return int(p.line)
 }
 
 // Inc advances the position by n characters on the same line.
 func (p *SourceIndexes) Inc(n int) int {
 	p.index += n
-	p.column += n
+	p.column += int32(n)
 	return p.index
 }
 
