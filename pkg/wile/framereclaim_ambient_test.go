@@ -79,7 +79,7 @@ func classifyAmbient(ctx context.Context, t *testing.T, wrapped string, immutabl
 
 	result := validate.ValidateExpression(ctx, env, expanded)
 	if !result.Ok() {
-		t.Fatalf("validate: %s", result.Error())
+		t.Fatalf("validate: %s", result.Errors)
 	}
 	unit := []validate.ValidatedExpr{result.Expr}
 

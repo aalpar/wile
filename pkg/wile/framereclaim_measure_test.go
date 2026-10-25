@@ -250,7 +250,7 @@ func classifyCompiled(ctx context.Context, wrapped string, immutable bool) (map[
 	// Validated tree (for the classifier) from the single expansion.
 	result := validate.ValidateExpression(ctx, env, expanded)
 	if !result.Ok() {
-		return nil, fmt.Errorf("validate: %s", result.Error())
+		return nil, fmt.Errorf("validate: %s", result.Errors)
 	}
 	unit := []validate.ValidatedExpr{result.Expr}
 

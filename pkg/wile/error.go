@@ -46,9 +46,9 @@ type CompilationError struct {
 	Condition Value // the condition Scheme would see; nil when there is no cause
 
 	// structured is true when Cause's own text already renders Source — which is
-	// the case whenever the innermost *compilation.SourcedError carries a
-	// location, since that is the one link in the chain that prefixes it
-	// (SourcedError.Error suppresses the outer ones). Error() then omits its own
+	// the case whenever any *compilation.SourcedError in the chain carries a
+	// location, since the deepest located one prefixes it (SourcedError.Error
+	// suppresses the others). Error() then omits its own
 	// prefix rather than emitting "file:line:col: … file:line:col: …". Same
 	// discipline as RuntimeError.structured, applied to the location alone: the
 	// cause text here IS the diagnostic, so it cannot be dropped wholesale.

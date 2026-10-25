@@ -16,18 +16,16 @@ package validate
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 )
 
-// DefaultMaxOriginDepth is the default maximum number of macro expansions to show
-// in error messages. Set to 0 for unlimited depth.
-const DefaultMaxOriginDepth = 10
-
-// ValidationError captures location and details for error reporting
+// ValidationError captures location and details for error reporting. It does
+// not render the macro-origin chain on Source.Origin: the compiler carries the
+// error on a compilation.SourcedError stamped with Source, and that is the one
+// place the chain is rendered, so it is never printed twice.
 type ValidationError struct {
 	Source  *syntax.SourceContext
 	Message string
@@ -35,28 +33,16 @@ type ValidationError struct {
 }
 
 func (p ValidationError) Error() string {
-	return p.ErrorWithMaxOriginDepth(DefaultMaxOriginDepth)
+	loc := p.Source.Location()
+	if loc == "" {
+		return p.Failure()
+	}
+	return loc + ": " + p.Failure()
 }
 
-// ErrorWithMaxOriginDepth returns the error message with a configurable origin chain depth.
-func (p ValidationError) ErrorWithMaxOriginDepth(maxDepth int) string {
-	var msg string
-	loc := p.Source.Location()
-	if loc != "" {
-		msg = fmt.Sprintf("%s: %s in %s form", loc, p.Message, p.Form)
-	} else {
-		msg = fmt.Sprintf("%s in %s form", p.Message, p.Form)
-	}
-
-	// The chain is independent of the node's own position: a node a transformer
-	// built carries the origin the expander stamped on it (StampOrigin) whether or
-	// not the transformer gave it a location, and each link names its own use
-	// site. Gating the chain on the position left every position-less node, such
-	// as a syntax-case template pair, reporting no expansion at all.
-	if p.Source != nil && p.Source.Origin != nil {
-		msg += syntax.FormatOriginChain(p.Source.Origin, maxDepth)
-	}
-	return msg
+// Failure is the error without its position: what failed, in which form.
+func (p ValidationError) Failure() string {
+	return fmt.Sprintf("%s in %s form", p.Message, p.Form)
 }
 
 // ValidationResult collects all errors from validation
@@ -207,23 +193,6 @@ func unitDefineParams(d *ValidatedDefine) *ValidatedParams {
 // Ok returns true if no validation errors were encountered.
 func (p *ValidationResult) Ok() bool {
 	return len(p.Errors) == 0
-}
-
-func (p *ValidationResult) Error() string {
-	if len(p.Errors) == 0 {
-		return ""
-	}
-	if len(p.Errors) == 1 {
-		return p.Errors[0].Error()
-	}
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "%d validation errors:\n", len(p.Errors))
-	for _, e := range p.Errors {
-		sb.WriteString("  ")
-		sb.WriteString(e.Error())
-		sb.WriteString("\n")
-	}
-	return sb.String()
 }
 
 func (p *ValidationResult) addError(source *syntax.SourceContext, form, message string) {

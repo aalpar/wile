@@ -1558,9 +1558,9 @@ func wrapCompilationError(msg string, cause error) *CompilationError {
 	var se *compilation.SourcedError
 	for err := cause; errors.As(err, &se); err = se.Cause {
 		loc := se.Source.Location()
-		ce.structured = loc != ""
 		if loc != "" {
 			ce.Source = loc
+			ce.structured = true
 		}
 	}
 	// Parse errors carry location on their token rather than a SourcedError.
