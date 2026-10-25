@@ -249,6 +249,14 @@ func TestStampedFaultWinsOverTheTokenItCut(t *testing.T) {
 		wantMess: tokenizer.MessageExpectingDelimiterAfterBigNumber,
 		wantText: []string{"index 7", `'x'`},
 	}, {
+		// The radix complex token does not parse yet (strconv on "1+2i"); the
+		// '#' that cut it is the reported fault, as racket ("misplaced") and
+		// petite ("invalid number syntax") reject the input.
+		name: "radix_complex_then_hash", src: "#x1+2i#t",
+		wantLoc:  "in.scm:1:6",
+		wantMess: tokenizer.MessageExpectingDelimiterAfterNumber,
+		wantText: []string{"index 6", `'#'`, "unsigned-complex"},
+	}, {
 		// Control: a token that parses with a fault pending still reports the
 		// fault (the success path, which takes any pending fault).
 		name: "control_code_point_after_a_valid_token", src: `#\x110000`,

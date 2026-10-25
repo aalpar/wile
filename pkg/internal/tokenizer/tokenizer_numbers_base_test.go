@@ -3122,6 +3122,11 @@ func TestRadixNumeralRequiresDelimiter(t *testing.T) {
 		{"#x1.8p3", "Go's big.ParseFloat would take p3 as a binary exponent; the reader must not offer it one"},
 		{"#d1000abc", "a radix prefix binds the whole numeral, even in base 10"},
 		{"#x1f#t", "readHashDigits eats the # as an inexact-digit placeholder, leaving t adjacent to the numeral"},
+		// '#' is not an R7RS delimiter. Where no hash-digit scan precedes it (after
+		// an exponent) it used to pass as a terminator: (#d1e3#t) read (1000.0 #t).
+		// racket "misplaced `#`", petite "invalid number syntax #d1e3#t".
+		{"#d1e3#t", "'#' after an exponent is not a delimiter"},
+		{"#d1.5e2#f", "'#' after a fractional exponent is not a delimiter"},
 	}
 	for _, tc := range rejected {
 		qt.New(t).Run(tc.input, func(c *qt.C) {
@@ -3142,6 +3147,10 @@ func TestRadixNumeralRequiresDelimiter(t *testing.T) {
 		{"#x1+2i", []string{"#x", "1+2i"}},
 		{"#b101 #o7", []string{"#b", "101", "#o", "7"}},
 		{"#x1f;c", []string{"#x", "1f", ";c"}}, // ; is a delimiter: the comment body is its own token
+		// Hash digits are consumed before the delimiter check, so they survive
+		// (racket and petite read (1##) as 100.0 and (#d1.5##) as 1.5).
+		{"#d1.5##", []string{"#d", "1.5##"}},
+		{"#d1## ", []string{"#d", "1##"}},
 		// Bare decimals keep splitting. This is the D1-a scope boundary, not an
 		// oversight — see TODO.md "Delimiter termination for decimal numerals".
 		{"1abc", []string{"1", "abc"}},
@@ -3188,6 +3197,8 @@ func TestBigNumNumeralRequiresDelimiter(t *testing.T) {
 		{"#m+inf.0+2i", "a big-float infinity has no complex form"},
 		{"#m+ix", "an infinity keyword that does not complete stops at the mismatch"},
 		{"#m-nanx", "a NaN keyword that does not complete stops at the mismatch"},
+		{"#z1#t", "'#' is not a delimiter; (#z1#t) read as (1 #t)"},
+		{"#m1.5#t", "'#' is not a delimiter after a big-float numeral either"},
 		{"#z1'a", "a quote character is not a delimiter; (1 'a) was read on master"},
 		{"#z1`a", "a quasiquote character is not a delimiter"},
 		{"#z1,a", "an unquote character is not a delimiter"},
@@ -3260,7 +3271,6 @@ func TestBigNumNumeralRequiresDelimiter(t *testing.T) {
 		{"#z1)", []string{"#z1", ")"}},
 		{"#m1.5 #z2", []string{"#m1.5", "#z2"}},
 		{"#z1;c", []string{"#z1", ";c"}},
-		{"#z1#t", []string{"#z1", "#t"}}, // '#' marks a prefix, as after a radix numeral
 		{"#z#x1f", []string{"#z", "#x", "1f"}},
 	}
 	for _, tc := range unchanged {

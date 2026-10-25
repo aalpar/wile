@@ -230,9 +230,13 @@ func (p *Tokenizer) requireDelimiterAfterRadixNumeral(r int) {
 }
 
 // requireDelimiter faults with mess unless the numeral just scanned ends at a
-// delimiter or '#'. A pending error is left as it is: it is the real fault.
+// delimiter. A pending error is left as it is: it is the real fault.
+//
+// '#' is not a delimiter (R7RS §7.1.1), so (#d1e3#t) and (#z1#t) are errors, as
+// in racket and petite. isDelimiterOrMarker is the right test only between
+// prefixes (#d#e1); hash digits (#d1.5##) are consumed before this check.
 func (p *Tokenizer) requireDelimiter(mess string) {
-	if p.err != nil || isDelimiterOrMarker(p.curr()) {
+	if p.err != nil || isDelimiter(p.curr()) {
 		return
 	}
 	p.fail(mess)
