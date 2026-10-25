@@ -21,6 +21,11 @@ package compilation
 // left every later form of the unit expanded, analysed and boxed without it.
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+
 	"github.com/aalpar/wile/pkg/machine/compilation/resolver"
 	"github.com/aalpar/wile/pkg/machine/compilation/sourceload"
 	"github.com/aalpar/wile/pkg/syntax"
@@ -114,7 +119,12 @@ func (p *ExpanderTimeContinuation) expandIncludedFile(sym *syntax.SyntaxSymbol, 
 	if err != nil {
 		return nil, err
 	}
-	ctx, err := enterIncludedFile(p.ctx, sym.Key(), filePath)
+	ctx, err := enterIncludedFile(p.ctx, sym.Key(), includeEntry{
+		path:        filePath,
+		guard:       p.depthGuard,
+		macroOutput: p.depthGuard.macroOutput,
+		literal:     literalIncludeAt(p.ctx, p.depthGuard),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -142,11 +152,63 @@ func (p *ExpanderTimeContinuation) expandIncludedFile(sym *syntax.SyntaxSymbol, 
 
 	child := p.newChildExpander(p.env)
 	child.ctx = ctx
+	child.libraryScope = p.libraryScope
 	expanded, err := child.ExpandBodyWithDefineSyntax(forms)
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(err, "include: failed to expand %s", name)
+		return nil, includeExpandFailure(ctx, sym.Key(), name, err)
 	}
 	return expanded, nil
+}
+
+// includeDepthError is the expansion depth guard's failure under a chain of
+// includes, rendered once. A macro-produced include that never stops producing
+// itself is not a refused cycle (enterIncludedFile), so the depth guard ends it;
+// wrapped once per level, the error grew by one "include: failed to expand"
+// layer per nested include, megabytes for the default depth. Each include
+// level returns the inner includeDepthError itself, dropping the layers between
+// two levels, which repeat the same frames.
+type includeDepthError struct {
+	err error
+}
+
+func (p *includeDepthError) Error() string {
+	return p.err.Error()
+}
+
+func (p *includeDepthError) Unwrap() error {
+	return p.err
+}
+
+// includeChainSummaryMax bounds how many files includeExpandFailure names.
+const includeChainSummaryMax = 6
+
+// includeExpandFailure wraps err, the failure to expand the forms of the file
+// name that form included under ctx. A depth-guard failure becomes one
+// includeDepthError naming the depth of the include chain and its files
+// (outermost and innermost, bounded); one already made by a nested include is
+// returned as is.
+func includeExpandFailure(ctx context.Context, form, name string, err error) error {
+	var deep *includeDepthError
+	if errors.As(err, &deep) {
+		return deep
+	}
+	if !errors.Is(err, werr.ErrExpandDepthExceeded) {
+		return werr.WrapForeignErrorf(err, "%s: failed to expand %s", form, name)
+	}
+	entries := ctxChainValues[includeEntry](ctx, includeChainKey{})
+	paths := make([]string, 0, includeChainSummaryMax+1)
+	for i, e := range entries {
+		half := includeChainSummaryMax / 2
+		if len(entries) > includeChainSummaryMax && i == half {
+			paths = append(paths, fmt.Sprintf("... %d more ...", len(entries)-includeChainSummaryMax))
+		}
+		if len(entries) > includeChainSummaryMax && i >= half && i < len(entries)-half {
+			continue
+		}
+		paths = append(paths, e.path)
+	}
+	return &includeDepthError{err: werr.WrapForeignErrorWithCause(werr.ErrExpandDepthExceeded, err,
+		"%s: %d nested includes (%s)", form, len(entries), strings.Join(paths, " -> "))}
 }
 
 // includeFileNames returns the filename strings of an include form's operands.

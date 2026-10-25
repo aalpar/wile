@@ -21,7 +21,6 @@ import (
 	"io"
 	"path"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/aalpar/wile/pkg/environment"
@@ -154,45 +153,91 @@ func readIncludedForms(ctx context.Context, env *environment.EnvironmentFrame, r
 	return forms, filePath, nil
 }
 
-// includeChain is the files being included on one causal chain, innermost
-// first. Like loadChain (library_load_chain.go) it is an immutable list carried
-// on ctx, so a sibling include, a finished include and a concurrent SRFI-18
-// thread never observe each other's entries. The load stack cannot answer the
-// same question: a thread inherits its starter's *LoadStack (the CLI installs
-// one for -f), so two threads including the same file would each find the
-// other's push and report a cycle that is not there.
-type includeChain struct {
+// includeEntry is one file on the include chain: the files being included on
+// one causal chain, carried on ctx (ctxChain) so a sibling include, a finished
+// include and a concurrent SRFI-18 thread never observe each other's entries.
+// The load stack cannot answer the same question: a thread inherits its
+// starter's *LoadStack (the CLI installs one for -f), so two threads including
+// the same file would each find the other's push.
+type includeEntry struct {
 	path string
-	prev *includeChain
+	// guard and macroOutput are the expander state the file's forms are
+	// expanded under: the run's depth guard and its macroOutput count at entry.
+	// guard is nil for a file the compiler includes (a declaration-level
+	// include, an include-library-declarations file), whose forms a fresh
+	// expander takes from count zero.
+	guard       *expandDepthGuard
+	macroOutput int
+	// literal reports that the include that entered this file was written in
+	// the file before it on the chain, not produced or passed through by a
+	// macro.
+	literal bool
 }
 
 // includeChainKey is the context key for the include chain.
 type includeChainKey struct{}
 
-// enterIncludedFile returns ctx recording filePath, the file the including form
-// (named by form) has just read, as being included, or refuses with
-// ErrIncludeCycle when ctx already records it: the file is being included from
-// inside itself, directly or through other files, and would be spliced into
-// itself until the expansion depth guard fired (or, for
-// include-library-declarations, until the Go stack overflowed). The error names
-// the files of the cycle, outermost first.
+// innermostInclude returns the innermost entry of ctx's include chain.
+func innermostInclude(ctx context.Context) (includeEntry, bool) {
+	node, _ := ctx.Value(includeChainKey{}).(*ctxChain[includeEntry])
+	if node == nil {
+		return includeEntry{}, false
+	}
+	return node.v, true
+}
+
+// literalIncludeAt reports whether an include the expander meets under guard
+// was written in the innermost file of ctx's include chain: no macro output has
+// begun since that file was entered, so the include is neither a macro's
+// template nor an argument a macro passed through (which could stop doing so).
+// With no file on the chain there is nothing to cycle through, and the answer
+// does not matter.
+func literalIncludeAt(ctx context.Context, guard *expandDepthGuard) bool {
+	in, ok := innermostInclude(ctx)
+	if !ok {
+		return true
+	}
+	if in.guard == nil {
+		return guard.macroOutput == 0
+	}
+	return in.guard == guard && guard.macroOutput == in.macroOutput
+}
+
+// enterIncludedFile returns ctx recording entry, the file the including form
+// (named by form) has just read, on the include chain, or refuses with
+// ErrIncludeCycle when the include can never stop: the file is already on the
+// chain, and it and every include after it, this one included, is literal.
+// Such a file re-reads into the same includes forever. A cycle through a
+// macro-produced include is not refused, since the macro can stop producing it
+// (a phase-1 counter does, as in Racket and Chez); the expansion depth guard
+// bounds one that does not (includeExpandFailure). The error names the files of
+// the cycle, outermost first.
 //
-// Paths compare cleaned. Resolver output already is; cleaning keeps the rule
-// independent of that.
-func enterIncludedFile(ctx context.Context, form, filePath string) (context.Context, error) {
-	clean := filepath.Clean(filePath)
-	prev, _ := ctx.Value(includeChainKey{}).(*includeChain)
-	var paths []string
-	for node := prev; node != nil; node = node.prev {
-		paths = append(paths, node.path)
+// Paths compare cleaned; resolver output already is.
+func enterIncludedFile(ctx context.Context, form string, entry includeEntry) (context.Context, error) {
+	entry.path = filepath.Clean(entry.path)
+	if !entry.literal {
+		return pushCtxChain(ctx, includeChainKey{}, entry), nil
 	}
-	slices.Reverse(paths)
-	i := slices.Index(paths, clean)
-	if i >= 0 {
-		chain := strings.Join(append(paths[i:], clean), " -> ")
-		return nil, werr.WrapForeignErrorf(werr.ErrIncludeCycle, "%s: %s", form, chain)
+	entries := ctxChainValues[includeEntry](ctx, includeChainKey{})
+	// The literal run: the longest suffix whose entries were entered literally,
+	// plus the entry before it, whose own entry does not matter.
+	start := len(entries) - 1
+	for start > 0 && entries[start].literal {
+		start--
 	}
-	return context.WithValue(ctx, includeChainKey{}, &includeChain{path: clean, prev: prev}), nil
+	for i := max(start, 0); i < len(entries); i++ {
+		if entries[i].path != entry.path {
+			continue
+		}
+		var chain []string
+		for _, e := range entries[i:] {
+			chain = append(chain, e.path)
+		}
+		chain = append(chain, entry.path)
+		return nil, werr.WrapForeignErrorf(werr.ErrIncludeCycle, "%s: %s", form, strings.Join(chain, " -> "))
+	}
+	return pushCtxChain(ctx, includeChainKey{}, entry), nil
 }
 
 // CompileInclude compiles an include expression.
@@ -210,6 +255,10 @@ func (p *CompileTimeContinuation) CompileInclude(ctctx CompileTimeCallContext, e
 // R7RS §5.3.2: Internal definitions use letrec* semantics where all defined
 // variables are in scope at the start of the body.
 func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContext, expr syntax.SyntaxValue, foldCase bool) error {
+	form := "include"
+	if foldCase {
+		form = "include-ci"
+	}
 	rest, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrNotAPair, "include: expected a list of filenames, got %T", expr)
@@ -248,7 +297,10 @@ func (p *CompileTimeContinuation) compileIncludeImpl(ctctx CompileTimeCallContex
 		// would push nowhere and the resolver would read nothing. `inner` is a
 		// copy, so the derived ctx does not escape this file's extent.
 		inner := ctctx
-		inner.ctx, err = enterIncludedFile(inner.ctx, "include", filePath)
+		// The compiler meets a literal include only below a file it entered
+		// itself: a library declaration is never a macro's output.
+		in, nested := innermostInclude(inner.ctx)
+		inner.ctx, err = enterIncludedFile(inner.ctx, form, includeEntry{path: filePath, literal: !nested || in.guard == nil})
 		if err != nil {
 			return err
 		}

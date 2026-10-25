@@ -451,7 +451,7 @@ func (p *CompileTimeContinuation) processIncludeLibraryDeclarations(ctctx Compil
 		// inside it, as compileIncludeImpl arranges for include: push its path
 		// on the load stack (creating one when there is none) for its extent.
 		inner := ctctx
-		inner.ctx, err = enterIncludedFile(inner.ctx, "include-library-declarations", filePath)
+		inner.ctx, err = enterIncludedFile(inner.ctx, "include-library-declarations", includeEntry{path: filePath, literal: true})
 		if err != nil {
 			return p.wrapCompilationError(err)
 		}

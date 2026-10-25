@@ -81,6 +81,12 @@ const DefaultMaxExpandDepth int = 50000
 type expandDepthGuard struct {
 	depth int
 	max   int // 0 = unlimited
+	// macroOutput counts the macro outputs being expanded on the current path
+	// (expandMacroOutput). The walk is depth-first on one goroutine, so a shared
+	// counter is per path. The include cycle check reads it: an include met with
+	// the count its file was entered at was written in that file and not
+	// produced or passed through by a macro (enterIncludedFile).
+	macroOutput int
 }
 
 // enter records one level of recursion and reports whether the bound is now
@@ -148,10 +154,10 @@ func NewExpanderTimeContinuation(ctx context.Context, env *environment.Environme
 // It is otherwise identical to the expander the call sites previously built with
 // NewExpanderTimeContinuation(p.ctx, env, p.evaluator): ctx and evaluator carry
 // over, env is the nested-body environment, and libraryScope is deliberately
-// left nil: no child site propagates it. The forms of an include written in a
-// library body need none, since they take the include head's scope set, which
-// holds the library scope. Sharing only the depth guard keeps the hygiene
-// behavior unchanged.
+// left nil (these body sites never propagated it — where library scope must
+// flow into a nested expander, the code sets it explicitly, e.g.,
+// expander_include.go:expandIncludedFile). Sharing only the depth guard keeps the
+// hygiene behavior unchanged.
 func (p *ExpanderTimeContinuation) newChildExpander(env *environment.EnvironmentFrame) *ExpanderTimeContinuation {
 	q := &ExpanderTimeContinuation{
 		ctx:           p.ctx,
@@ -823,7 +829,7 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbo
 		stx = syntax.FlipScopeStampOrigin(stx, introScope, pushOrigin(sym.Key(), sym.SourceContext(), pairCtx), expanderCtx.passThroughSet(inputForm))
 		stx = p.pruneUseSiteScopes(stx)
 		// Recursively expand the result to handle nested macro calls
-		return p.ExpandExpression(stx)
+		return p.expandMacroOutput(stx)
 	}
 	return nil, wrapSourcedError(sym.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASyntaxValue, "syntax transformer returned non-syntax value: %T", result))
 }
@@ -842,7 +848,17 @@ func (p *ExpanderTimeContinuation) expandERMacroInvocation(
 		return nil, wrapSourcedError(sym.SourceContext(), werr.WrapForeignErrorf(err, "expand: er-macro-transformer expansion failed"))
 	}
 	// Recursively expand the result
-	return p.ExpandExpression(wrapped)
+	return p.expandMacroOutput(wrapped)
+}
+
+// expandMacroOutput expands a transformer's output, counting it on the depth
+// guard's macroOutput for the extent of the expansion.
+func (p *ExpanderTimeContinuation) expandMacroOutput(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	p.depthGuard.macroOutput++
+	defer func() {
+		p.depthGuard.macroOutput--
+	}()
+	return p.ExpandExpression(stx)
 }
 
 // invokeERTransformer runs the ER transformer and returns the re-wrapped result
