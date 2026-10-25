@@ -237,7 +237,7 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 			return nil, p.die(NewParserErrorf(p.cur, "unexpected close %s", p.delimiterString(p.cur.Type())))
 		}
 		if err != nil {
-			return nil, p.die(err)
+			return nil, p.die(p.preferCutShortFault(err))
 		}
 		// Tokenizer.Next reports a token and the fault that ended it on separate
 		// calls, so a datum whose last token a scanner fault cut short ("#b109"
@@ -277,6 +277,38 @@ func (p *Parser) ReleaseLookahead(urr values.RuneUnreader) error {
 		return nil
 	}
 	return p.toks.ReleaseLookahead(urr)
+}
+
+// preferCutShortFault returns the read error to report when parsing a datum
+// failed with err while the tokenizer holds a pending fault.
+//
+// A numeral that must end at a delimiter and does not is cut short at the
+// offending rune, and the shortened token can then fail to parse ("#m1ex"
+// leaves "#m1e", "#z--5" leaves "#z-"), or fail where it stands whether cut or
+// not (a BigInteger in "#u8(#z1#t)"). Either way a lexical fault in the token
+// precedes its parse, as racket and petite also report it, so the stamped
+// delimiter fault wins: it comes first in the join, the error carries no token
+// (Location falls back to the stamped rune), and causeText renders it. err
+// stays in the chain, so its sentinels still match.
+//
+// Only the delimiter faults qualify. Another pending fault diagnoses a token
+// that is complete and wrong ("#\qqq"), which the parser names at least as
+// well, by its text, and which the tokenizer stamps past the token.
+func (p *Parser) preferCutShortFault(err error) error {
+	if p.toks == nil {
+		return err
+	}
+	pending := p.toks.Err()
+	if pending == nil {
+		return err
+	}
+	cut := errors.Is(pending, tokenizer.NewTokenizerError(tokenizer.MessageExpectingDelimiterAfterNumber)) ||
+		errors.Is(pending, tokenizer.NewTokenizerError(tokenizer.MessageExpectingDelimiterAfterBigNumber))
+	if !cut {
+		return err
+	}
+	p.cur = nil
+	return NewParserErrorWithWrap(errors.Join(pending, err), nil, messageReadFailed)
 }
 
 // locateReaderErr lifts any lower-layer error escaping a read — a lexical
@@ -1064,25 +1096,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateMarkerBase8:
 		return p.parseBaseWithExactness(8)
 	case tokenizer.TokenizerStateMarkerBase10:
-		// #d is the default (decimal) radix, so the following datum reads normally.
-		markerTok := p.curr()
-		err = p.advance()
-		if err != nil {
-			// "#d" alone: the radix prefix requires a number, so EOF is malformed
-			// input — mirroring the errNoDatum guard below.
-			return nil, p.cur, wrapMidParseEOF(err, markerTok, "decimal number marker")
-		}
-		var tok tokenizer.Token
-		q, tok, err = p.readSyntax()
-		// A radix marker with no number (e.g. "#d)") must be a located error, not a
-		// leaked errNoDatum that a compound reader silently treats as "no datum" —
-		// mirroring readExactnessMarker (#e/#i) and the #b/#o/#x arms, which all
-		// reject a missing number. Without this guard "(#d)" mis-parsed to "()".
-		if errors.Is(err, errNoDatum) {
-			return nil, tok, NewParserErrorWithWrapf(werr.ErrNotANumber, tok,
-				"decimal number marker requires a datum")
-		}
-		return q, tok, err
+		return p.parseBaseWithExactness(10)
 	case tokenizer.TokenizerStateMarkerBase16:
 		return p.parseBaseWithExactness(16)
 	case tokenizer.TokenizerStateSignedInf:

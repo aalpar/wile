@@ -98,7 +98,13 @@ func (p *Tokenizer) requireSpecialNumber(s string, r int, mismatchMsg string) {
 }
 
 // atNumberEnd reports whether the scanner sits at a legal end for a numeral that
-// terminates implicitly: a delimiter, a '#' prefix, or end of input.
+// terminates implicitly: a delimiter, a '#', or end of input.
+//
+// '#' still ends a numeral here, unlike in requireDelimiter. That rule covers
+// prefixed numerals (#d1e3#t and #z1#t are errors); the numerals that reach this
+// predicate are unprefixed, where '#' remains a terminator pending P6.5 (TODO.md,
+// "Delimiter termination for decimal numerals"), so (+inf.0#t) still reads as
+// two data.
 //
 // R7RS §7.1.1 exempts only +i, -i and <infnan> from <peculiar identifier>, so a
 // complete one of those followed by anything else is an identifier, not a number
@@ -143,6 +149,13 @@ func (p *Tokenizer) readBigNum(isExpMarker func(rune) bool) {
 	if p.err != nil {
 		return
 	}
+	// A sign may begin an infinity or a NaN (#m+inf.0), which the digit scan
+	// below would stop at, leaving the token "#m+".
+	if p.runeStart != start && (isImaginary(p.curr()) || p.curr() == 'n' || p.curr() == 'N') {
+		p.readBigNumInfNan()
+		p.requireDelimiter(MessageExpectingDelimiterAfterBigNumber)
+		return
+	}
 	// Integer part
 	p.readUnsignedBaseNNumber(10)
 	// Optional decimal point
@@ -185,6 +198,23 @@ func (p *Tokenizer) readBigNum(isExpMarker func(rune) bool) {
 	}
 }
 
+// readBigNumInfNan scans the keyword of an <infnan> after readBigNum's sign,
+// keeping the big-number state: the token stays one #m numeral, which
+// readSignedInfinity and readSignedNan would retype and extend into a complex.
+// A keyword that does not complete is not raised here; the scan stops at the
+// mismatching rune and the caller's delimiter check stamps it there.
+func (p *Tokenizer) readBigNumInfNan() {
+	if isImaginary(p.curr()) {
+		p.next() // consume 'i'
+		if p.err != nil {
+			return
+		}
+		p.readSpecialNumber("nf", 10, MessageExpectingInf)
+		return
+	}
+	p.readSpecialNumber("nan", 10, MessageExpectingNan)
+}
+
 // requireDelimiterAfterRadixNumeral enforces R7RS §7.1.1 implicit termination
 // for a numeral carrying an explicit radix prefix: once #b/#o/#d/#x has fixed
 // the digit set, the numeral has to end at a delimiter.
@@ -206,9 +236,14 @@ func (p *Tokenizer) requireDelimiterAfterRadixNumeral(r int) {
 }
 
 // requireDelimiter faults with mess unless the numeral just scanned ends at a
-// delimiter or '#'. A pending error is left as it is: it is the real fault.
+// delimiter. A pending error is left as it is: it is the real fault.
+//
+// '#' is not a delimiter (R7RS §7.1.1), so (#d1e3#t) and (#z1#t) are errors, as
+// in racket and petite. isDelimiterOrMarker is the right test between prefixes
+// (#d#e1), and atNumberEnd still uses it for unprefixed numerals pending P6.5;
+// hash digits (#d1.5##) are consumed before this check.
 func (p *Tokenizer) requireDelimiter(mess string) {
-	if p.err != nil || isDelimiterOrMarker(p.curr()) {
+	if p.err != nil || isDelimiter(p.curr()) {
 		return
 	}
 	p.fail(mess)
