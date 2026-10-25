@@ -25,93 +25,113 @@ import (
 
 	"github.com/aalpar/wile/pkg/parser"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // TestConcurrentMapAccess_T1 verifies concurrent access to a State's parsers
 // cache does not race or panic (T1 from the architectural review).
 // It is an internal test because the cache and its mutex are unexported per
 // engine — run with -race. Under the former package globals this drove the
-// shared map; now it drives one engine's per-State cache, the same locking
-// discipline the primitives use.
+// shared map; now it drives one engine's per-State cache through the code the
+// primitives call: readSyntaxLocked (and through it readSyntaxCached's
+// get-or-create) and evictPortCache. Each port has one reader, so what contends
+// is the cache map, not one port's parser (TestConcurrentReadSyntaxSamePort_T1_1
+// covers that). Assertions run on the test goroutine: a FailNow from a spawned
+// goroutine does not stop the test.
 func TestConcurrentMapAccess_T1(t *testing.T) {
-	c := qt.New(t)
-	st := NewState(nil)
-
-	numPorts := 10
-	ports := make([]*values.PortObject, numPorts)
-	for i := range numPorts {
-		ports[i] = values.NewStringInputPortWithBuffer(bytes.NewBufferString("(+ 1 2) (+ 3 4)"))
+	const numPorts = 20
+	newPorts := func() []*values.PortObject {
+		q := make([]*values.PortObject, numPorts)
+		for i := range numPorts {
+			q[i] = values.NewStringInputPortWithBuffer(bytes.NewBufferString("(+ 1 2) (+ 3 4)"))
+		}
+		return q
+	}
+	// read is the PrimRead pattern: the port's read lock, the cache's own
+	// get-or-create, then a read.
+	read := func(st *State, port *values.PortObject) error {
+		rr, _ := port.AsRuneReader()
+		mk := func() *parser.Parser {
+			return parser.NewParser(nil, true, rr)
+		}
+		syn, err := readSyntaxLocked(context.Background(), st, port, mk)
+		if err != nil {
+			return err
+		}
+		if syn == nil {
+			return errNoDatumRead
+		}
+		return nil
 	}
 
-	numGoroutines := 20
-	var wg sync.WaitGroup
-
-	// Concurrent parser creation and access (PrimRead pattern).
+	// Concurrent parser creation and access, one reader per port.
 	t.Run("concurrent parser access", func(t *testing.T) {
-		for i := range numGoroutines {
-			wg.Add(1)
-			go func(portIdx int) {
-				defer wg.Done()
-				port := ports[portIdx%numPorts]
-				rr, _ := port.AsRuneReader()
-				st.mu.Lock()
-				entry, ok := st.parsers[port]
-				if !ok || entry == nil {
-					entry = &parserEntry{parser: parser.NewParser(nil, true, rr)}
-					st.parsers[port] = entry
-				}
-				st.mu.Unlock()
-				c.Assert(entry, qt.Not(qt.IsNil))
-			}(i)
+		st := NewState(nil)
+		ports := newPorts()
+		errs := make([]error, numPorts)
+		var wg sync.WaitGroup
+		for i, port := range ports {
+			wg.Go(func() {
+				errs[i] = read(st, port)
+			})
 		}
 		wg.Wait()
+		for i, err := range errs {
+			qt.Assert(t, err, qt.IsNil, qt.Commentf("port %d", i))
+		}
+		st.mu.Lock()
+		cached := len(st.parsers)
+		st.mu.Unlock()
+		qt.Assert(t, cached, qt.Equals, numPorts)
 	})
 
 	// Concurrent delete operations (evictPortCache pattern).
 	t.Run("concurrent delete", func(t *testing.T) {
+		st := NewState(nil)
+		ports := newPorts()
 		for _, port := range ports {
-			rr, _ := port.AsRuneReader()
-			st.mu.Lock()
-			st.parsers[port] = &parserEntry{parser: parser.NewParser(nil, true, rr)}
-			st.mu.Unlock()
+			qt.Assert(t, read(st, port), qt.IsNil)
 		}
-		for i := range numGoroutines {
-			wg.Add(1)
-			go func(portIdx int) {
-				defer wg.Done()
-				port := ports[portIdx%numPorts]
-				evictPortCache(st, port)
-			}(i)
+		var wg sync.WaitGroup
+		for i := range 2 * numPorts {
+			wg.Go(func() {
+				evictPortCache(st, ports[i%numPorts])
+			})
 		}
 		wg.Wait()
+		qt.Assert(t, st.parsers, qt.HasLen, 0)
 	})
 
-	// Concurrent mixed operations (read, write, delete).
+	// Concurrent mixed operations: per port, one reader, one evicter and one
+	// map lookup.
 	t.Run("concurrent mixed operations", func(t *testing.T) {
-		for i := 0; i < numGoroutines*3; i++ {
-			wg.Add(1)
-			opType := i % 3
-			go func(portIdx, op int) {
-				defer wg.Done()
-				port := ports[portIdx%numPorts]
-				switch op {
-				case 0:
-					st.mu.Lock()
-					_ = st.parsers[port]
-					st.mu.Unlock()
-				case 1:
-					rr, _ := port.AsRuneReader()
-					st.mu.Lock()
-					st.parsers[port] = &parserEntry{parser: parser.NewParser(nil, true, rr)}
-					st.mu.Unlock()
-				case 2:
-					evictPortCache(st, port)
-				}
-			}(i, opType)
+		st := NewState(nil)
+		ports := newPorts()
+		errs := make([]error, numPorts)
+		var wg sync.WaitGroup
+		for i, port := range ports {
+			wg.Go(func() {
+				errs[i] = read(st, port)
+			})
+			wg.Go(func() {
+				evictPortCache(st, port)
+			})
+			wg.Go(func() {
+				st.mu.Lock()
+				_ = st.parsers[port]
+				st.mu.Unlock()
+			})
 		}
 		wg.Wait()
+		for i, err := range errs {
+			qt.Assert(t, err, qt.IsNil, qt.Commentf("port %d", i))
+		}
 	})
 }
+
+// errNoDatumRead is TestConcurrentMapAccess_T1's report that a read returned
+// neither a datum nor an error.
+var errNoDatumRead = werr.NewStaticError("readSyntaxLocked returned no datum and no error")
 
 // TestConcurrentReadSyntaxSamePort_T1_1 guards the reviews/2026-07-13 §4
 // CONCURRENCY finding at prim_read_write.go. The io read primitives cache one
