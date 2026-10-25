@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"math/big"
+	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
@@ -1226,6 +1227,71 @@ func TestVMPollCarriesCauseAndLocation(t *testing.T) {
 			c.Assert(re.Source, qt.Not(qt.Equals), "", qt.Commentf("the poll must locate its stop, got %v", err))
 		})
 	}
+}
+
+// TestCancelledProgramNeverFinishesNil pins the Engine's end-of-run ctx check: a
+// program whose ctx ended while it ran reports the cancellation even when it
+// finished normally, because nothing in it noticed: it ended before the next VM
+// poll, its only cancellation-aware step acquired without waiting, or a guard
+// caught the wait's raise. cancel! ends the ctx at a known point inside the run.
+// The controls finish nil: a live ctx, and a with-timeout whose own timer fired
+// and whose handler answered, which cancels only the timer's derived ctx.
+func TestCancelledProgramNeverFinishesNil(t *testing.T) {
+	t.Parallel()
+	_, sleepErr := exec.LookPath("sleep")
+	programs := []struct {
+		name      string
+		code      string
+		cancelled bool
+		process   bool // needs a child process
+	}{
+		{"ends before the poll", `(begin (cancel!) 42)`, true, false},
+		{"uncontended mutex-lock!", `(begin (define m (make-mutex)) (cancel!) (mutex-lock! m))`, true, false},
+		{"guard catches the cancelled wait",
+			`(begin (define m (make-mutex)) (mutex-lock! m #f #f) (cancel!) (guard (e (#t 'caught)) (mutex-lock! m)))`,
+			true, false},
+		// A child spawned under the run's ctx is killed by the cancel, and
+		// process-wait answers without reading the ctx.
+		{"process-wait on a killed child",
+			`(begin (define p (process-spawn "sleep" "30")) (cancel!) (process-wait p))`, true, true},
+		{"live ctx", `(begin (define m (make-mutex)) (mutex-lock! m) 42)`, false, false},
+		{"with-timeout handler answered",
+			`(with-timeout 1 (lambda (k) 'timeout) (lambda () (let loop () (loop))))`, false, false},
+	}
+	for _, tc := range programs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if tc.process && sleepErr != nil {
+				t.Skip("no sleep binary on PATH")
+			}
+			c := qt.New(t)
+			engine, ctx := engineWithCancel(t, context.DeadlineExceeded, WithProfile(KitchenSink))
+			v, err := engine.Eval(ctx, engine.MustParse(ctx, tc.code))
+			if !tc.cancelled {
+				c.Assert(err, qt.IsNil)
+				c.Assert(v, qt.IsNotNil)
+				return
+			}
+			c.Assert(err, qt.IsNotNil, qt.Commentf("a cancelled run finished with %v", v))
+			c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue, qt.Commentf("got %v", err))
+			c.Assert(errors.Is(err, context.DeadlineExceeded), qt.IsTrue, qt.Commentf("the cause must survive, got %v", err))
+			c.Assert(errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("ctx.Err() must survive, got %v", err))
+		})
+	}
+}
+
+// TestCancelledCallNeverFinishesNil is the same check on Engine.Call, whose run
+// is a sub-context of a throwaway root rather than a compiled program.
+func TestCancelledCallNeverFinishesNil(t *testing.T) {
+	t.Parallel()
+	c := qt.New(t)
+	engine, ctx := engineWithCancel(t, nil)
+	proc, err := engine.Eval(ctx, engine.MustParse(ctx, `(lambda () (cancel!) 42)`))
+	c.Assert(err, qt.IsNil)
+	v, err := engine.Call(ctx, proc)
+	c.Assert(err, qt.IsNotNil, qt.Commentf("a cancelled call finished with %v", v))
+	c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue, qt.Commentf("got %v", err))
+	c.Assert(errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("got %v", err))
 }
 
 // errTestCloser is the sentinel a failing test closer returns, so the assertion

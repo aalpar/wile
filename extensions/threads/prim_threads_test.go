@@ -382,6 +382,14 @@ func TestThreadSleepContextCancellation(t *testing.T) {
 // racing compilation against a wall clock.
 func evalCancelledAfterReady(t *testing.T, code string, cause error) (wile.Value, error) {
 	t.Helper()
+	engine, ready := newCancellableEngine(t)
+	return evalCancelledOnEngineAfterReady(t, engine, ready, code, cause)
+}
+
+// newCancellableEngine is evalCancelledAfterReady's engine, for a test that reads
+// the engine's state back after the cancelled run.
+func newCancellableEngine(t *testing.T) (*wile.Engine, <-chan struct{}) {
+	t.Helper()
 	ext, ready := testutil.ReadyExtension()
 	engine, err := wile.NewEngine(context.Background(),
 		wile.WithExtension(extthreads.Extension),
@@ -391,7 +399,12 @@ func evalCancelledAfterReady(t *testing.T, code string, cause error) (wile.Value
 	t.Cleanup(func() {
 		_ = engine.Close()
 	})
+	return engine, ready
+}
 
+// evalCancelledOnEngineAfterReady is evalCancelledAfterReady on a given engine.
+func evalCancelledOnEngineAfterReady(t *testing.T, engine *wile.Engine, ready <-chan struct{}, code string, cause error) (wile.Value, error) {
+	t.Helper()
 	ctx, cancel := context.WithCancelCause(context.Background())
 	defer cancel(nil)
 	type outcome struct {
@@ -485,13 +498,23 @@ func TestCancelledLockWaitRaisesOperationCancelled(t *testing.T) {
 // and answers #t, so cleanup that catches a cancelled wait and then releases or
 // takes a lock does not raise again. A lock acquired under a cancelled ctx is held;
 // raising there would leave it held with nobody told.
+//
+// The run itself still reports the cancellation, from the Engine's end-of-run
+// check rather than from a cleanup step: the guard's answer is read back from a
+// global, and the error names that check.
 func TestCaughtCancellationCleanupUnlockReturns(t *testing.T) {
 	c := qt.New(t)
-	v, err := evalCancelledAfterReady(t, `(begin (define m (make-mutex)) (define m2 (make-mutex)) (define m3 (make-mutex))
+	engine, ready := newCancellableEngine(t)
+	_, err := evalCancelledOnEngineAfterReady(t, engine, ready, `(begin (define m (make-mutex)) (define m2 (make-mutex)) (define m3 (make-mutex))
+	  (define cleaned #f)
 	  (mutex-lock! m) (mutex-lock! m2) (test-ready!)
-	  (guard (e (#t (list 'cleaned (mutex-unlock! m2) (mutex-lock! m3) (mutex-state m2))))
+	  (guard (e (#t (set! cleaned (list 'cleaned (mutex-unlock! m2) (mutex-lock! m3) (mutex-state m2)))))
 	    (mutex-lock! m)))`, context.Canceled)
-	c.Assert(err, qt.IsNil)
+	c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue, qt.Commentf("got %v", err))
+	c.Assert(err.Error(), qt.Contains, "Engine: cancelled before the run returned",
+		qt.Commentf("the cleanup must not raise; only the end-of-run check reports, got %v", err))
+	v, ok := engine.Get("cleaned")
+	c.Assert(ok, qt.IsTrue)
 	c.Assert(v.SchemeString(), qt.Equals, "(cleaned #t #t not-abandoned)")
 }
 

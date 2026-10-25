@@ -1131,6 +1131,9 @@ func (p *Engine) callCallable(ctx context.Context, callable values.Callable, arg
 
 	// Run the VM loop; escape continuations are caught and converted.
 	err = sub.RunWithEscapeHandling()
+	if err == nil {
+		err = cancelledAtEnd(ctx, sub)
+	}
 	if err != nil {
 		return nil, p.wrapRuntimeError(err)
 	}
@@ -1519,10 +1522,31 @@ func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, erro
 	err := mc.RunWithEscapeHandling()
 	p.lastCounters = mc.Counters()
 	val := mc.GetValue()
+	if err == nil {
+		err = cancelledAtEnd(ctx, mc)
+	}
 	if err != nil {
 		return nil, p.wrapRuntimeError(err)
 	}
 	return wrapValue(val), nil
+}
+
+// cancelledAtEnd is the end-of-run ctx check: the cancellation of a run that
+// finished normally although ctx ended while it ran, nil while ctx is live.
+// Nothing in such a run noticed: it ended before the next VM poll, its only
+// cancellation-aware step completed without waiting (an uncontended
+// mutex-lock!), or a guard caught the wait's raise and finished. Reporting its
+// value would tell the embedder a cancelled program succeeded.
+//
+// ctx is the caller's, not mc's current one: a with-timeout cancels only the ctx
+// it derives, so a timer that fired and whose handler answered leaves ctx live.
+// The cost accepted: a computation that genuinely finished as ctx ended reports
+// the cancellation too, as it would had the poll been one op earlier.
+func cancelledAtEnd(ctx context.Context, mc *machine.MachineContext) error {
+	if ctx.Err() == nil {
+		return nil
+	}
+	return mc.CancelledRun(ctx, "Engine: cancelled before the run returned")
 }
 
 // LastCounters returns the VM performance counters from the most recent
