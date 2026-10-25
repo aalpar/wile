@@ -287,6 +287,13 @@ func assertOneBlock(c *qt.C, refs refIndex) {
 // measures 11 at K=8, so the bound catches it here, but not in general (at K=1
 // both cost 3); assertOneBlock is the structural witness.
 func TestNewRefIndexAllocatesPerKeyNotPerOccurrence(t *testing.T) {
+	if inliningDisabled() {
+		// With -gcflags=-l (GoLand's debug runs, dlv) the walk's per-occurrence
+		// values escape through calls that are no longer inlined: K=8 N=1600
+		// measures 410, and the count scales with N, so no bound or ratio
+		// survives. The bound is a property of the optimised build.
+		t.Skip("allocation bound assumes an inlining build; this binary was built with -l")
+	}
 	c := qt.New(t)
 	const k = 8
 	const n = 200
@@ -308,6 +315,26 @@ func TestNewRefIndexAllocatesPerKeyNotPerOccurrence(t *testing.T) {
 	const bound = 4.0
 	c.Assert(allocs <= bound, qt.IsTrue,
 		qt.Commentf("K=%d N=%d allocs=%v bound=%v", k, k*n, allocs, bound))
+}
+
+// inlineProbe is returned by pointer from newInlineProbe: inlined, the value
+// stays on the caller's stack; called, it escapes to the heap.
+type inlineProbe struct {
+	n int
+}
+
+func newInlineProbe() *inlineProbe {
+	return &inlineProbe{n: 1}
+}
+
+// inliningDisabled reports whether this test binary was compiled with inlining
+// off, by whether a call that inlining makes allocation-free allocates.
+func inliningDisabled() bool {
+	allocs := testing.AllocsPerRun(10, func() {
+		p := newInlineProbe()
+		p.n++
+	})
+	return allocs > 0
 }
 
 // TestNewRefIndexContents pins what the allocation strategy must not move: each
