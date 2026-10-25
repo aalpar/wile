@@ -154,9 +154,9 @@ func (p *originStamp) stamp(c *SourceContext) *SourceContext {
 }
 
 // FlipScopeStampOrigin flips scope over stx, as FlipScope does, and records
-// origin on every node the transformer constructed, so a validation error
-// raised on any node of the expansion can name the macro that produced it
-// (ValidationError reads Source.Origin off the offending node). It is the
+// origin on every node the transformer constructed, so an error raised on any
+// node of the expansion can name the macro that produced it (the error is
+// stamped on the offending node and renders its Source.Origin). It is the
 // expander's one pass over a transformer's output, and a separate walk from
 // MapSyntaxTree on purpose: MapSyntaxTree never calls its function on a pair
 // and returns unchanged nodes by identity, while the stamp has to reach the

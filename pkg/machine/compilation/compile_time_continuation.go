@@ -820,8 +820,7 @@ func (p *CompileTimeContinuation) CompileExpression(ctctx CompileTimeCallContext
 	// of special forms (R7RS §4.2.2)
 	result := validate.ValidateExpression(ctctx.ctx, p.env, expr)
 	if !result.Ok() {
-		return p.wrapCompilationError(
-			werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "%s", result.Error()))
+		return p.wrapCompilationError(validationFailure(result))
 	}
 	// Compile the validated form
 	err := p.compileValidated(ctctx, result.Expr)

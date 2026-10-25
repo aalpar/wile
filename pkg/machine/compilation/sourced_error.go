@@ -16,8 +16,12 @@ package compilation
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 
+	"github.com/aalpar/wile/pkg/internal/validate"
 	"github.com/aalpar/wile/pkg/syntax"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // SourcedError wraps a compilation error with the source location where it
@@ -34,20 +38,30 @@ type SourcedError struct {
 	Cause  error
 }
 
+// Error renders the cause with its position and the macro-origin chain of the
+// node it was stamped on. Only the innermost SourcedError renders either: it
+// names the node that failed, so its location is the most specific (the exact
+// sub-expression, not the enclosing form) and its chain is the one that
+// describes that node. Outer SourcedErrors stay in the chain for programmatic
+// extraction via errors.As but add nothing to the text; a chain on an outer
+// link would blame a macro for syntax it merely passed through.
 func (p *SourcedError) Error() string {
-	loc := p.Source.Location()
-	if loc != "" {
-		// Only prepend this level's location when no deeper SourcedError
-		// exists. With deep wrapping the innermost location is the most
-		// specific (e.g. the exact sub-expression vs the enclosing form).
-		// Outer SourcedErrors stay in the chain for programmatic extraction
-		// via errors.As but don't duplicate the prefix in the string.
-		var inner *SourcedError
-		if !errors.As(p.Cause, &inner) {
-			return loc + ": " + p.Cause.Error()
-		}
+	var inner *SourcedError
+	if errors.As(p.Cause, &inner) {
+		return p.Cause.Error()
 	}
-	return p.Cause.Error()
+	return renderSourced(p.Source, p.Cause.Error())
+}
+
+// renderSourced is the one renderer of a compile-time failure's where: the
+// location prefixed, the expansion chain appended.
+func renderSourced(src *syntax.SourceContext, text string) string {
+	q := text
+	loc := src.Location()
+	if loc != "" {
+		q = loc + ": " + q
+	}
+	return q + syntax.OriginChainText(src)
 }
 
 func (p *SourcedError) Unwrap() error {
@@ -71,4 +85,24 @@ func wrapSourcedError(src *syntax.SourceContext, err error) error {
 		return err
 	}
 	return &SourcedError{Source: src, Cause: err}
+}
+
+// validationFailure carries a failed validation as an error. A single error is
+// stamped on the node it names, so errors.As reaches that node's position and
+// macro origin rather than the top-level form being compiled. Several errors
+// have no one owning node: each line is rendered by renderSourced and the list
+// is left for the caller to stamp with the enclosing form.
+func validationFailure(result *validate.ValidationResult) error {
+	if len(result.Errors) == 1 {
+		e := result.Errors[0]
+		return wrapSourcedError(e.Source, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "%s", e.Failure()))
+	}
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "%d validation errors:\n", len(result.Errors))
+	for _, e := range result.Errors {
+		sb.WriteString("  ")
+		sb.WriteString(renderSourced(e.Source, e.Failure()))
+		sb.WriteString("\n")
+	}
+	return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "%s", sb.String())
 }

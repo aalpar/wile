@@ -121,7 +121,28 @@ func conditionMessageAndIrritants(err error) (string, []values.Value) {
 		// nothing better exists.
 		msg = err.Error()
 	}
-	return msg, nil
+	return msg + innermostOriginChain(err), nil
+}
+
+// innermostOriginChain renders the macro-origin chain of the innermost
+// sourcedError: the node failureChain cuts at, so the chain names the macros
+// that built the very syntax the message describes. Outer links are the
+// compiler's route and would blame a macro for syntax it passed through, which
+// is the same rule compilation.SourcedError.Error applies to the Go text.
+//
+// The message carries the chain because nothing else on a condition does yet; a
+// (syntax-error ...) condition is exempt (conditionMessageAndIrritants returns
+// before reaching here) because its message is the macro author's own words.
+func innermostOriginChain(err error) string {
+	var innermost sourcedError
+	var se sourcedError
+	for e := err; errors.As(e, &se); e = errors.Unwrap(se) {
+		innermost = se
+	}
+	if innermost == nil {
+		return ""
+	}
+	return syntax.OriginChainText(innermost.SourceContext())
 }
 
 // failureChain returns the part of err that describes the failure rather than the

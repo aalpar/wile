@@ -16,6 +16,8 @@ package compilation
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -117,5 +119,42 @@ func TestSourcedError(t *testing.T) {
 		var extracted *SourcedError
 		c.Assert(errors.As(wrapped, &extracted), qt.IsTrue)
 		c.Assert(extracted.Source.File, qt.Equals, "lib.scm")
+	})
+}
+
+// TestSourcedErrorOriginChain: the innermost SourcedError renders the chain of
+// the node it was stamped on, once, whether or not that node has a position,
+// and truncates at syntax.DefaultMaxOriginDepth. Ported from validate's
+// ValidationError, which rendered the chain before the compiler carried it.
+func TestSourcedErrorOriginChain(t *testing.T) {
+	at := func(line int) *syntax.SourceContext {
+		return syntax.NewSourceContext("x", "f.scm", syntax.NewSourceIndexes(0, 0, line), syntax.NewSourceIndexes(1, 1, line))
+	}
+	chain := &syntax.OriginInfo{Identifier: "inner", Location: at(2),
+		Parent: &syntax.OriginInfo{Identifier: "mid", Location: at(3),
+			Parent: &syntax.OriginInfo{Identifier: "outer", Location: at(4)}}}
+	cause := werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "bad in let form")
+	wantChain := "\n  expanded from 'inner' at " + at(2).Location() +
+		"\n  expanded from 'mid' at " + at(3).Location() +
+		"\n  expanded from 'outer' at " + at(4).Location()
+
+	t.Run("position-less node still prints its chain", func(t *testing.T) {
+		se := &SourcedError{Source: &syntax.SourceContext{Origin: chain}, Cause: cause}
+		qt.Assert(t, se.Error(), qt.Equals, "bad in let form: invalid syntax"+wantChain)
+	})
+	t.Run("outer links add neither location nor chain", func(t *testing.T) {
+		inner := &SourcedError{Source: at(1).WithOrigin(chain), Cause: cause}
+		outer := &SourcedError{Source: at(9).WithOrigin(&syntax.OriginInfo{Identifier: "enclosing", Location: at(9)}), Cause: inner}
+		qt.Assert(t, outer.Error(), qt.Equals, at(1).Location()+": bad in let form: invalid syntax"+wantChain)
+	})
+	t.Run("max depth truncates", func(t *testing.T) {
+		var deep *syntax.OriginInfo
+		for i := syntax.DefaultMaxOriginDepth + 2; i > 0; i-- {
+			deep = &syntax.OriginInfo{Identifier: fmt.Sprintf("m%d", i), Parent: deep}
+		}
+		se := &SourcedError{Source: at(1).WithOrigin(deep), Cause: cause}
+		text := se.Error()
+		qt.Assert(t, strings.Count(text, "expanded from"), qt.Equals, syntax.DefaultMaxOriginDepth)
+		qt.Assert(t, strings.HasSuffix(text, "\n  ... and 2 more expansion(s)"), qt.IsTrue, qt.Commentf("%s", text))
 	})
 }

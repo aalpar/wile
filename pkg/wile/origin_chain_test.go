@@ -15,10 +15,14 @@
 package wile_test
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/machine/compilation"
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
 )
 
@@ -99,15 +103,16 @@ func expandOnceEval(form string) string {
 }
 
 // TestMacroOriginChainText pins the rendered chain block, anchored on the
-// message before it and on what follows, so a reordered, duplicated,
-// truncated or position-less chain cannot match. The link positions record the
+// message before it and on what follows (the end of the text on expand, the
+// stack trace on expand-once), so a reordered, duplicated, truncated or
+// position-less chain cannot match. The link positions record the
 // behavior as shipped, not an ideal: :2:1 is the use the chain was stamped at,
 // and :2:45 is where expand-once's quoted form sits in the program above.
 func TestMacroOriginChainText(t *testing.T) {
 	t.Parallel()
 
 	entries := []struct{ name, use, chain string }{
-		{"expand", `(bad y)`, "in let form\n  expanded from 'bad' at :2:1: invalid syntax"},
+		{"expand", `(bad y)`, "in let form: invalid syntax\n  expanded from 'bad' at :2:1"},
 		{"expand-once", expandOnceEval(`(bad y)`), "in let form\n  expanded from 'bad' at :2:45\nStack trace:"},
 	}
 	for _, kind := range originChainKinds {
@@ -116,6 +121,9 @@ func TestMacroOriginChainText(t *testing.T) {
 				err := evalSyntaxFormsErr(t, "(define-syntax bad "+kind.def+")\n"+entry.use, kind.opts...)
 				qt.Assert(t, err, qt.IsNotNil)
 				qt.Assert(t, err.Error(), qt.Contains, entry.chain)
+				if entry.name == "expand" {
+					qt.Assert(t, strings.HasSuffix(err.Error(), entry.chain), qt.IsTrue, qt.Commentf("%s", err.Error()))
+				}
 			})
 		}
 	}
@@ -132,11 +140,11 @@ func TestMacroOriginChainNests(t *testing.T) {
 		{"syntax-case in syntax-case",
 			"(define-syntax inner (lambda (stx) (syntax-case stx () ((_ x) #'(let ((x)) x)))))\n" +
 				"(define-syntax outer (lambda (stx) (syntax-case stx () ((_ x) #'(inner x)))))\n(outer y)",
-			"in let form\n  expanded from 'inner' at :2:65\n  expanded from 'outer' at :3:1: invalid syntax"},
+			"in let form: invalid syntax\n  expanded from 'inner' at :2:65\n  expanded from 'outer' at :3:1"},
 		{"er in syntax-rules",
 			"(define-syntax inner (er-macro-transformer (lambda (form rename compare) (list (rename 'let) (list (list 'y)) 'y))))\n" +
 				"(define-syntax outer (syntax-rules () ((_ x) (inner x))))\n(outer y)",
-			"in let form\n  expanded from 'inner' at :3:1\n  expanded from 'outer' at :3:1: invalid syntax"},
+			"in let form: invalid syntax\n  expanded from 'inner' at :3:1\n  expanded from 'outer' at :3:1"},
 		// The keyword of the inner use is an ER rename, which carries no origin
 		// of its own; the chain continues through the call pair around it.
 		{"rename keyword in er",
@@ -267,7 +275,7 @@ func TestMacroOriginChainKeepsSplicedKeywordPosition(t *testing.T) {
 		t.Run(layer.name, func(t *testing.T) {
 			err := evalSyntaxFormsErr(t, src, layer.opts...)
 			qt.Assert(t, err, qt.IsNotNil)
-			qt.Assert(t, err.Error(), qt.Contains, "in let form\n  expanded from 'inner' at :3:7: invalid syntax")
+			qt.Assert(t, err.Error(), qt.Contains, "in let form: invalid syntax\n  expanded from 'inner' at :3:7")
 			qt.Assert(t, err.Error(), qt.Not(qt.Contains), "expanded from 'outer'")
 		})
 	}
@@ -293,4 +301,71 @@ func TestSchemeLayerERConversionMatchesDatumToSyntax(t *testing.T) {
 		err := evalSyntaxFormsErr(t, void)
 		qt.Assert(t, err, qt.IsNotNil)
 	})
+}
+
+// TestMacroOriginChainOnEveryExpanderFailure (B30): the chain is rendered by
+// the error that owns the failing node, so failures raised outside validation
+// name the macros that built their input too. Each source nests one macro in
+// another; links counts the macros that built the failing node. A clause
+// mismatch fails on the inner macro's input, which only outer built.
+func TestMacroOriginChainOnEveryExpanderFailure(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name, src, failure string
+		links              int
+	}{
+		{"syntax-error",
+			"(define-syntax se (syntax-rules () ((_ x) (syntax-error \"bad\" x))))\n" +
+				"(define-syntax outer (syntax-rules () ((_ y) (se y))))\n(outer 1)",
+			"syntax-error: bad: 1", 2},
+		{"syntax-rules no matching clause",
+			"(define-syntax one (syntax-rules () ((_ x) x)))\n" +
+				"(define-syntax outer (syntax-rules () ((_ y) (one y y))))\n(outer 1)",
+			"syntax-rules: no matching clause for input", 1},
+		{"set! of no such binding",
+			"(define-syntax bs (syntax-rules () ((_ x) (set! nosuchvar x))))\n" +
+				"(define-syntax outer (syntax-rules () ((_ y) (bs y))))\n(outer 1)",
+			"no such binding \"nosuchvar\"", 2},
+		{"validation",
+			"(define-syntax badif (syntax-rules () ((_ x) (if x))))\n" +
+				"(define-syntax outer (syntax-rules () ((_ y) (badif y))))\n(outer 1)",
+			"if requires at least 2 argument(s), got 1 in if form", 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := evalSyntaxFormsErr(t, tc.src)
+			qt.Assert(t, err, qt.IsNotNil)
+			text := err.Error()
+			qt.Assert(t, text, qt.Contains, tc.failure)
+			qt.Assert(t, strings.Count(text, "expanded from 'outer'"), qt.Equals, 1)
+			qt.Assert(t, strings.Count(text, "expanded from '"), qt.Equals, tc.links, qt.Commentf("%s", text))
+		})
+	}
+}
+
+// TestMacroOriginChainIsCarried (B30): the chain is reachable as data, not only
+// as text. The deepest *compilation.SourcedError is the failing node, and its
+// Source.Origin names the macro that built it; its location is the only one the
+// rendered text carries. The use sits inside a define because validation runs
+// over the whole top-level form: the compiler's own stamp is the define, which
+// no macro built, so only the validation error's node knows the origin.
+func TestMacroOriginChainIsCarried(t *testing.T) {
+	t.Parallel()
+
+	err := evalSyntaxFormsErr(t, "(define-syntax badif (syntax-rules () ((_ x) (if x))))\n(define (f) (badif 1))")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrInvalidSyntax), qt.IsTrue)
+	var deepest *compilation.SourcedError
+	var se *compilation.SourcedError
+	for e := error(err); errors.As(e, &se); e = se.Cause {
+		deepest = se
+	}
+	qt.Assert(t, deepest, qt.IsNotNil)
+	qt.Assert(t, deepest.Source.Origin, qt.IsNotNil)
+	qt.Assert(t, deepest.Source.Origin.Identifier, qt.Equals, "badif")
+	loc := deepest.Source.Location()
+	qt.Assert(t, loc, qt.Not(qt.Equals), "")
+	qt.Assert(t, strings.Count(err.Error(), loc+": "), qt.Equals, 1, qt.Commentf("%s", err.Error()))
+	qt.Assert(t, strings.Count(err.Error(), "expanded from 'badif'"), qt.Equals, 1)
 }
