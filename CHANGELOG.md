@@ -36,8 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   aborts to a tag nothing holds reported "no prompt found" the first time and
   a barrier violation after. The first import's error is unchanged, so the two
   can differ: a top-level import whose body resumes a runtime continuation still
-  fails the first time with `ErrContinuationBarrier` (no runtime driver to
-  resume it). The later one names how the body exited and is located at the
+  fails the first time with the engine's `ErrContinuationBarrier` for an
+  expansion-time resume with no runtime driver. The later one names how the body exited and is located at the
   library's form.
 
 - **BREAKING (behavior): `char-ready?` requires a textual input port.** It

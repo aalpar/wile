@@ -856,8 +856,9 @@ func TestTopLevelImportOfAnAbortingLibraryBodyIsRememberedAsEscaped(t *testing.T
 }
 
 // TestTopLevelImportOfAResumingLibraryBodyIsRememberedAsEscaped is the resume
-// twin of the abort test above, and the case where the first and later imports
-// match different sentinels: the first top-level import of a body that invokes a
+// twin of the abort test above, and the case where the first import still
+// matches ErrContinuationBarrier, the sentinel later imports used to get: the
+// first top-level import of a body that invokes a
 // runtime continuation fails as any expansion-time resume with no runtime driver
 // does (ErrContinuationBarrier, from the engine's expansion-signal conversion);
 // a later one gets the remembered ErrLibraryInstantiationEscaped, and the body
