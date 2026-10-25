@@ -185,8 +185,7 @@ func FlipScopeStampOrigin(stx SyntaxValue, scope *Scope, origin *OriginInfo, pas
 	return p.walk(stx, true)
 }
 
-// walk rebuilds stx. flip is false inside a box: FlipScope does not descend
-// into one, so its symbols keep their scopes.
+// walk rebuilds stx.
 func (p *originStamp) walk(stx SyntaxValue, flip bool) SyntaxValue {
 	switch s := stx.(type) {
 	case *SyntaxPair:
@@ -252,9 +251,9 @@ func (p *originStamp) walk(stx SyntaxValue, flip bool) SyntaxValue {
 
 	case *SyntaxBox:
 		if p.pass.other.has(s) {
-			return s
+			return p.flipOnly(s, flip)
 		}
-		return NewSyntaxBox(p.walk(s.Value, false), p.stamp(s.SourceContext()))
+		return NewSyntaxBox(p.walk(s.Value, flip), p.stamp(s.SourceContext()))
 
 	default:
 		return stx

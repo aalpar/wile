@@ -51,10 +51,7 @@ func NewSyntaxBox(value SyntaxValue, sctx *SourceContext) *SyntaxBox {
 // its elements. Only symbols accumulate scopes; everything else is threaded
 // through unchanged.
 func (p *SyntaxBox) AddScope(scope *Scope) SyntaxValue {
-	if p == nil || p.Value == nil {
-		return p
-	}
-	inner := MapSyntaxTree(p.Value, func(node SyntaxValue) SyntaxValue {
+	return MapSyntaxTree(p, func(node SyntaxValue) SyntaxValue {
 		adder, ok := node.(interface {
 			AddScope(*Scope) SyntaxValue
 		})
@@ -63,10 +60,6 @@ func (p *SyntaxBox) AddScope(scope *Scope) SyntaxValue {
 		}
 		return node
 	})
-	if inner == p.Value {
-		return p
-	}
-	return NewSyntaxBox(inner, p.SourceContext())
 }
 
 // IsVoid returns true if the syntax box is nil.
