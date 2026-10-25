@@ -189,6 +189,9 @@ func (p *TokenizerError) Unwrap() error {
 // forgotten at a call site. runeStart, not runeEnd, is the position: it points
 // AT the offending rune rather than past it, which is what a caret would mark.
 func (p *Tokenizer) fail(mess string) {
+	if p.readerFailed() {
+		return
+	}
 	p.err = p.stampError(nil, mess)
 }
 
@@ -196,7 +199,19 @@ func (p *Tokenizer) fail(mess string) {
 // io.EOF or rune error that interrupted a longer construct. Call it with the
 // incoming p.err as cause; the stamp is read before p.err is overwritten.
 func (p *Tokenizer) failWrap(err error, mess string) {
+	if p.readerFailed() {
+		return
+	}
 	p.err = p.stampError(err, mess)
+}
+
+// readerFailed reports whether p.err is a reader fault. That fault stands: the
+// scanner diagnosing the construct the stream cut short ("1e" then a closed
+// port is not missing its exponent digits) would bury the real cause under a
+// scanner message that renders without it.
+func (p *Tokenizer) readerFailed() bool {
+	var terr *TokenizerError
+	return errors.As(p.err, &terr) && terr.readerFault()
 }
 
 // stampError builds the located error. It reads p.err (the error being

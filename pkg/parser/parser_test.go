@@ -2792,6 +2792,15 @@ func TestParser_ReadSyntaxReaderFaultIsNotEOF(t *testing.T) {
 		{name: "fault before the first rune", src: "abc", after: 0},
 		{name: "fault inside a symbol", src: "abc", after: 1},
 		{name: "fault inside a list", src: "(a b c)", after: 4},
+		{name: "fault inside a string", src: `"abc"`, after: 2},
+		{name: "fault inside a block comment", src: "#| x |# 1", after: 3},
+		{name: "fault inside an exponent", src: "1e5", after: 2},
+		{name: "fault inside a ratio", src: "1/2", after: 2},
+		{name: "fault inside a decimal", src: "1.5", after: 2},
+		{name: "fault inside a radix numeral", src: "#x1f", after: 3},
+		{name: "fault inside a complex", src: "1+2i", after: 3},
+		{name: "fault inside a hex character", src: `#\x41`, after: 3},
+		{name: "fault after a hash", src: "#t", after: 1},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -2804,6 +2813,9 @@ func TestParser_ReadSyntaxReaderFaultIsNotEOF(t *testing.T) {
 			c.Check(errors.Is(err, io.EOF), qt.IsFalse, qt.Commentf("got: %v", err))
 			c.Check(errors.Is(err, io.ErrUnexpectedEOF), qt.IsFalse, qt.Commentf("got: %v", err))
 			c.Check(errors.Is(err, werr.ErrPortClosed), qt.IsTrue, qt.Commentf("got: %v", err))
+			c.Check(errors.Is(err, werr.ErrIncompleteInput), qt.IsFalse, qt.Commentf("got: %v", err))
+			c.Check(strings.Contains(err.Error(), "U+FFFD"), qt.IsFalse, qt.Commentf("got: %v", err))
+			c.Check(strings.Contains(err.Error(), "is closed"), qt.IsTrue, qt.Commentf("got: %v", err))
 		})
 	}
 }

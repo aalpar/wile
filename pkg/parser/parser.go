@@ -291,7 +291,10 @@ func (p *Parser) ReleaseLookahead(urr values.RuneUnreader) error {
 // (Location falls back to the stamped rune), and causeText renders it. err
 // stays in the chain, so its sentinels still match.
 //
-// Only the delimiter faults qualify. Another pending fault diagnoses a token
+// A reader fault qualifies for the same reason: the stream failing cut the
+// token short ("1e" then a closed port), and its parse error is an artifact.
+//
+// Only the delimiter and reader faults qualify. Another pending fault diagnoses a token
 // that is complete and wrong ("#\qqq"), which the parser names at least as
 // well, by its text, and which the tokenizer stamps past the token.
 func (p *Parser) preferCutShortFault(err error) error {
@@ -303,7 +306,8 @@ func (p *Parser) preferCutShortFault(err error) error {
 		return err
 	}
 	cut := errors.Is(pending, tokenizer.NewTokenizerError(tokenizer.MessageExpectingDelimiterAfterNumber)) ||
-		errors.Is(pending, tokenizer.NewTokenizerError(tokenizer.MessageExpectingDelimiterAfterBigNumber))
+		errors.Is(pending, tokenizer.NewTokenizerError(tokenizer.MessageExpectingDelimiterAfterBigNumber)) ||
+		errors.Is(pending, tokenizer.NewTokenizerError(tokenizer.MessageReaderFailed))
 	if !cut {
 		return err
 	}
