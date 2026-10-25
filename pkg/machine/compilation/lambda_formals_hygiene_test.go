@@ -78,6 +78,20 @@ func TestLambdaFormalsHygienicDuplicates(t *testing.T) {
 			  ((mkf () 1 2) 10 20))`,
 			Expected: values.NewInteger(30),
 		},
+		{
+			// A user `x` beside a template-introduced `x`: two scope sets of the SAME
+			// size (the use-site scope plus one more each) with different members. The
+			// rows above differ in size as well as content, so a duplicate check keyed
+			// on how many scopes a formal carries, not which, passes them; this row
+			// does not.
+			Name: "user formal beside template formal, same scope-set size",
+			Code: `(begin
+			  (define-syntax inner
+			    (syntax-rules ()
+			      ((inner y) ((lambda (x y) (- x y)) 10 3))))
+			  (inner x))`,
+			Expected: values.NewInteger(7),
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
@@ -108,6 +122,14 @@ func TestLetSameNameDistinctScopeBindings(t *testing.T) {
 	tcs := []testhelpers.SchemeCodeTestCase{
 		{Name: "two same-name bindings", Code: macro + ` (start 10 20))`, Expected: values.NewInteger(-10)},
 		{Name: "three same-name bindings", Code: macro + ` (start 3 5 7))`, Expected: values.NewInteger(-9)},
+		{
+			// The accumulated `a`s differ in scope-set size as well as content; this
+			// pair (a user `x`, a template `x`) is the same size, so it is the row a
+			// slot key built from the number of scopes, not the set, gets wrong.
+			Name:     "user binder beside template binder, same scope-set size",
+			Code:     `(begin (define-syntax inner (syntax-rules () ((inner y) (let ((x 10) (y 3)) (- x y))))) (inner x))`,
+			Expected: values.NewInteger(7),
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {

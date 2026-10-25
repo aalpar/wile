@@ -89,4 +89,25 @@ func TestFrameReclaimVerdict_ScopeDistinctBindersGetSeparateVerdicts(t *testing.
 		}
 	}
 	qt.Assert(t, trues, qt.Equals, 1)
+
+	// The same recovery when the two binders' scope sets are the same SIZE. Above,
+	// the user f's set is smaller than the macro f's, so a verdict key built from the
+	// number of scopes, not the set, still separates them. Here each f comes from its
+	// own macro use and carries that use's scopes (one introduction, one use site):
+	// equal sizes, different members.
+	sameSize, err := classifyCompiled(ctx, `(begin
+		(define-syntax safe-f (syntax-rules () ((_) (define (f x) (+ x 1)))))
+		(define-syntax capturing-f (syntax-rules () ((_) (define (f x) (call/cc (lambda (k) (k x)))))))
+		(safe-f)
+		(capturing-f))`, true)
+	qt.Assert(t, err, qt.IsNil)
+	verdicts = verdictsForName(sameSize, "f")
+	qt.Assert(t, len(verdicts), qt.Equals, 2)
+	trues = 0
+	for _, v := range verdicts {
+		if v {
+			trues++
+		}
+	}
+	qt.Assert(t, trues, qt.Equals, 1)
 }

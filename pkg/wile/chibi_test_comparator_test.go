@@ -31,10 +31,11 @@ import (
 func TestChibiTestComparator(t *testing.T) {
 	t.Parallel()
 
-	c := qt.New(t)
 	ctx := context.Background()
 
-	newEngine := func() *wile.Engine {
+	// The handle is the SUBTEST's: a FailNow on the parent's, from the
+	// subtest's goroutine, aborts the wrong test.
+	newEngine := func(c *qt.C) *wile.Engine {
 		eng, err := wile.NewEngine(ctx,
 			wile.WithProfile(wile.KitchenSink),
 			wile.WithSourceFS(stdlib.FS),
@@ -77,19 +78,25 @@ func TestChibiTestComparator(t *testing.T) {
 		},
 		// An explicit comparator is honored even for inexact expected: a #f
 		// comparator makes (test 1.0 1.0) fail (it is not bypassed by approx).
+		// The harness's report goes to a string port and is part of the answer:
+		// on the process's stdout this deliberate FAIL line reached go test's
+		// output unattributed, beside whichever parallel test was running.
 		{
 			name: "custom comparator not bypassed for inexact",
 			code: `(import (chibi test))
-                   (test-begin "custom")
-                   (parameterize ((current-test-comparator (lambda (e a) #f)))
-                     (test 1.0 1.0))
-                   ((test-failure-count))`,
-			want: "1",
+                   (define out (open-output-string))
+                   (parameterize ((current-output-port out))
+                     (test-begin "custom")
+                     (parameterize ((current-test-comparator (lambda (e a) #f)))
+                       (test 1.0 1.0)))
+                   (list ((test-failure-count)) (get-output-string out))`,
+			want: `(1 "Testing custom\n  FAIL: expected 1.0 but got 1.0\n")`,
 		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			eng := newEngine()
+			c := qt.New(t)
+			eng := newEngine(c)
 			result, err := eng.EvalMultiple(ctx, tc.code)
 			c.Assert(err, qt.IsNil)
 			c.Assert(result.SchemeString(), qt.Equals, tc.want)

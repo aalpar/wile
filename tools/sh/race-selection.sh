@@ -81,8 +81,9 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
-# A goroutine spawn: `go f(`, `go p.f(`, or `go func(`.
-GO_SPAWN='^[[:space:]]*go[[:space:]]+([a-zA-Z_][a-zA-Z0-9_.]*\(|func[[:space:]]*\()'
+# A goroutine spawn: `go f(`, `go p.f(`, `go func(`, or sync.WaitGroup's
+# `wg.Go(` (Go 1.25), which spawns as surely as a go statement.
+GO_SPAWN='^[[:space:]]*(go[[:space:]]+([a-zA-Z_][a-zA-Z0-9_.]*\(|func[[:space:]]*\()|[a-zA-Z_][a-zA-Z0-9_.]*\.Go\()'
 
 # A t.Parallel() call, as a statement rather than as prose about one.
 TEST_PARALLEL='^[[:space:]]*[a-zA-Z_][a-zA-Z0-9_]*\.Parallel\(\)'

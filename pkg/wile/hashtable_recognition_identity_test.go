@@ -72,7 +72,7 @@ func TestMakeHashtableRecognitionSurvivesImports(t *testing.T) {
 		c.Run(tc.name, func(c *qt.C) {
 			// A FRESH engine per case: an import mutates the top level, so
 			// reusing one engine would let an earlier case decide a later one.
-			got := evalSRFI(c, newSRFITestEngine(t), tc.expr)
+			got := evalSRFI(c, newSRFITestEngine(c), tc.expr)
 			c.Assert(got, qt.Equals, `#t`)
 		})
 	}
@@ -107,8 +107,8 @@ func TestMakeHashtableRejectsUnregisteredProcedures(t *testing.T) {
 	}
 	for _, tc := range cases {
 		c.Run(tc.name, func(c *qt.C) {
-			eng := newSRFITestEngine(t)
-			_, err := eng.EvalMultiple(t.Context(), tc.expr)
+			eng := newSRFITestEngine(c)
+			_, err := eng.EvalMultiple(c.Context(), tc.expr)
 			c.Assert(err, qt.IsNotNil)
 		})
 	}
@@ -146,7 +146,7 @@ func TestHashtableAccessorsRoundTripAfterImport(t *testing.T) {
 	}
 	for _, tc := range cases {
 		c.Run(tc.name, func(c *qt.C) {
-			got := evalSRFI(c, newSRFITestEngine(t), tc.expr)
+			got := evalSRFI(c, newSRFITestEngine(c), tc.expr)
 			c.Assert(got, qt.Equals, `#t`)
 		})
 	}
@@ -180,7 +180,7 @@ func TestHashtableAccessorsSurviveAUserShadow(t *testing.T) {
 	}
 	for _, tc := range cases {
 		c.Run(tc.name, func(c *qt.C) {
-			got := evalSRFI(c, newSRFITestEngine(t), tc.expr)
+			got := evalSRFI(c, newSRFITestEngine(c), tc.expr)
 			c.Assert(got, qt.Equals, `#t`)
 		})
 	}
