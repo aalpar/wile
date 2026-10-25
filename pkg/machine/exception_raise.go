@@ -85,15 +85,21 @@ type escalatorArm struct {
 // embedder (engine.wrapRuntimeError) with the condition, source, and stack trace.
 func RaiseInPlace(mc *MachineContext, cond values.Value, continuable bool) error {
 	handlers := mc.ResolveParameterValue(exceptionHandlerParam)
-	return mc.raiseToHandlers(cond, continuable, handlers)
+	return mc.raiseToHandlers(cond, continuable, handlers, handlerReturnedMessage)
 }
+
+// handlerReturnedMessage is the secondary exception's message when a handler
+// returns from a non-continuable raise (R7RS §6.11).
+const handlerReturnedMessage = "exception handler returned from non-continuable exception"
 
 // raiseToHandlers runs the FIRST handler of `handlers` on cond, escalating to the
 // rest (its cdr) on a non-continuable normal return. handlers is passed explicitly so
 // the non-continuable escalation targets the parent list directly rather than
 // re-resolving from marks (the handler ran with the parent mark, but the finalizer
-// frame that escalates runs after the handler's marks are gone).
-func (mc *MachineContext) raiseToHandlers(cond values.Value, continuable bool, handlers values.Value) error {
+// frame that escalates runs after the handler's marks are gone). returned is the
+// message of that escalation's secondary exception; the escalation itself raises
+// with handlerReturnedMessage.
+func (mc *MachineContext) raiseToHandlers(cond values.Value, continuable bool, handlers values.Value, returned string) error {
 	source := mc.CurrentSource()
 	trace := mc.CaptureStackTrace(DefaultBacktraceDepth)
 	enrichNativeError(cond, source, trace)
@@ -101,7 +107,7 @@ func (mc *MachineContext) raiseToHandlers(cond values.Value, continuable bool, h
 	pair, ok := handlers.(*values.Pair)
 	if !ok {
 		// Empty handler stack: uncaught exception. Carry it to the embedder.
-		return &ErrExceptionEscape{Condition: cond, Source: source, StackTrace: trace}
+		return &ErrExceptionEscape{Condition: cond, Source: source, StackTrace: trace, Continuable: continuable}
 	}
 	handler := pair.Car()
 	parent := pair.Cdr()
@@ -185,11 +191,8 @@ func (mc *MachineContext) raiseToHandlers(cond values.Value, continuable bool, h
 			finMC.SetValues(vals...)
 			return nil
 		}
-		secondary := values.NewErrorObjectWithCause(
-			"exception handler returned from non-continuable exception",
-			werr.ErrNonContinuableException,
-		)
-		return finMC.raiseToHandlers(secondary, false, parent)
+		secondary := values.NewErrorObjectWithCause(returned, werr.ErrNonContinuableException)
+		return finMC.raiseToHandlers(secondary, false, parent, handlerReturnedMessage)
 	}
 	// Use a runtime env reachable from here, falling back to the live frame: when the
 	// raise fires inside a reified call-with-values producer the live procedure frame

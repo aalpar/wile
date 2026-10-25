@@ -21,6 +21,7 @@ import (
 	"testing/fstest"
 
 	"github.com/aalpar/wile/pkg/stdlib"
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
 
 	qt "github.com/frankban/quicktest"
@@ -86,4 +87,22 @@ func TestGuardMissReportsTheRaiseSite(t *testing.T) {
 			qt.Assert(t, re.Source, qt.Equals, tc.want)
 		})
 	}
+}
+
+// TestRaiseContinuableOutOfAnExpansionRootNamesItself: a transformer's
+// raise-continuable reaches the caller's handlers after the transformer's root
+// has ended, so it cannot be resumed, and a handler that returns is an error. The
+// error names the raise the program wrote, and where it was, rather than "a
+// non-continuable exception" at the eval.
+func TestRaiseContinuableOutOfAnExpansionRootNamesItself(t *testing.T) {
+	t.Parallel()
+
+	_, err := newExpansionRootProbeEngine(t).EvalMultiple(context.Background(),
+		"(import (for-syntax (scheme base)))\n"+
+			"(define-syntax m (lambda (s) (raise-continuable 'boom)))\n"+
+			"(with-exception-handler (lambda (e) 42) (lambda () (eval '(m) (interaction-environment))))")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrNonContinuableException), qt.IsTrue, qt.Commentf("%v", err))
+	qt.Assert(t, err.Error(), qt.Contains, "returned from raise-continuable at :2:30")
+	qt.Assert(t, err.Error(), qt.Not(qt.Contains), "non-continuable exception")
 }

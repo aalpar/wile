@@ -77,11 +77,25 @@ func (p *unlinkedRootEscape) Unwrap() error {
 // settled mark: an outer bridge, such as one below a handler that is running now
 // and so is not in mc's handlers, must not raise it a second time. Not
 // RaiseInPlace, which would replace that chain with a fresh carrier.
+//
+// The raise is non-continuable whatever the root raised: the root has ended, so
+// a raise-continuable has nothing to resume. A handler that returns from one is
+// told so, and where it was raised, rather than that the program raised a
+// non-continuable exception.
 func (p *unlinkedRootEscape) raiseIn(mc *MachineContext, err error) error {
 	handlers := mc.ResolveParameterValue(exceptionHandlerParam)
 	_, ok := handlers.(*values.Pair)
 	if !ok {
 		return &unlinkedRootEscape{err: err}
 	}
-	return mc.raiseToHandlers(p.escape.Condition, false, handlers)
+	returned := handlerReturnedMessage
+	if p.escape.Continuable {
+		returned = "exception handler returned from raise-continuable"
+		loc := p.escape.Location()
+		if loc != "" {
+			returned += " at " + loc
+		}
+		returned += ", which ran at expansion time and cannot be resumed"
+	}
+	return mc.raiseToHandlers(p.escape.Condition, false, handlers, returned)
 }

@@ -28,11 +28,16 @@ import (
 // Condition / Source / StackTrace). Handler dispatch itself no longer flows through
 // this type — handlers ride the %exception-handlers parameter and are invoked in
 // place by RaiseInPlace (see exception_raise.go), so the old handler-machinery
-// fields (Continuable / Continuation / Handled / WindingStack) are gone.
+// fields (Continuation / Handled / WindingStack) are gone.
 type ErrExceptionEscape struct {
 	Condition  values.Value          // The raised condition/object
 	Source     *syntax.SourceContext // Source location where exception was raised
 	StackTrace StackTrace            // VM stack trace at raise point
+	// Continuable records that the raise was a raise-continuable. Uncaught where
+	// it was raised, it never resumes; an unlinked root's escape is raised again
+	// in the caller's handlers after that root has ended, and a handler that
+	// returns there gets an error naming the raise-continuable (raiseIn).
+	Continuable bool
 }
 
 // Error implements the error interface.
