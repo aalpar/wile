@@ -556,20 +556,26 @@ func ambiguousReference(id *syntax.SyntaxSymbol, suffix string) error {
 
 // unboundMessage renders the text of an unbound-binding diagnostic for sym; form
 // names the form after the identifier (" for set!"), or is empty. scoped is the
-// raising arm's claim that a scope set refused the reference. The message makes
-// that claim, "with compatible scopes", only when a same-named binding exists
-// somewhere: for a name bound at no phase under any scope set, no scope set would
-// have found it, so the text is the empty-scope arm's, and the absence clause
-// agrees with it instead of contradicting it. The "local" it denies is the
-// compile phase's: a local of an enclosing lower phase (a let around a
-// define-syntax) is read from phase 1 or above, so the phase sentence always
-// follows the name and qualifies the claim. The three answers stay apart: a
-// tie never reaches here (ambiguousReference), a miss with a same-named binding
-// keeps the scope wording, a miss with none does not.
+// raising arm's claim that a scope set refused the reference. The prefix claims
+// only what the probes established:
+//   - "no such binding %q with compatible scopes": scoped, and a same-named
+//     binding exists somewhere (another phase, or hygienically distinct).
+//   - "no such local or global binding %q": nothing of that name exists and the
+//     compile phase is the runtime, where the compile phase's locals are every
+//     local the reference could have meant.
+//   - "no such binding %q" otherwise. A same-named binding exists, so "local or
+//     global" would deny it; or the phase is above the runtime, where a local of
+//     an enclosing lower phase (a let around a define-syntax) is invisible to
+//     the probes, the reason the absence clause claims the global table only.
+//
+// A tie never reaches here (ambiguousReference), so the three answers stay apart.
 func (p *CompileTimeContinuation) unboundMessage(sym *values.Symbol, scopes syntax.Scopes, scoped bool, form string) string {
 	suffix, exists := p.unboundSuffix(sym, scopes, scoped)
 	if scoped && exists {
 		return fmt.Sprintf("no such binding %q with compatible scopes%s%s", sym.Key, form, suffix)
+	}
+	if exists || p.env.PhaseLevel() != environment.PhaseRuntime {
+		return fmt.Sprintf("no such binding %q%s%s", sym.Key, form, suffix)
 	}
 	return fmt.Sprintf("no such local or global binding %q%s%s", sym.Key, form, suffix)
 }

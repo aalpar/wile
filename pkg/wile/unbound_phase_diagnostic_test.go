@@ -98,7 +98,7 @@ func TestUnboundDiagnosticNamesThePhase(t *testing.T) {
 			src: `(define counter 41)
 			      (begin-for-syntax (define seen counter))`,
 			site: "compile_time_continuation.go, CompileSymbol empty-scope arm",
-			want: `no such local or global binding "counter" at phase 1 of this unit's macro tower`,
+			want: `no such binding "counter" at phase 1 of this unit's macro tower`,
 		},
 		{
 			name: "set! of a lower-phase name from a transformer body",
@@ -119,7 +119,7 @@ func TestUnboundDiagnosticNamesThePhase(t *testing.T) {
 			src: `(define counter 41)
 			      (begin-for-syntax (begin-for-syntax (define seen counter)))`,
 			site: "compile_time_continuation.go, CompileSymbol empty-scope arm",
-			want: `no such local or global binding "counter" at phase 2 of this unit's macro tower`,
+			want: `no such binding "counter" at phase 2 of this unit's macro tower`,
 		},
 	}
 	for _, tc := range cases {
@@ -186,10 +186,12 @@ func TestUnboundDiagnosticKeepsItsSentinel(t *testing.T) {
 // unbound diagnostic says which of three things happened, instead of asserting
 // a scope refusal it never tested. "with compatible scopes" blamed scopes for a
 // plain typo: a repeat lookup under syntax.AllScopes() misses too, so no scope
-// set would have found the name. Such a name also loses the scope wording from
-// the prefix, which reads as the empty-scope arm's ("no such local or global
-// binding"), so the absence clause no longer contradicts the text it follows;
-// a name with a same-named binding somewhere keeps "with compatible scopes".
+// set would have found the name. The prefix claims no more than the clause:
+// "with compatible scopes" only for a scoped miss with a same-named binding
+// somewhere; "no such local or global binding" only for a name absent
+// everywhere at the runtime phase; plain "no such binding" otherwise, so a
+// binding at another phase, a hygienically distinct one, or a local of an
+// enclosing lower phase (above the runtime) is never denied by the prefix.
 //
 // Every row asserts the EXACT tail of the message, not a substring: the clause
 // text, its parentheses and its position before the sentinel are the contract,
@@ -209,7 +211,7 @@ func TestUnboundDiagnosticDiscriminatesAbsenceFromScopeRefusal(t *testing.T) {
 		{
 			name: "a name bound at no phase says so",
 			src:  `(begin (define-syntax q (lambda (stx) (totally-absent-name-xyz stx))) (q))`,
-			tail: `no such local or global binding "totally-absent-name-xyz" at phase 1 of this unit's macro tower (no global binding of that name at any phase): no such binding`,
+			tail: `no such binding "totally-absent-name-xyz" at phase 1 of this unit's macro tower (no global binding of that name at any phase): no such binding`,
 		},
 		{
 			name: "a phase-0 typo names its absence and carries no phase sentence",
@@ -226,7 +228,7 @@ func TestUnboundDiagnosticDiscriminatesAbsenceFromScopeRefusal(t *testing.T) {
 			// carries scopes, and still no scope set would find the name.
 			name: "set! of a name bound nowhere from a transformer body says so",
 			src:  `(begin (define-syntax q (lambda (stx) (set! totally-absent-q 1))) (q))`,
-			tail: `no such local or global binding "totally-absent-q" for set! at phase 1 of this unit's macro tower (no global binding of that name at any phase): no such binding`,
+			tail: `no such binding "totally-absent-q" for set! at phase 1 of this unit's macro tower (no global binding of that name at any phase): no such binding`,
 		},
 		{
 			name: "a name bound at phase 0 and referenced at phase 1 says so",
@@ -236,20 +238,20 @@ func TestUnboundDiagnosticDiscriminatesAbsenceFromScopeRefusal(t *testing.T) {
 		{
 			name: "a name bound only above the reference phase names that phase",
 			src:  `(begin-for-syntax (define only-expand 1)) only-expand`,
-			tail: `no such local or global binding "only-expand" (bound at phase 1): no such binding`,
+			tail: `no such binding "only-expand" (bound at phase 1): no such binding`,
 		},
 		{
 			name: "every bound phase is listed, not the nearest",
 			src: `(define both 1)
 			      (begin-for-syntax (begin-for-syntax (define both 2)))
 			      (begin-for-syntax both)`,
-			tail: `no such local or global binding "both" at phase 1 of this unit's macro tower (bound at phases 0, 2): no such binding`,
+			tail: `no such binding "both" at phase 1 of this unit's macro tower (bound at phases 0, 2): no such binding`,
 		},
 		{
 			name: "the empty-scope arm names the phase it is bound at",
 			src: `(define counter 41)
 			      (begin-for-syntax (define seen counter))`,
-			tail: `no such local or global binding "counter" at phase 1 of this unit's macro tower (bound at phase 0): no such binding`,
+			tail: `no such binding "counter" at phase 1 of this unit's macro tower (bound at phase 0): no such binding`,
 		},
 		{
 			name: "a macro-introduced binder the use site cannot see names hygiene",
@@ -271,7 +273,7 @@ func TestUnboundDiagnosticDiscriminatesAbsenceFromScopeRefusal(t *testing.T) {
 			src: `(define-syntax def-it2 (syntax-rules () ((_) (define secret 1))))
 			      (def-it2)
 			      secret`,
-			tail: `no such local or global binding "secret": no such binding`,
+			tail: `no such binding "secret": no such binding`,
 		},
 		{
 			// A macro-introduced global bound at another phase under scopes the use
@@ -286,14 +288,14 @@ func TestUnboundDiagnosticDiscriminatesAbsenceFromScopeRefusal(t *testing.T) {
 			src: `(define-syntax def-ct (syntax-rules () ((_ v) (begin-for-syntax (define hidden v)))))
 			      (def-ct 5)
 			      hidden`,
-			tail: `no such local or global binding "hidden": no such binding`,
+			tail: `no such binding "hidden": no such binding`,
 		},
 		{
 			name: "a phase-0 binder introduced by a macro is not called absent from phase 1",
 			src: `(define-syntax def0 (syntax-rules () ((_) (define hid0 1))))
 			      (def0)
 			      (begin-for-syntax hid0)`,
-			tail: `no such local or global binding "hid0" at phase 1 of this unit's macro tower: no such binding`,
+			tail: `no such binding "hid0" at phase 1 of this unit's macro tower: no such binding`,
 		},
 		{
 			// The only same-named binding is at ANOTHER phase, so "here" would be
@@ -305,15 +307,16 @@ func TestUnboundDiagnosticDiscriminatesAbsenceFromScopeRefusal(t *testing.T) {
 		},
 		{
 			// A local of an enclosing LOWER phase is invisible to the global
-			// table, so the clause must claim only the global table.
+			// table, so the clause must claim only the global table, and the
+			// prefix must not deny the local the program wrote.
 			name: "a phase-0 local read from a transformer body is a global absence only",
 			src:  `(let ((loc 1)) (define-syntax q (lambda (stx) loc)) (q))`,
-			tail: `no such local or global binding "loc" at phase 1 of this unit's macro tower (no global binding of that name at any phase): no such binding`,
+			tail: `no such binding "loc" at phase 1 of this unit's macro tower (no global binding of that name at any phase): no such binding`,
 		},
 		{
 			name: "the let-syntax form of the same local",
 			src:  `(let ((yy 1)) (let-syntax ((m (lambda (stx) yy))) (m)))`,
-			tail: `no such local or global binding "yy" at phase 1 of this unit's macro tower (no global binding of that name at any phase): no such binding`,
+			tail: `no such binding "yy" at phase 1 of this unit's macro tower (no global binding of that name at any phase): no such binding`,
 		},
 	}
 	for _, tc := range cases {
@@ -347,7 +350,7 @@ func TestUnboundDiagnosticSeesForTemplateImports(t *testing.T) {
 
 	_, err = eng.EvalMultiple(ctx, `(import (for-template (tpl lib))) tplonly`)
 	qt.Assert(t, err, qt.IsNotNil)
-	want := `no such local or global binding "tplonly" (bound at phase -1): no such binding`
+	want := `no such binding "tplonly" (bound at phase -1): no such binding`
 	qt.Assert(t, strings.HasSuffix(err.Error(), want), qt.IsTrue,
 		qt.Commentf("want tail: %s\ngot: %v", want, err))
 

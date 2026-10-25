@@ -93,7 +93,7 @@ func TestERMacroTransformerCannotSeeLetLocals(t *testing.T) {
 			qt.Commentf("an er-macro-transformer body must not reach the enclosing let's runtime locals"))
 		qt.Assert(t, errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue,
 			qt.Commentf("got: %s", err))
-		qt.Assert(t, strings.Contains(err.Error(), `no such local or global binding "c"`), qt.IsTrue,
+		qt.Assert(t, strings.Contains(err.Error(), `no such binding "c"`), qt.IsTrue,
 			qt.Commentf("the refusal must name the identifier; got: %s", err))
 	})
 

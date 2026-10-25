@@ -271,14 +271,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   report the phases a name resolves at; an ambiguous phase counts as bound
   rather than raising.
 
-- **An unbound name bound nowhere no longer opens with a scope refusal.** A
-  scoped reference or `set!` of a name no global resolves at any phase, under
-  any scope set, read `no such binding "x" with compatible scopes ... (no global
-  binding of that name at any phase)`, the clause denying the prefix. It now
-  reads as the empty-scope arm does, `no such local or global binding "x" ...
-  (no global binding of that name at any phase)`. A name with a same-named
-  binding somewhere (another phase, or hygienically distinct) keeps `with
-  compatible scopes`. Text only; the sentinel is still `ErrNoSuchBinding`.
+- **An unbound-binding prefix no longer claims more than its clause.** A scoped
+  reference or `set!` of a name no global resolves at any phase, under any scope
+  set, read `no such binding "x" with compatible scopes ... (no global binding of
+  that name at any phase)`, the clause denying the prefix; and the empty-scope
+  arm read `no such local or global binding "x"` for a name bound at another
+  phase or hygienically distinct. Now `with compatible scopes` is said only for
+  a scoped miss with a same-named binding somewhere, and `no such local or global
+  binding` only for a name absent everywhere at phase 0; every other miss reads
+  `no such binding "x"`. Above phase 0 a local of an enclosing lower phase (a
+  `let` around a `define-syntax`) is outside what the probes see, so the prefix
+  no longer denies it. Text only; the sentinel is still `ErrNoSuchBinding`.
 
 - **A resolver miss reports every arm and every extension it searched
   (I117).** `ChainFileResolver.ResolveAndOpen` and `ResolveLibraryFile` each kept
