@@ -127,10 +127,10 @@ func (p *OSFileResolver) resolveRelative(ctx context.Context, path string) (fs.F
 	searched := p.buildSearchedList(searchDirs)
 	if len(searched) == 0 {
 		return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound,
-			"%q (no search paths available)", path)
+			"file %q not found (no search paths available)", path)
 	}
 	return nil, "", werr.WrapForeignErrorf(werr.ErrFileNotFound,
-		"%q (searched: %s)", path, strings.Join(searched, ", "))
+		"file %q not found; searched: %s", path, strings.Join(searched, ", "))
 }
 
 // absenceErrnos are the stat failures that PROVE the candidate is not there, as

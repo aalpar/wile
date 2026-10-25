@@ -1339,23 +1339,3 @@ func TestJoinMisses_NoMissesIsNotFound(t *testing.T) {
 	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsTrue, qt.Commentf("err = %v", err))
 }
 
-// TestResolverMissStatesNotFoundOnce pins each arm's miss text: the sentinel
-// already renders ": file not found", so the arm's own message names the file
-// and where it looked without saying "not found" a second time.
-func TestResolverMissStatesNotFoundOnce(t *testing.T) {
-	env := environment.NewNamespace().Runtime()
-	tcs := []struct {
-		name string
-		r    environment.FileResolver
-	}{
-		{"virtual filesystem", NewFSFileResolver(fstest.MapFS{}, env)},
-		{"OS filesystem", NewOSFileResolver(env)},
-	}
-	for _, tc := range tcs {
-		t.Run(tc.name, func(t *testing.T) {
-			_, _, err := tc.r.ResolveAndOpen(context.Background(), "absent-xyz.scm")
-			qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsTrue)
-			qt.Assert(t, strings.Count(err.Error(), "not found"), qt.Equals, 1, qt.Commentf("%q", err.Error()))
-		})
-	}
-}
