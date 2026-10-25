@@ -17,6 +17,7 @@ package core_test
 import (
 	"errors"
 	"math"
+	"math/big"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
@@ -630,7 +631,10 @@ func TestSqrt(t *testing.T) {
 
 		// Perfect square rational returns exact rational per R7RS §6.2.6
 		{Name: "sqrt of rational perfect square", Code: `(sqrt 1/4)`, Expected: values.NewRational(1, 2)},
-		{Name: "sqrt of rational", Code: `(sqrt 2/9)`, Expected: values.NewFloat(0.4714045207910317)},
+		// A non-square Rational is unbounded-tier, so its root is a BigFloat at
+		// the default precision, as (exp 1/2) and (log 2/3) are.
+		{Name: "sqrt of rational", Code: `(sqrt 2/9)`, Expected: values.NewBigFloat(new(big.Float).SetPrec(values.DefaultBigFloatPrecision).Set(
+			values.NewBigFloatFromString("0.471404520791031682933896241403232692856557291792316024392226579330244159487367").BigFloatValue()))},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
