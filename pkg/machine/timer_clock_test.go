@@ -254,3 +254,34 @@ func TestTimerClaimsErrorsOwnArgumentFailureBelowIt(t *testing.T) {
 		qt.Assert(t, errors.Is(err, werr.ErrNotAString), qt.IsTrue)
 	})
 }
+
+// TestTimerHandlerAfterAnEscapeSeesTheOuterParameterize pins that a with-timeout
+// handler run because a wait in an escape's after thunk was cancelled sees the
+// parameterization outside the escaping continuation, not the one around its
+// capture: the escape reinstates k0, whose capture-time snapshot held the
+// parameterize around the call/cc, and the handler, below the reinstated frames,
+// read it ((handler esc)).
+func TestTimerHandlerAfterAnEscapeSeesTheOuterParameterize(t *testing.T) {
+	env := testhelpers.NewFullRuntimeEnv(t)
+	ctx, fire := machine.WithTimerFiringOnCue(context.Background())
+	_, err := env.DefineOwnGlobal(values.NewSymbol("fire!"), environment.BindingTypeVariable, syntax.Scopes{},
+		machine.NewForeignClosure(env, 0, false, func(cc machine.CallContext) error {
+			fire()
+			cc.SetValue(values.Void)
+			return nil
+		}))
+	qt.Assert(t, err, qt.IsNil)
+	result, err := testhelpers.RunSchemeCodeWithEnvAndContext(ctx, t, env, `(begin
+  (define p (make-parameter 'outer))
+  (define m (make-mutex))
+  (mutex-lock! m)
+  (with-timeout 1000 (lambda (k) (list 'handler (p)))
+    (lambda ()
+      (parameterize ((p 'esc))
+        (call/cc (lambda (k0)
+          (dynamic-wind (lambda () #f)
+                        (lambda () (k0 'escaped))
+                        (lambda () (fire!) (mutex-lock! m)))))))))`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.List(values.NewSymbol("handler"), values.NewSymbol("outer")))
+}

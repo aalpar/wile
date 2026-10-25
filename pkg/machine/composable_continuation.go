@@ -64,12 +64,12 @@ type ComposableContinuation struct {
 	// for every call/cc capture; nil on a composable continuation. See
 	// boundaryToken.
 	root *boundaryToken
-	// capturedMarks is the snapshot of the reachable parameter/handler mark
-	// environment at capture time — including the marks ABOVE any sub-context
-	// boundary that the captured cont chain does not itself carry. It is re-installed
-	// as a findParameterInMarks fallback on resume (applyComposableContinuation), so a
-	// continuation captured inside a call-with-values producer (etc.) restores the
-	// outer handler/parameter values. See collectReachableMarks.
+	// capturedMarks is the snapshot of the parameter/handler mark environment the
+	// continuation inherits from outside its own frames at capture time: the marks
+	// ABOVE any sub-context boundary, which the captured cont chain does not carry.
+	// It is re-installed as a findParameterInMarks fallback on resume
+	// (reinstallSegment), so a continuation captured inside eval (etc.) restores the
+	// outer handler/parameter values. See collectMarksOutsideSegment.
 	capturedMarks []markEntry
 	// liveMarks is the capturing activation's own mark frame at capture time, the
 	// marks a with-continuation-mark in tail position of that activation has written

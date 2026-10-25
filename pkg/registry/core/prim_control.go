@@ -189,7 +189,7 @@ func PrimCallCC(cc machine.CallContext) error {
 	// (call-with-composable-continuation) and timer interrupts deliberately do NOT
 	// snapshot: they compose with the invoker's continuation (no isolatedMarks), so
 	// they should see the invoker's marks, not a captured snapshot.
-	mc.SnapshotReachableMarksInto(comp)
+	mc.SnapshotReachableMarksInto(comp, capturePrompt)
 
 	capt := machine.NewCapturedContinuation(comp, mc.ThreadID(), mc.BarrierValid())
 

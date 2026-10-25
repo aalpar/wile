@@ -72,11 +72,11 @@ type MachineContext struct {
 	// capturedMarks has two producers, both pairing it with isolatedMarks so that
 	// forEachReachableMarkFrame can consult it at the isolatedMarks stop instead of
 	// walking parentMC. reinstallSegment copies the segment's capture-time
-	// reachable-marks snapshot (comp.capturedMarks) so a resumed continuation's
-	// outer parameter/handler marks survive resume. unwindStackTo and RewindTo
-	// copy frame.entryMarks into the dynamic-wind thunk sub-context, which is the
-	// wind frame's entry mark environment, not a call/cc snapshot.
-	// See collectReachableMarks / SnapshotReachableMarksInto.
+	// snapshot of the marks outside it (comp.capturedMarks) so a resumed
+	// continuation's outer parameter/handler marks survive resume. unwindStackTo
+	// and RewindTo copy frame.entryMarks into the dynamic-wind thunk sub-context,
+	// which is the wind frame's entry mark environment, not a call/cc snapshot.
+	// See collectMarksOutsideSegment / collectReachableMarks.
 	capturedMarks []markEntry
 	debugger      *Debugger       // optional debugger for breakpoints and stepping
 	parentMC      *MachineContext // parent context for sub-contexts, enables call/cc escape tracking

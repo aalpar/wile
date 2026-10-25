@@ -27,7 +27,7 @@ import (
 // sub-context boundary (a call-with-values producer, etc.). Before B-marks the
 // resumed continuation lost marks reachable only via parentMC, because
 // applyCapturedContinuation sets isolatedMarks and cuts the parentMC walk.
-// See pkg/machine/exception_raise.go (SnapshotReachableMarksInto / collectReachableMarks).
+// See pkg/machine/machine_context_apply.go (SnapshotReachableMarksInto / collectMarksOutsideSegment).
 
 // An OUTER parameterize (above the call-with-values boundary) must be visible to a
 // continuation captured inside the producer and re-invoked.
@@ -81,4 +81,85 @@ func TestMarks_NestedGuardReRaiseEscalates(t *testing.T) {
     (raise 1)))`)
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, got.SchemeString(), qt.Equals, "111")
+}
+
+// TestMarks_ResumedParameterizeEndsWithItsExtent pins that a call/cc
+// continuation reinstated from outside its extent leaves a parameterize, or a
+// with-exception-handler, around the capture once the resumed frames return.
+// The capture-time snapshot a resume consults below its frames held the
+// segment's own marks too, so they stayed in force for the rest of the run:
+// the first row answered ((0 outer) (1 inner)). Petite and Racket agree with
+// every row.
+func TestMarks_ResumedParameterizeEndsWithItsExtent(t *testing.T) {
+	t.Parallel()
+
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{
+			name: "call/cc in tail position of the parameterize body",
+			code: `(let ((p (make-parameter 'outer)) (k #f) (n 0) (log '()))
+			  (let ((v (parameterize ((p 'inner)) (call/cc (lambda (c) (set! k c) 0)))))
+			    (set! log (cons (list v (p)) log))
+			    (set! n (+ n 1))
+			    (if (< n 2) (k 1) #f)
+			    (reverse log)))`,
+			want: "((0 outer) (1 outer))",
+		},
+		{
+			name: "call/cc in a procedure's parameterize",
+			code: `(let* ((p (make-parameter 'outer)) (k #f) (n 0)
+			        (f (lambda () (parameterize ((p 'inner)) (call/cc (lambda (c) (set! k c) 0))))))
+			  (let ((r (list (f) (p))))
+			    (set! n (+ n 1))
+			    (if (< n 2) (k 1) #f)
+			    (list r (p))))`,
+			want: "((1 outer) outer)",
+		},
+		{
+			name: "non-tail call/cc still sees its parameterize while inside it",
+			code: `(let ((p (make-parameter 'outer)) (k #f) (n 0) (log '()))
+			  (parameterize ((p 'inner))
+			    (let ((v (call/cc (lambda (c) (set! k c) 0))))
+			      (set! log (cons (list v (p)) log))))
+			  (set! log (cons (list 'after (p)) log))
+			  (set! n (+ n 1))
+			  (if (< n 2) (k 1) #f)
+			  (reverse log))`,
+			want: "((0 inner) (after outer) (1 inner) (after outer))",
+		},
+		{
+			name: "captured inside eval, an outer parameterize still resolves",
+			code: `(let* ((p (make-parameter 'outer)) (k #f) (n 0)
+			        (save! (lambda (c) (set! k c)))
+			        (bump! (lambda () (set! n (+ n 1)) n))
+			        (resume! (lambda (v) (k v))))
+			  (list (parameterize ((p 'pz))
+			          (eval (list 'let (list (list 'v (list 'parameterize (list (list p ''in-eval))
+			                                         (list 'call/cc (list 'lambda '(c) (list save! 'c) 0)))))
+			                      (list 'if (list '< (list bump!) 2) (list resume! 1) (list 'list 'v (list p))))
+			                (interaction-environment)))
+			        (p)))`,
+			want: "((1 pz) outer)",
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := testhelpers.RunSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+
+	t.Run("a handler around the capture does not catch a later raise", func(t *testing.T) {
+		t.Parallel()
+		_, err := testhelpers.RunSchemeCode(t, `(let ((k #f) (n 0))
+		  (with-exception-handler (lambda (e) 'inner-h) (lambda () (call/cc (lambda (c) (set! k c) 0))))
+		  (set! n (+ n 1))
+		  (if (< n 2) (k 1) (raise-continuable 'after-resume)))`)
+		qt.Assert(t, err, qt.ErrorMatches, `(?s).*after-resume.*`)
+	})
 }
