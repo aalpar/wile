@@ -15,6 +15,7 @@
 package core_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -23,6 +24,8 @@ import (
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
+	"github.com/aalpar/wile/pkg/werr"
+	"github.com/aalpar/wile/pkg/wile"
 )
 
 func TestWithTimeout(t *testing.T) {
@@ -73,6 +76,158 @@ func TestWithTimeoutErrors(t *testing.T) {
 			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
+}
+
+// TestDriverAppliedHandlerFailureIsCatchable pins the two handlers the driver
+// applies itself, not through an OpApply: the with-timeout handler and the
+// prompt handler an abort runs. Their application's failure (here an arity
+// mismatch) is a Scheme condition a guard catches, at top level and inside eval,
+// as any other procedure application's is. Racket agrees for the abort twin
+// (with-handlers catches the arity error). The correct-arity rows are the
+// controls.
+func TestDriverAppliedHandlerFailureIsCatchable(t *testing.T) {
+	t.Parallel()
+
+	const (
+		timerArity = `(with-timeout 20 (lambda () 'x) (lambda () (let loop () (loop))))`
+		abortArity = `(let ((t (make-continuation-prompt-tag 't)))
+  (call-with-continuation-prompt (lambda () (abort-current-continuation t 1 2)) t (lambda (x) x)))`
+	)
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name:     "timer handler arity, guard at top level",
+			Code:     `(guard (e (#t (error-object-message e))) ` + timerArity + `)`,
+			Expected: values.NewString("expected 0 arguments, got 1"),
+		},
+		{
+			Name:     "abort handler arity, guard at top level",
+			Code:     `(guard (e (#t (error-object-message e))) ` + abortArity + `)`,
+			Expected: values.NewString("expected 1 arguments, got 2"),
+		},
+		{
+			Name:     "timer handler arity, guard inside eval",
+			Code:     `(eval '(guard (e (#t 'caught)) ` + timerArity + `) (interaction-environment))`,
+			Expected: values.NewSymbol("caught"),
+		},
+		{
+			Name:     "abort handler arity, guard inside eval",
+			Code:     `(eval '(guard (e (#t 'caught)) ` + abortArity + `) (interaction-environment))`,
+			Expected: values.NewSymbol("caught"),
+		},
+		{
+			Name:     "timer handler arity, guard around eval",
+			Code:     `(guard (e (#t 'caught)) (eval '` + timerArity + ` (interaction-environment)))`,
+			Expected: values.NewSymbol("caught"),
+		},
+		{
+			Name:     "abort handler arity, guard around eval",
+			Code:     `(guard (e (#t 'caught)) (eval '` + abortArity + ` (interaction-environment)))`,
+			Expected: values.NewSymbol("caught"),
+		},
+		{
+			Name:     "control: timer handler of the right arity",
+			Code:     `(guard (e (#t 'caught)) (with-timeout 20 (lambda (k) 'x) (lambda () (let loop () (loop)))))`,
+			Expected: values.NewSymbol("x"),
+		},
+		{
+			Name: "control: abort handler of the right arity",
+			Code: `(let ((t (make-continuation-prompt-tag 't)))
+  (guard (e (#t 'caught))
+    (call-with-continuation-prompt (lambda () (abort-current-continuation t 1 2)) t (lambda (x y) y))))`,
+			Expected: values.NewInteger(2),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCodeWithTimeout(t, tc.Code, 5*time.Second)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
+// TestTimerHandlerRunsOutsideTheAbandonedThunk pins the marks half of the hard
+// suspension: the handler, and a failure of its application, see the handlers
+// and parameterizations of the with-timeout's own chain, not those the timed-out
+// thunk installed, as an abort's prompt handler does. A resumed thunk still sees
+// its own (the marks travel in the resumable). The failing handler is the arity
+// mismatch of TestDriverAppliedHandlerFailureIsCatchable.
+func TestTimerHandlerRunsOutsideTheAbandonedThunk(t *testing.T) {
+	t.Parallel()
+
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name: "handler failure skips a handler the thunk installed",
+			Code: `(call/cc (lambda (out)
+  (with-exception-handler (lambda (e) (out 'outer))
+    (lambda ()
+      (with-timeout 20 (lambda () 'x)
+        (lambda ()
+          (call/cc (lambda (in)
+            (with-exception-handler (lambda (e) (in 'inner))
+              (lambda () (let loop () (loop))))))))))))`,
+			Expected: values.NewSymbol("outer"),
+		},
+		{
+			Name: "handler failure does not pass through an escalating handler of the thunk",
+			Code: `(guard (e (#t (list 'outer (error-object? e))))
+  (with-timeout 20 (lambda () 'x)
+    (lambda ()
+      (with-exception-handler (lambda (e) (raise 'inner))
+        (lambda () (let loop () (loop)))))))`,
+			Expected: values.List(values.NewSymbol("outer"), values.TrueValue),
+		},
+		{
+			Name: "handler sees the parameterization outside the thunk",
+			Code: `(let ((p (make-parameter 'outer)))
+  (with-timeout 20 (lambda (k) (p))
+    (lambda () (parameterize ((p 'inner)) (let loop () (loop))))))`,
+			Expected: values.NewSymbol("outer"),
+		},
+		{
+			Name: "resumed thunk sees its own parameterization",
+			Code: `(let ((p (make-parameter 'outer)))
+  (with-timeout 1 (lambda (k) (list (p) (k)))
+    (lambda () (parameterize ((p 'inner)) (let loop ((n 0)) (if (< n 2000000) (loop (+ n 1)) (p)))))))`,
+			Expected: values.List(values.NewSymbol("outer"), values.NewSymbol("inner")),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCodeWithTimeout(t, tc.Code, 5*time.Second)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
+// TestFiredTimerIsTornDownBeforeItsHandlerRuns pins the order inside the timer
+// arm: the fired timer is torn down before its handler is applied, so a failure
+// of that application is not claimed by the same timer as a second interrupt.
+// Claimed, the driver resolves the interrupt again and applies the handler a
+// second time; the Go handler counts its applications.
+func TestFiredTimerIsTornDownBeforeItsHandlerRuns(t *testing.T) {
+	t.Parallel()
+	c := qt.New(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	engine, err := wile.NewEngine(ctx)
+	c.Assert(err, qt.IsNil)
+	defer func() {
+		_ = engine.Close()
+	}()
+	calls := 0
+	c.Assert(engine.RegisterFunc("failing-handler", func(wile.Value) error {
+		calls++
+		return werr.WrapForeignErrorf(werr.ErrNotANumber, "failing-handler: always fails")
+	}), qt.IsNil)
+
+	result, err := engine.Eval(ctx, engine.MustParse(ctx,
+		`(guard (e (#t 'caught)) (with-timeout 20 failing-handler (lambda () (let loop () (loop)))))`))
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "caught")
+	c.Assert(calls, qt.Equals, 1)
 }
 
 func TestWithTimeoutNesting(t *testing.T) {
