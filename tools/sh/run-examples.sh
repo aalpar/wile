@@ -2,7 +2,9 @@
 # Run all Scheme example files and verify they exit 0.
 # Excludes benchmarks, schelog, lib, and embedding directories.
 # Reads examples/.ci-exclude for files that intentionally exit non-zero.
-# Each example gets a 30-second timeout to catch hangs.
+# Each example gets a 120-second timeout to catch hangs. The timeout is a
+# hang catcher, not a speed budget: 06-graph-algorithms takes ~2s alone but
+# ran past 30s on a CI runner shared with the rest of `make ci`'s -j targets.
 #
 # Usage:
 #   ./tools/sh/run-examples.sh <path-to-scheme-binary>
@@ -10,7 +12,7 @@
 set -euo pipefail
 
 SCHEME="${1:?Usage: run-examples.sh <scheme-binary>}"
-TIMEOUT="${EXAMPLE_TIMEOUT:-30}"
+TIMEOUT="${EXAMPLE_TIMEOUT:-120}"
 
 if [ ! -x "$SCHEME" ]; then
     echo "Error: Scheme binary not found or not executable: $SCHEME"
