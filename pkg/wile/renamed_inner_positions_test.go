@@ -192,11 +192,11 @@ func TestRenamedQuasiquoteMarkerIsVisibleToTheOpaqueScan(t *testing.T) {
 			`(import (scheme base) (rename (scheme base) (unquote uq)))
 			 (define t 0)
 			 (let ((t #f)) (if t t (quasiquote ((uq t)))))`, "(#f)"},
-		// dottedUnquoteTail's own marker read: `(a . ,x) parses as the 3-element
+		// dottedTailMarker's own marker read: `(a . ,x) parses as the 3-element
 		// list (a unquote x), a bare marker symbol in the SPINE rather than a pair
 		// head, so it reaches forEachRawSymbolPair's dotted-tail arm
-		// (opaque_subtree.go:413-430), not the pair-head dispatch the row above
-		// exercises. Reverting dottedUnquoteTail's markerName call to sym.Key()
+		// (dottedTailMarker), not the pair-head dispatch the row above
+		// exercises. Reverting dottedTailMarker's markerName call to sym.Key()
 		// makes this site read the renamed uq by spelling only, so it is never
 		// recognized as the marker and the whole tail stays data: the set! never
 		// marks, and (f) after the quasiquote answers the stale 7 instead of 99 --

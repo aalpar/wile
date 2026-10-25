@@ -407,7 +407,7 @@ func quasiNeedsRuntimeArg(v *syntax.SyntaxPair, newDepth int, kw quasiKeywords, 
 // unquote. A car-yielding walk cannot reach that cdr, and restating the test
 // over cars would replace a local pattern match with a stateful post-condition.
 // validate's forEachRawSymbolPair recognizes the same shape for the same reason
-// and takes the cell too (dottedUnquoteTail, opaque_subtree.go).
+// and takes the cell too (dottedTailMarker, opaque_subtree.go).
 //
 // The second reason is `return true`: this is a predicate that stops at its
 // first hit, which a range-over-func does with an ordinary return and a ForEach

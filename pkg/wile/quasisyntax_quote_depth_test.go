@@ -260,6 +260,104 @@ func TestMarkerNamedLocalIsAnOrdinaryCall(t *testing.T) {
 	})
 }
 
+// A binder the raw subtree introduces itself shadows a marker-named head inside
+// its own body. The scan resolved heads in the node's frame, which holds none of
+// those binders, so the inner quote read as the barrier and the set! under it went
+// unmarked: f was inlined stale (7), or, where the closure captured it, never
+// boxed, and the set! faulted at runtime. Each row answers (n f-result).
+func TestMarkerNamedBinderInsideOpaqueSubtree(t *testing.T) {
+	t.Parallel()
+
+	const b = `(begin (set! n 1) (set! f (lambda () 99)) 1)`
+	row := func(name, form string) innerPositionRow {
+		return innerPositionRow{name, `(let ((f (lambda () 7)) (n 0)) ` + form + ` (list n (f)))`, "(1 99)"}
+	}
+	runQuasisyntaxRows(t, []innerPositionRow{
+		// The measured defect: store-free: free slot 0 holds *machine.MachineClosure, not a box.
+		row("lambda parameter under an unsyntax", `(quasisyntax (a #,((lambda (quote) (quote `+b+`)) list)))`),
+		// (0 7)-shaped on master: answered 7 by default and 99 under inline-0.
+		row("let name under an unsyntax", `(quasisyntax (a #,(let ((quote list)) (quote `+b+`))))`),
+		row("quasiquote: lambda parameter under an unquote", "`(a ,((lambda (quote) (quote "+b+")) list))"),
+		row("quasiquote: rest parameter", "(guard (e (#t #f)) `(a ,((lambda quote (quote "+b+")))))"),
+		row("quasiquote: case-lambda clause parameter", "`(a ,((case-lambda ((quote) (quote "+b+"))) list))"),
+		row("quasiquote: let* init sees the earlier name", "`(a ,(let* ((quote list) (y (quote "+b+"))) y))"),
+		row("quasiquote: letrec init sees every name", "`(a ,(letrec ((quote list) (y (lambda () (quote "+b+")))) (y)))"),
+		row("quasiquote: letrec* init sees every name", "`(a ,(letrec* ((quote list) (y (quote "+b+"))) y))"),
+		row("quasiquote: named let name", "`(a ,(let lp ((quote list)) (quote "+b+")))"),
+		row("quasiquote: named let tag", "`(a ,(let quote ((k 1)) (if (= k 1) (quote (begin (set! n 1) (set! f (lambda () 99)) 2)) k)))"),
+		row("internal define under an unsyntax", `(quasisyntax (a #,((lambda () (define quote list) (quote `+b+`)))))`),
+		row("quasiquote: internal define", "`(a ,((lambda () (define quote list) (quote "+b+"))))"),
+		row("quasiquote: internal define spliced through a begin", "`(a ,(let () (begin (define quote list)) (quote "+b+")))"),
+		// Derived forms reach the walk expanded (compilation's expandQuasiOperands),
+		// so their binders are the core forms' binders.
+		row("let-values under an unsyntax", `(quasisyntax (a #,(let-values (((quote) (values list))) (quote `+b+`))))`),
+		row("quasiquote: do loop variable", "`(a ,(do ((quote list) (i 0 (+ i 1))) ((= i 1) 5) (quote "+b+")))"),
+		row("quasiquote: procedure define shorthand formals", "`(a ,((lambda () (define (g quote) (quote "+b+")) (g list))))"),
+		// A template that writes both the binder and the reference pins the
+		// reference to the core quote; the local binder still decides first, as
+		// validateForm's resolveFormHead has it.
+		{"macro template: lambda parameter and reference, under an unquote",
+			`(define-syntax m3 (syntax-rules () ((_ e) ((lambda (quote) (quote e)) list))))
+			 (let ((f (lambda () 7)) (n 0)) ` + "`(a ,(m3 " + b + "))" + ` (list n (f)))`,
+			"(1 99)"},
+		{"macro template: lambda parameter and reference, under an unsyntax",
+			`(define-syntax m3 (syntax-rules () ((_ e) ((lambda (quote) (quote e)) list))))
+			 (let ((f (lambda () 7)) (n 0)) (quasisyntax (a #,(m3 ` + b + `))) (list n (f)))`,
+			"(1 99)"},
+		{"macro template: internal define and reference",
+			`(define-syntax m3 (syntax-rules () ((_ e) (let () (define quote list) (quote e)))))
+			 (let ((f (lambda () 7)) (n 0)) ` + "`(a ,(m3 " + b + "))" + ` (list n (f)))`,
+			"(1 99)"},
+		{"macro template: let name and reference",
+			`(define-syntax m3 (syntax-rules () ((_ e) (let ((quote list)) (quote e)))))
+			 (let ((f (lambda () 7)) (n 0)) ` + "`(a ,(m3 " + b + "))" + ` (list n (f)))`,
+			"(1 99)"},
+		// The inner lambda head reaches the body's Predeclared lambda slot, and
+		// Wile still compiles it as the form (validate.headDenotesSpecialForm), so
+		// the scan must read it as one. This pins agreement with Wile's compiler,
+		// not a portable answer: Racket reads lambda as the variable and rejects
+		// (quote) as bad syntax, and Chez refuses the define after an expression.
+		{"later define of lambda in the same body",
+			"(let ((f (lambda () 7)) (n 0)) `(a ,((lambda () ((lambda (quote) (quote " + b + ")) list) (define lambda 5) 1))) (list n (f)))",
+			"(1 99)"},
+		// Hygiene control: the template's quote is not the user's binder, so it
+		// stays the real quote and nothing fires. Racket and petite (0 7).
+		{"control: macro-introduced quote under a user binder",
+			`(define-syntax m (syntax-rules () ((_ q e) ((lambda (q) (quote e)) list))))
+			 (let ((f (lambda () 7)) (n 0)) ` + "`(a ,(m quote " + b + "))" + ` (list n (f)))`,
+			"(0 7)"},
+		{"control: macro-introduced quote under a user binder, unsyntax",
+			`(define-syntax m (syntax-rules () ((_ q e) ((lambda (q) (quote e)) list))))
+			 (let ((f (lambda () 7)) (n 0)) (quasisyntax (a #,(m quote ` + b + `))) (list n (f)))`,
+			"(0 7)"},
+		{"user macro binder under an unsyntax",
+			`(define-syntax bind1 (syntax-rules () ((_ v e body) ((lambda (v) body) e))))
+			 (let ((f (lambda () 7)) (n 0)) (quasisyntax (a #,(bind1 quote list (quote ` + b + `)))) (list n (f)))`,
+			"(1 99)"},
+	})
+}
+
+// `(a . `x) reads as (a quasiquote x), and the compiler takes x one level deeper
+// (dottedTailCell). The scan read it element-wise, so the unquote under it reached
+// depth 0 and its quote form became a barrier over the inner unquote the compiler
+// fires. The quasisyntax row follows Wile's compiler and Chez; Racket does not
+// read a dotted quasisyntax tail as nesting and answers (0 7).
+func TestDottedQuasiquoteTailIsOneLevelDeeper(t *testing.T) {
+	t.Parallel()
+
+	const b = `(begin (set! n 1) (set! f (lambda () 99)) 1)`
+	row := func(name, form string) innerPositionRow {
+		return innerPositionRow{name, `(let ((f (lambda () 7)) (n 0)) ` + form + ` (list n (f)))`, "(1 99)"}
+	}
+	runQuasisyntaxRows(t, []innerPositionRow{
+		row("list under a quote", "`(a . `(b ,'(,"+b+")))"),
+		row("vector under a quote", "`(a . `(b ,'#(,"+b+")))"),
+		// Read element-wise, the vector sat at depth 0, a self-evaluating literal.
+		row("vector under the unquote", "`(a . `(b ,#(,"+b+")))"),
+		row("quasisyntax dialect", `(quasisyntax (a . (quasisyntax (b #,(quote (#,`+b+`))))))`),
+	})
+}
+
 // opaqueSubtreeMentions (or_lower.go) shares the scan, so the same blindness hid
 // the only reference to a let's binder: the lowering dropped a frame that was
 // live. Measured on master, rows 1 and 2 answered an unbound-"t" compile error

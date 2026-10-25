@@ -26,7 +26,7 @@ import (
 // followed by an improper (dotted) tail — e.g. `(a unquote x . y) — used to reach
 // SyntaxPair.Length(), which panics on an improper list, and surfaced as an
 // opaque "compile: panic recovery: internal error: SyntaxPair.Length: improper
-// list" instead of a clean compile. Both the validator (dottedUnquoteTail) and
+// list" instead of a clean compile. Both the validator (dottedTailMarker) and
 // the compiler (compileQuasiquoteDatum / quasiNeedsRuntime /
 // quasiNeedsRuntimeList) walked it; all now use a properness-safe
 // IsSyntaxEmptyList check. A malformed template compiles as ordinary quasiquoted
