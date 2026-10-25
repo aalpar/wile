@@ -549,6 +549,9 @@ func TestP03_QuoteSyntaxDefSiteLocalUnderUseSiteLet(t *testing.T) {
 func TestP05_Accessors(t *testing.T) {
 	t.Parallel()
 
+	// %syntax-spine returns the form and its origins record; spine keeps the form.
+	const spineOf = "(define (spine x) (call-with-values (lambda () (%syntax-spine x)) (lambda (form origins) form)))\n"
+
 	c := qt.New(t)
 	tests := []struct {
 		name, src, want string
@@ -559,10 +562,10 @@ func TestP05_Accessors(t *testing.T) {
 		{"syntax-cdr keeps syntax", `(list (syntax-pair? (syntax-cdr #'(a b))) (syntax->datum (syntax-cdr #'(a . b))))`, "(#t b)"},
 		{"syntax-vector?", `(list (syntax-vector? #'#(1 2)) (syntax-vector? #'(1 2)))`, "(#t #f)"},
 		{"syntax-vector->list is a syntax list", `(let ((l (syntax-vector->list #'#(a 2)))) (list (syntax-pair? l) (identifier? (syntax-car l)) (syntax->datum l)))`, "(#t #t (a 2))"},
-		{"%syntax-spine: pairs and vectors unwrapped, identifiers kept", `(let ((s (%syntax-spine #'(a (b . 1) #(c) 2))))
+		{"%syntax-spine: pairs and vectors unwrapped, identifiers kept", spineOf + `(let ((s (spine #'(a (b . 1) #(c) 2))))
   (list (pair? s) (identifier? (car s)) (pair? (cadr s)) (identifier? (car (cadr s))) (cdr (cadr s))
         (vector? (caddr s)) (identifier? (vector-ref (caddr s) 0)) (cadddr s)))`, "(#t #t #t #t 1 #t #t 2)"},
-		{"%syntax-spine: empty and improper tails", `(let ((s (%syntax-spine #'(a . b)))) (list (identifier? (car s)) (identifier? (cdr s)) (null? (%syntax-spine #'()))))`, "(#t #t #t)"},
+		{"%syntax-spine: empty and improper tails", spineOf + `(let ((s (spine #'(a . b)))) (list (identifier? (car s)) (identifier? (cdr s)) (null? (spine #'()))))`, "(#t #t #t)"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -570,6 +573,7 @@ func TestP05_Accessors(t *testing.T) {
 		})
 	}
 	c.Assert(evalSyntaxFormsErr(t, `(syntax-car #'())`), qt.ErrorMatches, `(?s).*syntax-car: expected a syntax pair.*`)
+	c.Assert(evalSyntaxFormsErr(t, `(%er-syntax #'k '(a) 1)`), qt.ErrorMatches, `(?s).*%er-syntax: spine must be the record %syntax-spine returned.*`)
 }
 
 // TestP05_SyntaxViolationCarriesSource (design §6 Diagnostics): the raise helper

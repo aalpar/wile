@@ -108,17 +108,28 @@ func PrimSyntaxVectorToList(mc machine.CallContext) error {
 // a form element is #f. compare is the re-homed free-identifier=?, which requires
 // both arguments to be identifiers, so (compare 'sym x) raises where Chibi's
 // identifier=? would accept the quoted symbol.
+//
+// It returns two values: the spine, and an opaque record of the syntax node
+// each of its containers came from, for %er-syntax. The record cannot be
+// rebuilt later from the spine: by then the proc may have mutated it, and
+// unwrapping STX again makes containers of different identity.
 func PrimSyntaxSpine(mc machine.CallContext) error {
-	mc.SetValue(syntax.UnwrapSpine(mc.Arg(0)))
+	raw, spine := syntax.UnwrapSpine(mc.Arg(0))
+	mc.SetValues(raw, values.NewOpaqueValue(inputSpineTag, spine))
 	return nil
 }
 
+// inputSpineTag tags the opaque *syntax.InputSpine %syntax-spine returns.
+const inputSpineTag = "input-spine"
+
 // PrimErSyntax implements (%er-syntax template-id spine result), the Scheme
-// er-macro-transformer's datum->syntax. It converts RESULT with TEMPLATE-ID's
-// context as datum->syntax does, except that a pair or vector of SPINE, the
-// value (%syntax-spine stx) handed the procedure, that RESULT hands back is
-// recorded with the expander (NotePassThrough): it is the user's own form, not
-// something the macro built, and the macro-origin stamp must leave it alone.
+// er-macro-transformer's datum->syntax. SPINE is the record %syntax-spine
+// returned beside the form it handed the procedure. It converts RESULT with
+// TEMPLATE-ID's context as datum->syntax does, except that a pair, vector or
+// box of that form which RESULT hands back is rebuilt with its own source
+// context and recorded with the expander (NotePassThrough): it is the user's
+// own form, not something the macro built, and the macro-origin stamp must
+// leave it alone.
 func PrimErSyntax(cc machine.CallContext) error {
 	mc, err := machine.RequireMachineContext(cc, "%er-syntax")
 	if err != nil {
@@ -128,11 +139,15 @@ func PrimErSyntax(cc machine.CallContext) error {
 	if !ok {
 		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "%%er-syntax: template-id must be an identifier, got %s", mc.Arg(0).SchemeString())
 	}
+	spine := inputSpineOf(mc.Arg(1))
+	if spine == nil {
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "%%er-syntax: spine must be the record %%syntax-spine returned, got %s", mc.Arg(1).SchemeString())
+	}
 	sctx := templateID.SourceContext()
 	if values.IsVoid(mc.Arg(2)) {
 		return werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "er-macro-transformer: transformer produced no result")
 	}
-	keep := &schemeutil.Kept{Spine: syntax.InputSpineOf(mc.Arg(1)), Ctx: sctx}
+	keep := &schemeutil.Kept{Spine: spine}
 	ectx := mc.ExpanderContext()
 	if ectx != nil {
 		keep.Rebuilt = ectx.NotePassThrough
@@ -143,6 +158,17 @@ func PrimErSyntax(cc machine.CallContext) error {
 	}
 	mc.SetValue(result)
 	return nil
+}
+
+// inputSpineOf returns the *syntax.InputSpine v wraps, or nil when v is not
+// one %syntax-spine made.
+func inputSpineOf(v values.Value) *syntax.InputSpine {
+	o, ok := v.(*values.OpaqueValue)
+	if !ok || o.OpaqueTag() != inputSpineTag {
+		return nil
+	}
+	q, _ := o.Unwrap().(*syntax.InputSpine)
+	return q
 }
 
 // syntaxViolation is the error %syntax-violation returns. It carries three

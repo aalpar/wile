@@ -872,8 +872,7 @@ func (p *ExpanderTimeContinuation) invokeERTransformer(
 	// a rename (pinned, or intro-scoped by the closure below) or a raw symbol that
 	// is use-site by contract; a flip would stamp those raw symbols and turn an
 	// anaphoric binder hygienic.
-	rawForm := syntax.UnwrapSpine(inputForm)
-	spine := syntax.InputSpineOf(rawForm)
+	rawForm, spine := syntax.UnwrapSpine(inputForm)
 
 	// Create a fresh intro scope for this invocation. Unbound renamed symbols
 	// (like temporary names) get this scope to prevent variable capture.
@@ -945,16 +944,16 @@ func (p *ExpanderTimeContinuation) invokeERTransformer(
 	// per invocation, not one per node. It reaches the nodes the transformer
 	// constructed from raw data. A node it hands back already wrapped keeps the
 	// context it arrived with, so a rename or a spine identifier is not
-	// stamped. The raw pairs of the input spine are the user's own form handed
-	// back; they are rebuilt with the keyword's unstamped context, the one they
-	// took before the stamp existed, so the chain does not blame the macro for
-	// syntax it merely returned.
+	// stamped. The raw pairs, vectors and boxes of the input spine are the
+	// user's own form handed back; each is rebuilt with the context of the node
+	// it was unwrapped from, so the chain does not blame the macro for syntax it
+	// merely returned and a diagnostic on it points at the user's subform.
 	keywordCtx := sym.SourceContext()
 	wrapped, err := schemeutil.DatumToSyntaxValueKeeping(
 		p.ctx,
 		keywordCtx.WithOrigin(pushOrigin(sym.Key(), keywordCtx, pairCtx)),
 		result,
-		&schemeutil.Kept{Spine: spine, Ctx: keywordCtx},
+		&schemeutil.Kept{Spine: spine},
 	)
 	if err != nil {
 		return nil, wrapSourcedError(sym.SourceContext(), err)

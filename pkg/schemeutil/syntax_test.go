@@ -343,36 +343,61 @@ func (p *DatumToSyntaxValueSuite) TestLengthIsNotBounded(c *qt.C) {
 
 func TestDatumToSyntaxValueKeeping(t *testing.T) {
 	stamped := &syntax.SourceContext{Text: "stamped"}
-	plain := &syntax.SourceContext{Text: "plain"}
-	inner := values.NewCons(values.NewInteger(1), values.NewCons(values.NewInteger(2), values.EmptyList))
-	vec := values.NewVector(values.NewInteger(3))
+	ctxOf := func(text string) *syntax.SourceContext {
+		return &syntax.SourceContext{Text: text}
+	}
+	innerCtx, innerCdrCtx, vecCtx, boxCtx := ctxOf("inner"), ctxOf("inner-cdr"), ctxOf("vec"), ctxOf("box")
+	int1 := func(n int64) syntax.SyntaxValue {
+		return syntax.NewSyntaxObject(values.NewInteger(n), nil)
+	}
+	// input is the form the transformer was handed: ((1 2) #(3) #&4), each
+	// container carrying a context of its own.
+	input := syntax.NewSyntaxCons(
+		syntax.NewSyntaxCons(int1(1), syntax.NewSyntaxCons(int1(2), syntax.SyntaxEmptyList, innerCdrCtx), innerCtx),
+		syntax.NewSyntaxCons(syntax.NewSyntaxVector(vecCtx, int1(3)),
+			syntax.NewSyntaxCons(syntax.NewSyntaxBox(int1(4), boxCtx), syntax.SyntaxEmptyList, nil), nil), nil)
+	raw, spine := syntax.UnwrapSpine(input)
+	cell := raw.(*values.Pair)
+	inner := cell.Car()
+	cell = cell.Cdr().(*values.Pair)
+	vec := cell.Car()
+	box := cell.Cdr().(*values.Pair).Car()
 	mine := values.NewCons(values.NewInteger(9), values.EmptyList)
-	// input is the form the transformer was handed: (inner-pair . vec). The
-	// result keeps inner and vec by identity and adds a pair of its own.
-	spine := syntax.InputSpineOf(values.NewCons(inner, values.NewCons(vec, values.EmptyList)))
+	// The result keeps inner, vec and box by identity and adds pairs of its own.
+	result := values.List(inner, vec, box)
+	result.(*values.Pair).Cdr().(*values.Pair).Cdr().(*values.Pair).SetCdr(mine)
 
 	build := func(c *qt.C) (syntax.SyntaxValue, []syntax.SyntaxValue) {
 		var rebuilt []syntax.SyntaxValue
-		keep := &Kept{Spine: spine, Ctx: plain, Rebuilt: func(n syntax.SyntaxValue) { rebuilt = append(rebuilt, n) }}
-		got, err := DatumToSyntaxValueKeeping(context.Background(), stamped, values.NewCons(inner, values.NewCons(vec, mine)), keep)
+		keep := &Kept{Spine: spine, Rebuilt: func(n syntax.SyntaxValue) { rebuilt = append(rebuilt, n) }}
+		got, err := DatumToSyntaxValueKeeping(context.Background(), stamped, result, keep)
 		c.Assert(err, qt.IsNil)
 		return got, rebuilt
 	}
 
 	c := qt.New(t)
-	c.Run("members take Ctx, the rest take sctx", func(c *qt.C) {
+	c.Run("members take their own context, the rest take sctx", func(c *qt.C) {
 		got, _ := build(c)
 		top := got.(*syntax.SyntaxPair)
 		c.Assert(top.SourceContext(), qt.Equals, stamped)
-		c.Assert(top.Car().(*syntax.SyntaxPair).SourceContext(), qt.Equals, plain)
+		in := top.Car().(*syntax.SyntaxPair)
+		c.Assert(in.SourceContext(), qt.Equals, innerCtx)
+		c.Assert(in.Cdr().(*syntax.SyntaxPair).SourceContext(), qt.Equals, innerCdrCtx)
 		rest := top.Cdr().(*syntax.SyntaxPair)
-		c.Assert(rest.Car().(*syntax.SyntaxVector).SourceContext(), qt.Equals, plain)
+		c.Assert(rest.Car().(*syntax.SyntaxVector).SourceContext(), qt.Equals, vecCtx)
+		rest = rest.Cdr().(*syntax.SyntaxPair)
+		c.Assert(rest.Car().(*syntax.SyntaxBox).SourceContext(), qt.Equals, boxCtx)
 		c.Assert(rest.Cdr().(*syntax.SyntaxPair).SourceContext(), qt.Equals, stamped)
+	})
+	c.Run("an atom of the input takes sctx", func(c *qt.C) {
+		got, _ := build(c)
+		one := got.(*syntax.SyntaxPair).Car().(*syntax.SyntaxPair).SyntaxCar()
+		c.Assert(one.SourceContext(), qt.Equals, stamped)
 	})
 	c.Run("Rebuilt sees exactly the member nodes", func(c *qt.C) {
 		_, rebuilt := build(c)
-		// Two cells of inner and the vector.
-		c.Assert(rebuilt, qt.HasLen, 3)
+		// Two cells of inner, the vector and the box.
+		c.Assert(rebuilt, qt.HasLen, 4)
 	})
 	c.Run("a nil Kept is DatumToSyntaxValue", func(c *qt.C) {
 		got, err := DatumToSyntaxValueKeeping(context.Background(), stamped, inner, nil)
@@ -380,8 +405,8 @@ func TestDatumToSyntaxValueKeeping(t *testing.T) {
 		c.Assert(got.SourceContext(), qt.Equals, stamped)
 	})
 	c.Run("a member without a Rebuilt hook is fine", func(c *qt.C) {
-		got, err := DatumToSyntaxValueKeeping(context.Background(), stamped, inner, &Kept{Spine: spine, Ctx: plain})
+		got, err := DatumToSyntaxValueKeeping(context.Background(), stamped, inner, &Kept{Spine: spine})
 		c.Assert(err, qt.IsNil)
-		c.Assert(got.SourceContext(), qt.Equals, plain)
+		c.Assert(got.SourceContext(), qt.Equals, innerCtx)
 	})
 }

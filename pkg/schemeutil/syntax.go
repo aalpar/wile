@@ -60,41 +60,38 @@ func DatumToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o value
 
 // Kept describes the part of a datum that is the user's own form coming back.
 type Kept struct {
-	// Spine is the pairs and vectors of the form the transformer was handed
-	// (syntax.InputSpineOf what syntax.UnwrapSpine returned).
+	// Spine is the pairs, vectors and boxes of the form the transformer was
+	// handed, with the syntax nodes they were unwrapped from (what
+	// syntax.UnwrapSpine returned).
 	Spine *syntax.InputSpine
-
-	// Ctx is the context a rebuilt Spine pair or vector takes in place of the
-	// converter's sctx. Callers pass the context the converter would have used
-	// had it not been stamped.
-	Ctx *syntax.SourceContext
 
 	// Rebuilt, when non-nil, receives each node built from a Spine member.
 	Rebuilt func(syntax.SyntaxValue)
 }
 
 // DatumToSyntaxValueKeeping is DatumToSyntaxValue for a transformer's result,
-// where some of the pairs and vectors in o are the input form handed back.
-// Those are rebuilt, not returned (the transformer may have mutated them), but
-// with keep.Ctx instead of sctx, so a stamp carried by sctx lands only on the
-// nodes the transformer constructed. Atoms keep sctx: an atom has no identity
-// to tell its source by.
+// where some of the pairs, vectors and boxes in o are the input form handed
+// back. Those are rebuilt, not returned (the transformer may have mutated
+// them), each with the context of the syntax node it was unwrapped from, so a
+// stamp carried by sctx lands only on the nodes the transformer constructed and
+// a diagnostic on a returned subform points at the subform. Atoms keep sctx: an
+// atom has no identity to tell its source by.
 func DatumToSyntaxValueKeeping(ctx context.Context, sctx *syntax.SourceContext, o values.Value, keep *Kept) (syntax.SyntaxValue, error) {
 	return datumToSyntaxValueVisited(ctx, sctx, o, values.NewMapSet[values.Value](0), 0, keep)
 }
 
-// ctxFor returns the context for the SyntaxPair or SyntaxVector built from o, and whether o is a Spine member
-// A member takes keep.Ctx and is reported to keep.Rebuilt through note; anything
-// else takes sctx.
+// ctxFor returns the context for the container built from o, and whether o is
+// a Spine member. A member takes its origin node's context and is reported to
+// keep.Rebuilt through note; anything else takes sctx.
 func (p *Kept) ctxFor(sctx *syntax.SourceContext, o values.Value) (*syntax.SourceContext, bool) {
 	if p == nil {
 		return sctx, false
 	}
-	member := p.Spine.HasPair(o) || p.Spine.HasVector(o)
-	if member {
-		return p.Ctx, true
+	origin := p.Spine.Origin(o)
+	if origin == nil {
+		return sctx, false
 	}
-	return sctx, false
+	return origin.SourceContext(), true
 }
 
 // note reports n, built from a Spine member.
@@ -147,7 +144,10 @@ func datumToSyntaxValueVisited(ctx context.Context, sctx *syntax.SourceContext, 
 		// A box is a container, so it becomes a syntax container: a
 		// SyntaxObject wrapping a box of syntax is opaque to quote and
 		// syntax->datum, which leave the contents wrapped.
-		return syntax.NewSyntaxBox(inner, sctx), nil
+		bctx, member := keep.ctxFor(sctx, o)
+		q := syntax.NewSyntaxBox(inner, bctx)
+		keep.note(member, q)
+		return q, nil
 	case *values.Vector:
 		dup := visited.ContainsOne(o)
 		if dup {

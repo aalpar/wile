@@ -20,7 +20,8 @@ import "github.com/aalpar/wile/pkg/values"
 // boxes all the way down, keeps identifier leaves as *SyntaxSymbol, and unwraps
 // every other atom (design §3.5, Q6). It is the form an explicit-renaming
 // transformer receives, on both syntax layers (%syntax-spine in the Scheme one),
-// so the two hand over one shape.
+// so the two hand over one shape. The InputSpine maps each container of that
+// form back to the syntax node it was unwrapped from.
 //
 // Keeping the leaves is what keeps an identifier's scopes through the
 // transformer; unwrapping the spine is what keeps (pair? x) answering #t on a
@@ -31,77 +32,82 @@ import "github.com/aalpar/wile/pkg/values"
 // form before %syntax-spine sees it, which copies the tree, so there a
 // reader-shared datum (#0=(a b) #0#) arrives as two copies; the Go boundary
 // stamps nothing and hands over one.
-func UnwrapSpine(v values.Value) values.Value {
+func UnwrapSpine(v values.Value) (values.Value, *InputSpine) {
+	q := &InputSpine{
+		pairs:   make(map[*values.Pair]*SyntaxPair),
+		vectors: make(map[*values.Vector]*SyntaxVector),
+		boxes:   make(map[*values.Box]*SyntaxBox),
+	}
 	sv, ok := v.(SyntaxValue)
 	if !ok {
-		return v
+		return v, q
 	}
-	return unwrapShared(sv, make(map[SyntaxValue]values.Value), true)
+	cache := make(map[SyntaxValue]values.Value)
+	raw := unwrapShared(sv, cache, true)
+	for node, out := range cache {
+		q.record(node, out)
+	}
+	return raw, q
 }
 
-// InputSpine is the set of pairs and vectors of a value UnwrapSpine produced, by
-// identity. A transformer that returns one of them unchanged is handing the
-// user's own form back; the expander uses the set to tell that from a form the
-// transformer built (see schemeutil.DatumToSyntaxValueKeeping).
+// InputSpine maps the pairs, vectors and boxes of a value UnwrapSpine produced,
+// by identity, to the syntax nodes they came from. A transformer that returns
+// one of them unchanged is handing the user's own form back; the expander uses
+// the map to tell that from a form the transformer built, and to give the
+// rebuilt node its own source position (see schemeutil.DatumToSyntaxValueKeeping).
+// Atoms are not recorded: a raw 5 or #t has no identity to tell its source by.
 type InputSpine struct {
-	pairs   map[*values.Pair]struct{}
-	vectors map[*values.Vector]struct{}
+	pairs   map[*values.Pair]*SyntaxPair
+	vectors map[*values.Vector]*SyntaxVector
+	boxes   map[*values.Box]*SyntaxBox
 }
 
-// InputSpineOf records the pairs and vectors of raw. The sets double as the visited
-// record, so a shared or cyclic spine is entered once.
-func InputSpineOf(raw values.Value) *InputSpine {
-	q := &InputSpine{
-		pairs:   make(map[*values.Pair]struct{}),
-		vectors: make(map[*values.Vector]struct{}),
-	}
-	q.add(raw)
-	return q
-}
-
-func (p *InputSpine) add(v values.Value) {
-	for {
-		switch x := v.(type) {
-		case *values.Pair:
-			_, seen := p.pairs[x]
-			if seen {
-				return
-			}
-			p.pairs[x] = struct{}{}
-			p.add(x.Car())
-			v = x.Cdr()
-		case *values.Vector:
-			_, seen := p.vectors[x]
-			if seen {
-				return
-			}
-			p.vectors[x] = struct{}{}
-			for _, elem := range x.Elems() {
-				p.add(elem)
-			}
-			return
-		default:
-			return
+// record adds out when it is the container unwrapped from node. Only the
+// container node itself is taken, never a wrapper (a SyntaxObject or a datum
+// label) that caches the same result: each raw container is made from exactly
+// one container node, so the map does not depend on cache iteration order.
+func (p *InputSpine) record(node SyntaxValue, out values.Value) {
+	switch x := node.(type) {
+	case *SyntaxPair:
+		raw, ok := out.(*values.Pair)
+		if ok {
+			p.pairs[raw] = x
+		}
+	case *SyntaxVector:
+		raw, ok := out.(*values.Vector)
+		if ok {
+			p.vectors[raw] = x
+		}
+	case *SyntaxBox:
+		raw, ok := out.(*values.Box)
+		if ok {
+			p.boxes[raw] = x
 		}
 	}
 }
 
-// HasPair reports whether v is a pair of the spine.
-func (p *InputSpine) HasPair(v values.Value) bool {
-	x, ok := v.(*values.Pair)
-	if !ok {
-		return false
+// Origin returns the syntax node v was unwrapped from, or nil when v is not a
+// pair, vector or box of the spine.
+func (p *InputSpine) Origin(v values.Value) SyntaxValue {
+	if p == nil {
+		return nil
 	}
-	_, ok = p.pairs[x]
-	return ok
-}
-
-// HasVector reports whether v is a vector of the spine.
-func (p *InputSpine) HasVector(v values.Value) bool {
-	x, ok := v.(*values.Vector)
-	if !ok {
-		return false
+	switch x := v.(type) {
+	case *values.Pair:
+		node, ok := p.pairs[x]
+		if ok {
+			return node
+		}
+	case *values.Vector:
+		node, ok := p.vectors[x]
+		if ok {
+			return node
+		}
+	case *values.Box:
+		node, ok := p.boxes[x]
+		if ok {
+			return node
+		}
 	}
-	_, ok = p.vectors[x]
-	return ok
+	return nil
 }
