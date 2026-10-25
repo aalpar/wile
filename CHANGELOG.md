@@ -142,8 +142,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `read-syntax` serialised only against each other, so a `read-char` thread
   beside a `read-syntax` thread raced on the stream and its position counter
   (`go test -race`) and could return a datum or a line spliced from
-  non-adjacent text (`"ef"` from the lines `e` and `f`). Every read primitive now holds the port's read lock for the
-  whole call. A port also refuses a second `UnreadRune` in a row itself
+  non-adjacent text (`"ef"` from the lines `e` and `f`). The binary readers
+  (`read-u8`, `peek-u8`, `read-bytevector`, `read-bytevector!`) took no lock
+  either: two `read-u8` threads draining 20000 bytes counted 15906. Every read
+  primitive now holds the port's read lock for the whole call. A port also refuses a second `UnreadRune` in a row itself
   (`bufio.ErrInvalidUnreadRune`), whatever its Go reader allows, so the
   counted position cannot run ahead of the stream; and `close-port` racing a
   read is no longer a data race on the closed flag.

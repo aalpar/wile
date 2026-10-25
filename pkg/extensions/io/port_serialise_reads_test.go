@@ -16,6 +16,7 @@ package io_test
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -152,4 +153,65 @@ func TestCloseRacingARead(t *testing.T) {
 	result, err := engine.EvalMultiple(context.Background(), code)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.SchemeString(), qt.Not(qt.Equals), "#f")
+}
+
+// TestTwoThreadsReadingOneBinaryPortSerialise is the binary half of A17: each
+// binary read primitive holds the port's read lock for its call, so two
+// threads draining one bytevector port neither race (-race) nor read a byte
+// twice or skip one. The source counts 0..255 repeatedly, so a step's result
+// is checked byte for byte: every byte value occurs exactly
+// serialiseRounds times across both threads.
+func TestTwoThreadsReadingOneBinaryPortSerialise(t *testing.T) {
+	const (
+		readU8     = `(lambda () (let ((b (read-u8 p))) (if (eof-object? b) b (list b))))`
+		peekU8     = `(lambda () (let ((b (peek-u8 p))) (if (eof-object? b) b '())))`
+		readBV     = `(lambda () (let ((v (read-bytevector 3 p))) (if (eof-object? v) v (bv->list v (bytevector-length v)))))`
+		readBVBang = `(lambda () (let* ((v (make-bytevector 3 0)) (n (read-bytevector! v p))) (if (eof-object? n) n (bv->list v n))))`
+	)
+	tests := []struct {
+		name         string
+		first, other string
+	}{
+		{"read-u8 and read-u8", readU8, readU8},
+		{"peek-u8 and read-u8", peekU8, readU8},
+		{"read-bytevector and read-u8", readBV, readU8},
+		{"read-bytevector! and read-u8", readBVBang, readU8},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine, err := wile.NewEngine(context.Background(),
+				wile.WithExtension(extio.Extension),
+				wile.WithExtension(threads.Extension),
+			)
+			c.Assert(err, qt.IsNil)
+			t.Cleanup(func() {
+				_ = engine.Close()
+			})
+			code := `
+(define src (let loop ((i (- (* 256 ` + strconv.Itoa(serialiseRounds) + `) 1)) (acc '()))
+  (if (< i 0) acc (loop (- i 1) (cons (modulo i 256) acc)))))
+(define p (open-input-bytevector (apply bytevector src)))
+(define (bv->list v n)
+  (let loop ((i (- n 1)) (acc '()))
+    (if (< i 0) acc (loop (- i 1) (cons (bytevector-u8-ref v i) acc)))))
+(define (drain step)
+  (lambda ()
+    (let loop ((acc '()))
+      (let ((x (step)))
+        (if (eof-object? x) acc (loop (append x acc)))))))
+(define t1 (make-thread (drain ` + tt.first + `)))
+(define t2 (make-thread (drain ` + tt.other + `)))
+(thread-start! t1)
+(thread-start! t2)
+(let ((counts (make-vector 256 0)))
+  (for-each (lambda (b) (vector-set! counts b (+ 1 (vector-ref counts b))))
+            (append (thread-join! t1) (thread-join! t2)))
+  (vector->list counts))`
+			result, err := engine.EvalMultiple(context.Background(), code)
+			c.Assert(err, qt.IsNil)
+			want := strings.TrimSuffix(strings.Repeat(strconv.Itoa(serialiseRounds)+" ", 256), " ")
+			c.Assert(result.SchemeString(), qt.Equals, "("+want+")")
+		})
+	}
 }

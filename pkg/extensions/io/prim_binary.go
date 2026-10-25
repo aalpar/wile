@@ -39,6 +39,8 @@ func PrimReadU8(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
+	p.LockReads()
+	defer p.UnlockReads()
 	br, _ := p.AsByteReader()
 	b, err := br.ReadByte()
 	if errors.Is(err, io.EOF) {
@@ -61,6 +63,10 @@ func PrimPeekU8(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
+	// The read and the unread are one step: another reader between them would
+	// have its byte unread instead.
+	p.LockReads()
+	defer p.UnlockReads()
 	br, _ := p.AsByteReader()
 	b, err := br.ReadByte()
 	if errors.Is(err, io.EOF) {
@@ -152,6 +158,8 @@ func PrimReadBytevector(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
+	p.LockReads()
+	defer p.UnlockReads()
 
 	// Read exactly k bytes using io.ReadFull to avoid short reads from buffered ports.
 	// R7RS §6.13.3: read-bytevector returns a bytevector of exactly k bytes if available.
@@ -194,6 +202,8 @@ func PrimReadBytevectorBang(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
+	p.LockReads()
+	defer p.UnlockReads()
 
 	// Extract optional start/end arguments
 	start, end, err := helpers.ParseSubrange(tuple.Cdr(), bv.Length(), "read-bytevector!")
