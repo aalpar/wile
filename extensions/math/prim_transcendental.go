@@ -177,9 +177,11 @@ func PrimExp(mc machine.CallContext) error {
 }
 
 // PrimLog implements the (log z) and (log z1 z2) primitives. A positive,
-// unbounded-tier real argument takes the big-precision log (so a value beyond the
-// float64 range no longer overflows its input to +Inf); non-positive or complex
-// arguments keep the branch-correct complex path.
+// unbounded-tier real argument, or with two arguments either operand of that
+// tier when both are positive reals, takes the big-precision log at the
+// operands' precision (so a value beyond the float64 range no longer overflows
+// its input to +Inf); non-positive or complex arguments keep the
+// branch-correct complex path.
 func PrimLog(mc machine.CallContext) error {
 	o := mc.Arg(0)
 	rest := mc.Arg(1)
@@ -684,7 +686,8 @@ func isRealKind(n values.Number) bool {
 }
 
 // bigFloatExpt computes base^exp in big.Float for real operands at least one of
-// which is a BigFloat, rounded to the widest BigFloat operand's precision.
+// which is a BigFloat, rounded to their OperandPrecision (the widest BigFloat
+// operand's, capped at MaxBigFloatLiteralPrecision).
 //
 // The IEEE special cases are answered first, in big.Float, because the kernels
 // cannot take them: big.Float has no NaN, BigExp cannot reduce an infinity, and

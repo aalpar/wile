@@ -898,3 +898,37 @@ func TestOperandPrecisionExactPartner(t *testing.T) {
 		})
 	}
 }
+
+// TestBigComplexKernelOperandPrecision pins operand-max on the two BigComplex
+// kernel sites: exp's float64-overflow rescue and atan's out-of-float64-range
+// arm compute at the BigFloat part's precision, not at the default.
+func TestBigComplexKernelOperandPrecision(t *testing.T) {
+	engine := newEngine(t)
+	tcs := []struct {
+		name  string
+		lit   string
+		code  string
+		parts []string
+	}{
+		// cmplx.Exp(1000+1i) overflows float64, so rescueBigComplex answers
+		{"exp overflow rescue", "#m1000." + strings.Repeat("0", 117) + "1", "(exp (make-rectangular x 1))", []string{"real-part", "imag-part"}},
+		// a real part beyond float64 range diverts to values.BigComplexAtan;
+		// the imaginary part, about 1/x^2, is lost and the result is real
+		{"atan beyond float64 range", "#m1." + strings.Repeat("0", 119) + "1e400", "(atan (make-rectangular x 1))", []string{"real-part"}},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			x, ok := eval(t, engine, tc.lit).Internal().(*values.BigFloat)
+			c.Assert(ok, qt.IsTrue)
+			prec := x.BigFloatValue().Prec()
+			c.Assert(prec > values.DefaultBigFloatPrecision, qt.IsTrue)
+			for _, part := range tc.parts {
+				code := "(let ((x " + tc.lit + ")) (" + part + " " + tc.code + "))"
+				got, ok := eval(t, engine, code).Internal().(*values.BigFloat)
+				c.Assert(ok, qt.IsTrue, qt.Commentf("%s", code))
+				c.Assert(got.BigFloatValue().Prec(), qt.Equals, prec, qt.Commentf("%s", code))
+			}
+		})
+	}
+}
