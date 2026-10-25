@@ -652,3 +652,28 @@ func TestP05_DatumToSyntax(t *testing.T) {
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(sym.ResolvedBinding, qt.IsNil)
 }
+
+// TestExpandOnceKeepsANonPairCdr pins the cdr hand-off: ExpandOnce replaced a
+// non-pair cdr with the empty list before invoking the transformer, so
+// (m . 5) lost the 5 under expand-once while the full expansion kept it. Racket:
+// (syntax->datum (expand-once #'(m . 5))) => (quote 5).
+func TestExpandOnceKeepsANonPairCdr(t *testing.T) {
+	t.Parallel()
+
+	tcs := []struct{ name, code, want string }{
+		{"syntax-rules", `(define-syntax m (syntax-rules () ((_ . x) 'x)))
+(call-with-values (lambda () (expand-once #'(m . 5)))
+  (lambda (stx ok) (list (syntax->datum stx) ok)))`, "((quote 5) #t)"},
+		{"er-macro-transformer", `(define-syntax e (er-macro-transformer (lambda (f r c) (list (r 'quote) f))))
+(call-with-values (lambda () (expand-once #'(e . 5)))
+  (lambda (stx ok) (list (syntax->datum stx) ok)))`, "((quote (e . 5)) #t)"},
+		{"improper argument list unchanged", `(define-syntax m (syntax-rules () ((_ . x) 'x)))
+(syntax->datum (call-with-values (lambda () (expand-once #'(m 1 . 5))) (lambda (stx ok) stx)))`, "(quote (1 . 5))"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			qt.New(t).Assert(evalSyntaxForms(t, tc.code, withStdlibResolver()...), qt.Equals, tc.want)
+		})
+	}
+}
