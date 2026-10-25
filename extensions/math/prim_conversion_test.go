@@ -15,7 +15,10 @@
 package math_test
 
 import (
+	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/values"
@@ -94,7 +97,7 @@ func TestStringToNumber(t *testing.T) {
 		// prefix directives
 		{"prefix octal", `(= (string->number "#o10") 8)`, values.TrueValue},
 		{"prefix decimal", `(= (string->number "#d42") 42)`, values.TrueValue},
-		{"prefix unknown", `(equal? (string->number "#z42") #f)`, values.TrueValue},
+		{"prefix unknown", `(equal? (string->number "#q42") #f)`, values.TrueValue},
 		// exactness conversions
 		{"prefix exact int passthrough", `(= (string->number "#e42") 42)`, values.TrueValue},
 		{"prefix exact int-valued float", `(= (string->number "#e1.0") 1)`, values.TrueValue},
@@ -620,4 +623,156 @@ func TestLossSignalDiscoverability(t *testing.T) {
 			c.Assert(result.Internal(), qt.Equals, tc.want)
 		})
 	}
+}
+
+// numberAnswer renders a string->number or reader result for comparison: the Go
+// type as well as the printed form, because a BigInteger 42 and an Integer 42
+// print alike, so a print-only comparison passes with the #z widening missing.
+func numberAnswer(v values.Value) string {
+	n, ok := v.(values.Number)
+	if !ok {
+		return "#f"
+	}
+	return fmt.Sprintf("%T %s", n, n.SchemeString())
+}
+
+// TestStringToNumberPrefixes pins string->number on the prefix forms whose
+// answer is not the reader's (one-per-slot, which the reader does not yet
+// enforce for exactness), has no reader counterpart (the radix argument), or
+// was named by the crosscheck row. Standard-prefix rows agree with racket and
+// petite; #z/#m are Wile-only.
+func TestStringToNumberPrefixes(t *testing.T) {
+	engine := newEngine(t)
+	tcs := []struct {
+		code string
+		want string
+	}{
+		// #z and #m are introducers, as in the reader.
+		{`(string->number "#z42")`, "*values.BigInteger 42"},
+		{`(string->number "#Z42")`, "*values.BigInteger 42"},
+		{`(string->number "#m1.5")`, "*values.BigFloat 1.5l0"},
+		{`(string->number "#z1.5")`, "#f"},
+		{`(string->number "#z#x1f")`, "*values.BigInteger 31"},
+		{`(string->number "#x#z1f")`, "#f"},
+		{`(string->number "#e#z9")`, "*values.BigInteger 9"},
+		{`(string->number "#i#z9")`, "*values.Float 9.0"},
+		{`(string->number "#z#m5")`, "#f"},
+		{`(string->number "#m#z5")`, "*values.BigFloat 5.0l0"},
+		{`(string->number "#m1.2345678901234567890123456789")`,
+			"*values.BigFloat 1.2345678901234567890123456789l0"},
+		{`(string->number "#m1p3")`, "#f"},
+		{`(string->number "#z")`, "#f"},
+		// The radix argument is the default radix for the digits after #z/#m,
+		// as it is after #e: only a radix prefix overrides it.
+		{`(string->number "#z1f" 16)`, "*values.BigInteger 31"},
+		{`(string->number "#e10" 2)`, "*values.Integer 2"},
+		{`(string->number "#z10/2" 16)`, "#f"},
+		// One prefix per slot (racket and petite: #f).
+		{`(string->number "#d#x1")`, "#f"},
+		{`(string->number "#x#x1")`, "#f"},
+		{`(string->number "#e#i1")`, "#f"},
+		{`(string->number "#e#e1")`, "#f"},
+		{`(string->number "#e#x#i1")`, "#f"},
+		// A non-decimal radix reads a decimal point (racket and petite).
+		{`(string->number "#x1.8")`, "*values.Float 1.5"},
+		{`(string->number "1.8" 16)`, "*values.Float 1.5"},
+		{`(string->number "#o1.4")`, "*values.Float 1.5"},
+		{`(string->number "#x#e1.8")`, "*values.Rational 3/2"},
+		{`(string->number "#e#x1.8")`, "*values.Rational 3/2"},
+		{`(string->number "#x-.8")`, "*values.Float -0.5"},
+		{`(string->number "#o1e2")`, "#f"},
+		{`(string->number "#x.")`, "#f"},
+		// Reader-defect rows TestStringToNumberAgreesWithReader leaves out.
+		{`(string->number "#x+inf.0")`, "*values.Float +inf.0"},
+		{`(string->number "#e#m#d0.1")`, "*values.Rational 3602879701896397/36028797018963968"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.code, func(t *testing.T) {
+			got := numberAnswer(eval(t, engine, tc.code).Internal())
+			qt.New(t).Assert(got, qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestStringToNumberAgreesWithReader is the R7RS §6.2.7 ratchet: string->number
+// accepts exactly the reader's number syntax, so for every string in the corpus
+// it answers what (read (open-input-string s)) does, or #f where the reader
+// faults or reads a non-number. The corpus is the cross product of every
+// prefix sequence up to three long with a set of numeral shapes, so it covers
+// orders and repetitions no hand-picked list does.
+//
+// Three classes are left out, each a reader defect filed as its own row;
+// TestStringToNumberPrefixes pins string->number's answer for each:
+//   - a second exactness prefix in one run (#e#i1): the reader accepts it,
+//     racket and petite answer #f;
+//   - an infinity or NaN under a non-decimal radix (#x+inf.0): the reader
+//     refuses it, racket and petite read it;
+//   - #e over a bare #m (#e#m#d0.1): the reader converts the innermost
+//     numeral's digits, through the #m and any #i between, so #e#m#d0.1 is
+//     1/10 where #e#m0.1 is the 256-bit value's exact image. string->number
+//     converts the value in both.
+func TestStringToNumberAgreesWithReader(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	ctx := context.Background()
+	marks := []string{"#b", "#o", "#d", "#x", "#e", "#i", "#z", "#m"}
+	prefixes := []string{""}
+	layer := []string{""}
+	for range 3 {
+		var next []string
+		for _, l := range layer {
+			for _, m := range marks {
+				next = append(next, l+m)
+			}
+		}
+		prefixes = append(prefixes, next...)
+		layer = next
+	}
+	for _, m := range marks {
+		prefixes = append(prefixes, strings.ToUpper(m), strings.ToUpper(m)+"#d")
+	}
+	numerals := []string{
+		"", "42", "+5", "-7", "007", "101", "1f", "1.5", "0.1", "-.5", "1.", "1/3", "10/2",
+		"1e3", "1d3", "1s2", "1l0", "1p3", "+inf.0", "-nan.0", "1+2i", "+i", "inf",
+		"1.2345678901234567890123456789", "99999999999999999999999",
+	}
+	for _, pf := range prefixes {
+		for _, num := range numerals {
+			s := pf + num
+			if readerDefectRow(pf, num) {
+				continue
+			}
+			want := "#f"
+			r, err := engine.EvalMultiple(ctx, "(quote "+s+")")
+			if err == nil {
+				want = numberAnswer(r.Internal())
+			}
+			got := numberAnswer(eval(t, engine, `(string->number "`+s+`")`).Internal())
+			c.Check(got, qt.Equals, want, qt.Commentf("(string->number %q)", s))
+		}
+	}
+}
+
+// readerDefectRow reports whether (prefix, numeral) falls in one of the two
+// classes TestStringToNumberAgreesWithReader leaves out.
+func readerDefectRow(prefix, numeral string) bool {
+	lower := strings.ToLower(prefix)
+	if strings.Contains(numeral, "inf.0") || strings.Contains(numeral, "nan.0") {
+		if strings.Contains(lower, "#b") || strings.Contains(lower, "#o") || strings.Contains(lower, "#x") {
+			return true
+		}
+	}
+	e := strings.Index(lower, "#e")
+	if e >= 0 && strings.Contains(lower[e:], "#m#") {
+		return true
+	}
+	// A run is the prefixes between introducers; #z and #m start a new one.
+	for _, run := range strings.FieldsFunc(lower, func(r rune) bool {
+		return r == 'z' || r == 'm'
+	}) {
+		if strings.Count(run, "#e")+strings.Count(run, "#i") > 1 {
+			return true
+		}
+	}
+	return false
 }

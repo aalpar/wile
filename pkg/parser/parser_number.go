@@ -188,15 +188,7 @@ func (p *Parser) parseBigIntegerWithBase(base int) (syntax.SyntaxValue, tokenize
 // container introducer #& gives #&#&5 two boxes deep. That falls out of the
 // BigInteger arm being the identity.
 func (p *Parser) widenToBigInteger(stx syntax.SyntaxValue, _ tokenizer.Token) (syntax.SyntaxValue, error) {
-	switch v := stx.Unwrap().(type) {
-	case *values.BigInteger:
-		return stx, nil
-	case *values.Integer:
-		return p.rewrapSyntax(stx, values.NewBigIntegerFromInt64(v.Value)), nil
-	default:
-		return nil, werr.WrapForeignErrorf(werr.ErrNotANumber,
-			"widenToBigInteger: #z requires an exact integer datum, got %T", v)
-	}
+	return p.convertWrappedNumber(stx, "widenToBigInteger", WidenToBigInteger)
 }
 
 // widenToBigFloat implements #m as a datum introducer, the inexact counterpart
@@ -215,37 +207,7 @@ func (p *Parser) widenToBigInteger(stx syntax.SyntaxValue, _ tokenizer.Token) (s
 // notation. Precision beyond float64 is available through the unprefixed decimal
 // spelling or the l marker.
 func (p *Parser) widenToBigFloat(stx syntax.SyntaxValue, _ tokenizer.Token) (syntax.SyntaxValue, error) {
-	switch v := stx.Unwrap().(type) {
-	case *values.BigFloat:
-		return stx, nil
-	case *values.Float:
-		return p.rewrapSyntax(stx, values.NewBigFloatFromFloat64(v.Value)), nil
-	case *values.Integer:
-		bf := new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetInt64(v.Value)
-		return p.rewrapSyntax(stx, values.NewBigFloat(bf)), nil
-	case *values.BigInteger:
-		n := v.BigInt()
-		prec := max(uint(values.DefaultBigFloatPrecision), uint(n.BitLen()))
-		if prec > values.MaxBigFloatLiteralPrecision {
-			return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
-				"widenToBigFloat: #m operand needs %d bits, past the %d-bit limit", prec, values.MaxBigFloatLiteralPrecision)
-		}
-		bf := new(big.Float).SetPrec(prec).SetInt(n)
-		return p.rewrapSyntax(stx, values.NewBigFloat(bf)), nil
-	case *values.Rational:
-		r := v.Rat()
-		bits := max(r.Num().BitLen(), r.Denom().BitLen())
-		prec := max(uint(values.DefaultBigFloatPrecision), uint(bits))
-		if prec > values.MaxBigFloatLiteralPrecision {
-			return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
-				"widenToBigFloat: #m operand needs %d bits, past the %d-bit limit", prec, values.MaxBigFloatLiteralPrecision)
-		}
-		bf := new(big.Float).SetPrec(prec).SetRat(r)
-		return p.rewrapSyntax(stx, values.NewBigFloat(bf)), nil
-	default:
-		return nil, werr.WrapForeignErrorf(werr.ErrNotANumber,
-			"widenToBigFloat: #m requires a real datum, got %T", v)
-	}
+	return p.convertWrappedNumber(stx, "widenToBigFloat", WidenToBigFloat)
 }
 
 // parseScientificNotation parses a number in scientific notation (e.g., "1e10", "+2e-5").
@@ -680,22 +642,11 @@ func (p *Parser) parseDecimalFractionWithBase(base int) (syntax.SyntaxValue, tok
 }
 
 // parseBigFloat parses a big float token (e.g., "#m1.23456789012345678901234567890").
-//
-// The tokenizer admits two spellings big.ParseFloat does not: an <infnan>
-// (#m+inf.0), converted through float64, whose NaN NewBigFloatFromFloat64 maps
-// to the BigFloat NaN flag; and the short exponent markers s/f/d/l, which mean
-// e (R7RS §7.1.1) and are folded to it.
+// The conversion is ParseBigFloatLiteral, shared with string->number.
 func (p *Parser) parseBigFloat() (syntax.SyntaxValue, tokenizer.Token, error) {
-	s := schemeutil.TrimPrefixCI(p.cur.String(), "#m")
-	special, ok := ParseSpecialFloat(s)
-	if ok {
-		q := p.wrapSyntax(values.NewBigFloatFromFloat64(special.Value), p.cur)
-		return q, p.cur, nil
-	}
-	q1 := values.NewBigFloatFromString(schemeutil.NormalizeExponentMarker(s))
-	if q1 == nil {
-		return nil, p.cur, NewParserErrorWithWrapf(werr.ErrInvalidFormat, p.cur,
-			"invalid big float (malformed, or past the %d-bit precision limit): %s", values.MaxBigFloatLiteralPrecision, p.cur.String())
+	q1, err := ParseBigFloatLiteral(schemeutil.TrimPrefixCI(p.cur.String(), "#m"))
+	if err != nil {
+		return nil, p.cur, NewParserErrorWithWrapf(err, p.cur, "invalid big float: %s", p.cur.String())
 	}
 	q := p.wrapSyntax(q1, p.cur)
 	return q, p.cur, nil
