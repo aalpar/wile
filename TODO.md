@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-10-24: `todo/` became a tracked symlink into `../wile-memoplans/todo/` (same arrangement as `plans/` and `memory/`; row edits now show in that repo's `git status`); the crosscheck-filed rows moved from the tier files into thirteen `todo/crosscheck-*.md` files, each row with its resolution block, ranked by the 2026-10-24 triage (see **Layout**); Layout counts re-measured. Previous: 2026-10-17: split into `TODO.md` (hub) plus `todo/*.md` (one file per tier, plus
+**Last Updated**: 2026-10-25: the crosscheck backlog run (X1–X57, `plans/2026-10-24-crosscheck-backlog-triage.md` §7.9) is executed; Layout counts re-taken. Before that, 2026-10-24: `todo/` became a tracked symlink into `../wile-memoplans/todo/` (same arrangement as `plans/` and `memory/`; row edits now show in that repo's `git status`); the crosscheck-filed rows moved from the tier files into thirteen `todo/crosscheck-*.md` files, each row with its resolution block, ranked by the 2026-10-24 triage (see **Layout**); Layout counts re-measured. Previous: 2026-10-17: split into `TODO.md` (hub) plus `todo/*.md` (one file per tier, plus
 `exceptions-and-rejected.md` and `closed.md`); every row moved verbatim, see **Layout** below. Previous: 2026-10-16: every open row and the Plan Index re-verified against `956604f0`
 (repros rerun, citations resolved, fixing commits found): 13 rows closed that had already shipped,
 the `if` section and Top Priority table updated, drifted citations repointed, two unindexed plans
@@ -34,25 +34,25 @@ from the split to 2026-10-24, `git log -p todo/<file>` in `wile`; after that, th
 | [`todo/tier2-embedding-api.md`](todo/tier2-embedding-api.md) | Embedding API, algebra & analytics roadmap, feature deltas | 32 | 21 | 152 |
 | [`todo/tier3-tooling-dx.md`](todo/tier3-tooling-dx.md) | Linter, tooling, developer experience | 4 | 6 | 24 |
 | [`todo/tier4-performance.md`](todo/tier4-performance.md) | Measured perf levers; unboxed arithmetic is the largest | 9 | 11 | 145 |
-| [`todo/tier5-tech-debt.md`](todo/tier5-tech-debt.md) | Simplification, dedup, postponed items | 43 | 48 | 752 |
+| [`todo/tier5-tech-debt.md`](todo/tier5-tech-debt.md) | Simplification, dedup, postponed items | 43 | 48 | 753 |
 | [`todo/tier6-nice-to-haves.md`](todo/tier6-nice-to-haves.md) | Unranked wants | 14 | 7 | 58 |
-| [`todo/crosscheck-numeric.md`](todo/crosscheck-numeric.md) | Crosscheck backlog: big-precision results, special-float contagion (A1, A4, A6–A8, C-precision) | 12 | 0 | 117 |
-| [`todo/crosscheck-numeric-reader.md`](todo/crosscheck-numeric-reader.md) | Crosscheck backlog: `#z`/`#m` literals, `l` marker, `#` terminator, `string->number` (B31–B34, C ×2) | 10 | 0 | 112 |
-| [`todo/crosscheck-reader-ports.md`](todo/crosscheck-reader-ports.md) | Crosscheck backlog: `read` on failing ports, port serialisation, UTF-8, tokenizer diagnostics (A2, A17, B25–B41) | 10 | 0 | 136 |
-| [`todo/crosscheck-hygiene-syntax.md`](todo/crosscheck-hygiene-syntax.md) | Crosscheck backlog: scope duals, opaque-subtree binders, cyclic syntax, ER contract (A3, A5, A13, A14, A20, A22, B38, B46, C ×2) | 16 | 0 | 198 |
-| [`todo/crosscheck-expander-phases.md`](todo/crosscheck-expander-phases.md) | Crosscheck backlog: `define` failure leaves `#<void>`, cross-phase lookup, head-position shadowing (A9, A24, B44, B45, C) | 6 | 0 | 116 |
-| [`todo/crosscheck-include-library.md`](todo/crosscheck-include-library.md) | Crosscheck backlog: include cycles and resolution, resolver chains, nested `define-library` (A10–A12, A16, A21, B29, B43, C ×2) | 12 | 0 | 183 |
-| [`todo/crosscheck-algebra-dataflow.md`](todo/crosscheck-algebra-dataflow.md) | Crosscheck backlog: AC unification, backward dataflow seeding (A18, A19, B42, B48) | 8 | 0 | 92 |
-| [`todo/crosscheck-vm-errors.md`](todo/crosscheck-vm-errors.md) | Crosscheck backlog: variadic retention, continuation marks, hashtable kind, process-kill (A15, A23, B36, B37, C ×3) | 9 | 0 | 134 |
-| [`todo/crosscheck-error-classification.md`](todo/crosscheck-error-classification.md) | Crosscheck backlog: index-keyed classification, carried origin chain, `%T` in diagnostics (B26, B30, B47) | 7 | 0 | 66 |
-| [`todo/crosscheck-p317-correctness.md`](todo/crosscheck-p317-correctness.md) | Crosscheck backlog: the P3.17 cancellation / `with-timeout` correctness rows (P3.17-a–h, B28) | 9 | 0 | 198 |
-| [`todo/crosscheck-p317-residue.md`](todo/crosscheck-p317-residue.md) | Crosscheck backlog: the rest of the P3.17 heading, open and closed, in filing order | 20 | 15 | 448 |
-| [`todo/crosscheck-d-tests-windows.md`](todo/crosscheck-d-tests-windows.md) | Crosscheck backlog Band D: Windows-unverifiable rows, test debt | 27 | 0 | 292 |
-| [`todo/crosscheck-d-docs-tooling-debt.md`](todo/crosscheck-d-docs-tooling-debt.md) | Crosscheck backlog Band D: docs, tooling, tech debt, perf, information disclosure | 27 | 0 | 330 |
+| [`todo/crosscheck-numeric.md`](todo/crosscheck-numeric.md) | Crosscheck backlog: big-precision results, special-float contagion (A1, A4, A6–A8, C-precision) | 20 | 12 | 171 |
+| [`todo/crosscheck-numeric-reader.md`](todo/crosscheck-numeric-reader.md) | Crosscheck backlog: `#z`/`#m` literals, `l` marker, `#` terminator, `string->number` (B31–B34, C ×2) | 13 | 9 | 143 |
+| [`todo/crosscheck-reader-ports.md`](todo/crosscheck-reader-ports.md) | Crosscheck backlog: `read` on failing ports, port serialisation, UTF-8, tokenizer diagnostics (A2, A17, B25–B41) | 9 | 9 | 161 |
+| [`todo/crosscheck-hygiene-syntax.md`](todo/crosscheck-hygiene-syntax.md) | Crosscheck backlog: scope duals, opaque-subtree binders, cyclic syntax, ER contract (A3, A5, A13, A14, A20, A22, B38, B46, C ×2) | 17 | 16 | 257 |
+| [`todo/crosscheck-expander-phases.md`](todo/crosscheck-expander-phases.md) | Crosscheck backlog: `define` failure leaves `#<void>`, cross-phase lookup, head-position shadowing (A9, A24, B44, B45, C) | 12 | 6 | 142 |
+| [`todo/crosscheck-include-library.md`](todo/crosscheck-include-library.md) | Crosscheck backlog: include cycles and resolution, resolver chains, nested `define-library` (A10–A12, A16, A21, B29, B43, C ×2) | 16 | 12 | 233 |
+| [`todo/crosscheck-algebra-dataflow.md`](todo/crosscheck-algebra-dataflow.md) | Crosscheck backlog: AC unification, backward dataflow seeding (A18, A19, B42, B48) | 5 | 8 | 115 |
+| [`todo/crosscheck-vm-errors.md`](todo/crosscheck-vm-errors.md) | Crosscheck backlog: variadic retention, continuation marks, hashtable kind, process-kill (A15, A23, B36, B37, C ×3) | 6 | 11 | 163 |
+| [`todo/crosscheck-error-classification.md`](todo/crosscheck-error-classification.md) | Crosscheck backlog: index-keyed classification, carried origin chain, `%T` in diagnostics (B26, B30, B47) | 9 | 6 | 90 |
+| [`todo/crosscheck-p317-correctness.md`](todo/crosscheck-p317-correctness.md) | Crosscheck backlog: the P3.17 cancellation / `with-timeout` correctness rows (P3.17-a–h, B28) | 20 | 12 | 255 |
+| [`todo/crosscheck-p317-residue.md`](todo/crosscheck-p317-residue.md) | Crosscheck backlog: the rest of the P3.17 heading, open and closed, in filing order | 7 | 30 | 469 |
+| [`todo/crosscheck-d-tests-windows.md`](todo/crosscheck-d-tests-windows.md) | Crosscheck backlog Band D: Windows-unverifiable rows, test debt | 11 | 19 | 318 |
+| [`todo/crosscheck-d-docs-tooling-debt.md`](todo/crosscheck-d-docs-tooling-debt.md) | Crosscheck backlog Band D: docs, tooling, tech debt, perf, information disclosure | 8 | 22 | 363 |
 | [`todo/exceptions-and-rejected.md`](todo/exceptions-and-rejected.md) | Documented R7RS exceptions, rejected proposals, the FCA coupling assessment | 0 | 10 | 89 |
 | [`todo/closed.md`](todo/closed.md) | Archive form of closed rows; read for traps and deciding measurements | 0 | 90 | 815 |
 
-**Crosscheck backlog files (2026-10-24).** The thirteen `todo/crosscheck-*.md` files hold the 173
+**Crosscheck backlog files (2026-10-24).** The thirteen `todo/crosscheck-*.md` files held the 173
 open rows that were filed under the "Filed by the P*.* crosscheck / verification / re-review /
 residual audit" headings of the tier files, each row verbatim and followed by its resolution block
 (Sites, Change, Gate, Verification, Risk, Size, Ships with, Branch) from
@@ -60,7 +60,7 @@ residual audit" headings of the tier files, each row verbatim and followed by it
 run Band A, then B, then C, in the triage's ranking: A (wrong answers, crashes, silent error loss),
 B (behavioural inconsistencies, error quality), C (forks, each decided), D (everything else, in the
 two `-d-` files). Within a band a confirmed repro outranks a hypothesis. The task cut that orders the
-items against each other is the plan's §7.1 (X1–X57). The "Filed by" headings stay in the tier
+items against each other is the plan's §7.1 (X1–X57). **Executed 2026-10-24/25** (ledger §7.9): every X1–X57 task is shipped, declined, blocked (X44, on P9.2) or deferred by the owner (X56); the rows still open are mostly ones the run filed itself, under the files' `### N1`–`### N37` headings (the next backlog, several marked *decide*), plus the four Windows-only rows. The "Filed by" headings stay in the tier
 files as citation anchors, each with a pointer line and its closed rows.
 
 Rows are ranked by the four goals under **Ordering** below, not by file; the tier files are
@@ -224,7 +224,7 @@ because the citation is what `make indexlint` counts:
 | `2026-09-22-defect-closeout-P6.md` | The value surface answers at its edges instead of raising, splitting or silently rounding. **9/15** (P6.11 `fddda8c2`, merged `c291cebf`: the differential row only, the code change being P4.7's spine; P6.1 `51ff522b` + `89a2096e` + `d1ab8e0d` + `f93761ba`, merged `f663ebd7`; P6.2 `a232b7aa` + `ca7c080d` + `d5e69ce1` + `9167628d`, merged `0a289b5b`; P6.3 `2be65293` + `899bff71` + `a6139bfe` + `a53ecda7` + `04b7620f`, merged `6f833a7d`; P6.4 `73e8e436` + `189f7f05` + `f4520e40`, merged `e7beee1d`; P6.6 `2966319c` + `1a780e87` + `7c34bbdd` + `f5b44d2c` + `a119c685`, merged `86b83d09`; P6.8 `9089ce37` + `baed772c` + `39ba140c` + `91b44674`, merged `b2567dd7`; P6.9 `ac4c197f` + `b09bfe6a` + `d45ee093` + `ffd2687b` + `d1a8403a` + `c6dd88c3`, merged `1f80339b`; P6.14 `72dcf9df` + `82c20ab8` + `61d6d3a8` + `f7f8ae09`, merged `545fd064`); five window-constrained, ten free after the registry/core carve-out. P6.5, P6.7, P6.10, P6.12, P6.13, P6.15 are decisions. I172's rename residual is fixed (`12edd154` + `fb7f346a` + `5ea457d2`, merged `76df7d19`), under "Filed by the P4.7 crosscheck" |
 | `2026-09-22-defect-closeout-P8.md` | No hand-maintained list stands in for something the tree can derive, and a stale citation is caught by a gate rather than by a reader. **5/14** (P8.1 `a9d26981`, P8.4 `0788da7e`, P8.5 `3b8c3502`, P8.11 `4d2ba6a4`, P8.14 `07a51091`); four window-constrained, ten free. P8.3 is NOT done — its **Sites** paragraph names `tools/sh/planlint.sh`, and the script has no reverse arm |
 | `2026-09-22-defect-closeout-P9.md` | The never-fork-dependent cleanups: retire what nothing production calls. **5/7** (P9.5 `36300615`, P9.3 `95724172`, P9.7 `4acc7d15`, P9.6 `d5ae1fb8`, P9.4 `ecf0d137`); three window-constrained, four free, and the phase never picks a side on before-or-after |
-| `2026-10-24-crosscheck-backlog-triage.md` | Triage of the 173 open crosscheck-filed rows into Bands A–D (§1–§6), a 57-row task cut (§7.1), erratum (§7.2) and 15 open forks (§7.3). The per-item resolution blocks live beside the rows in `todo/crosscheck-*.md` (§7.4). No task cut yet. |
+| `2026-10-24-crosscheck-backlog-triage.md` | **Executed 2026-10-25 (ledger §7.9).** Triage of the 173 open crosscheck-filed rows into Bands A–D (§1–§6), a 57-row task cut (§7.1), erratum (§7.2) and 15 open forks (§7.3). The per-item resolution blocks live beside the rows in `todo/crosscheck-*.md` (§7.4). No task cut yet. |
 
 ### Design-only — approved or drafted, no code
 
