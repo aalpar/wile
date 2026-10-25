@@ -501,14 +501,38 @@ func TestP2_ERSpineContainers(t *testing.T) {
 }
 
 // TestP2_ERSpineUnlabeledCycle: the parser's label wrapper does not fence every
-// path into a cycle (#1# reaches it past label 0), so the spine walk itself must
-// terminate. Go layer only: the Scheme layer overflows earlier, stamping scopes
-// onto the cyclic input (MapSyntaxTree), which is filed in TODO.md.
+// path into a cycle (#1# reaches it past label 0), so every walk over the input
+// must terminate: the spine walk, and the expander's scope stamp onto the
+// cyclic input (MapSyntaxTree), which overflowed the Go stack on the Scheme
+// layer and, for a syntax-rules macro, on both. The cycle closes through a
+// pair, a vector and a box.
 func TestP2_ERSpineUnlabeledCycle(t *testing.T) {
-	src := `(import (for-syntax (scheme base)))  ; cadr
-(define-syntax probe (er-macro-transformer (lambda (f r c) (list (r 'quote) (pair? (cadr f))))))
-(probe #0=(#1=(x . #0#)) #1#)`
-	qt.Assert(t, evalSyntaxForms(t, src, withStdlibResolver(wile.WithGoSyntaxForms())...), qt.Equals, "#t")
+	uses := []struct {
+		name string
+		use  string
+	}{
+		{"pair", `(probe #0=(#1=(x . #0#)) #1#)`},
+		{"vector", `(probe #0=(#1=#(x #0#)) #1#)`},
+		{"box", `(probe #0=(#1=#&(x . #0#)) #1#)`},
+	}
+	macros := []struct {
+		name string
+		def  string
+		want string
+	}{
+		{"er", `(define-syntax probe (er-macro-transformer (lambda (f r c) (list (r 'quote) (pair? (cadr f))))))`, "#t"},
+		{"syntax-rules", `(define-syntax probe (syntax-rules () ((_ a b) 1)))`, "1"},
+	}
+	for _, m := range macros {
+		for _, u := range uses {
+			src := "(import (for-syntax (scheme base)))  ; cadr\n" + m.def + "\n" + u.use
+			for _, l := range syntaxLayers {
+				t.Run(m.name+"/"+u.name+"/"+l.name, func(t *testing.T) {
+					qt.Assert(t, evalSyntaxForms(t, src, withStdlibResolver(l.opt)...), qt.Equals, m.want)
+				})
+			}
+		}
+	}
 }
 
 // TestP2_ERContractCrossLibrary is the same contract read across a library
