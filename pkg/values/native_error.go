@@ -40,6 +40,7 @@ type NativeError struct {
 	err            error           // Wrapped Go error (optional)
 	sourceLocation string          // "file:line:col", empty if error hasn't been raised
 	stackTraceVal  Value           // Scheme list of stack frame alists, nil if not raised
+	raiseOrigin    any             // the VM's record of the first raise; see RaiseOrigin
 }
 
 // newNativeError is the core constructor for all NativeError variants.
@@ -163,6 +164,25 @@ func (p *NativeError) SetStackTraceValue(v Value) {
 		return
 	}
 	p.stackTraceVal = v
+}
+
+// RaiseOrigin returns what the VM recorded of this error's first raise, or nil.
+// It is opaque here: the VM keeps the raise's source context and stack trace in
+// its own types, which this package cannot name, so that an uncaught re-raise
+// can report the first raise's location and trace together.
+func (p *NativeError) RaiseOrigin() any {
+	if p == nil {
+		return nil
+	}
+	return p.raiseOrigin
+}
+
+// SetRaiseOrigin records the VM's record of this error's first raise.
+func (p *NativeError) SetRaiseOrigin(v any) {
+	if p == nil {
+		return
+	}
+	p.raiseOrigin = v
 }
 
 // Error implements the error interface.

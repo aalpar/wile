@@ -39,6 +39,11 @@ type ErrPromptAbort struct {
 	// "reconcile from the driver's own winding" (the value-delivery aborts, e.g.
 	// composable continuation, where the abort site and driver share a winding).
 	SourceWinding WindingStack
+	// rebaseWinding is set by an expansion-time root that passed the abort up
+	// after leaving its own extents, as for a resume (ErrResumeContinuation's
+	// field of the same name): the next driver replaces SourceWinding with its
+	// own winding (rebasePassedUpAbort).
+	rebaseWinding bool
 }
 
 func (p *ErrPromptAbort) Error() string {

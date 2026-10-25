@@ -845,7 +845,7 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbo
 
 	mc, err := p.evaluator.InvokeTransformer(p.ctx, cls, expanderCtx, inputForm)
 	if err != nil {
-		return nil, wrapSourcedError(sym.SourceContext(), werr.WrapForeignErrorf(err, "expand: syntax-rules transformer invocation failed"))
+		return nil, wrapSourcedError(sym.SourceContext(), werr.WrapForeignErrorf(err, "expand: transformer invocation failed"))
 	}
 	defer machine.ReleaseSubContext(mc)
 

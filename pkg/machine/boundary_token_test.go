@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/values"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -45,4 +46,29 @@ func TestReleaseClosesTheBoundary(t *testing.T) {
 	ReleaseSubContext(sub)
 	qt.Assert(t, comp.boundary.closed.Load(), qt.IsTrue)
 	qt.Assert(t, comp.root.closed.Load(), qt.IsFalse)
+}
+
+// TestGoTransformerCaptureIsAnExpansionTimeOne: a primitive used as a macro
+// transformer runs on a context no driver enters, so a capture on it or on a
+// sub-context it opens must still name an expansion-time root. With the flag
+// set only at RunWithinBoundary's entry, its token read as a runtime one.
+func TestGoTransformerCaptureIsAnExpansionTimeOne(t *testing.T) {
+	env := environment.NewNamespace().Runtime()
+	var own, sub *boundaryToken
+	fc := NewForeignClosure(env, 1, false, func(cc CallContext) error {
+		mc, err := RequireMachineContext(cc, "probe")
+		if err != nil {
+			return err
+		}
+		own = mc.rootIdentity()
+		s := mc.NewSubContext()
+		defer ReleaseSubContext(s)
+		sub = s.rootIdentity()
+		return nil
+	})
+	mc, err := invokeTransformerClosure(context.Background(), fc, nil, values.EmptyList)
+	qt.Assert(t, err, qt.IsNil)
+	ReleaseSubContext(mc)
+	qt.Assert(t, own.runtime, qt.IsFalse)
+	qt.Assert(t, sub, qt.Equals, own)
 }

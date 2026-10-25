@@ -1523,38 +1523,43 @@ func expandAndCompileOptimized(ctx context.Context, env *environment.Environment
 	}()
 
 	q, rerr = compilation.ExpandAndCompileOptimized(ctx, env, stx)
-	return q, controlSignalEscapedExpansion(rerr)
+	return q, expansionSignalAsError(rerr)
 }
 
-// controlSignalEscapedExpansion turns a control signal that escaped the
-// expansion into a plain error. This compile entry has no VM driver above it, so
-// a resume an expansion-time root passed up (a runtime continuation, stale once
-// its form ended, invoked in a transformer at top level) or an abort to a tag no
+// expansionSignalAsError turns a control signal that escaped the expansion into
+// a plain error. This compile entry has no VM driver above it, so a resume an
+// expansion-time root passed up (a runtime continuation, stale once its form
+// ended, invoked in a transformer at top level) or an abort to a tag no
 // expansion-time chain holds can reach no driver here; left as is, the signal
 // would surface to the embedder as an error that errors.As still matches, and a
 // driver that later saw it would act on it. The same signals raised under a
 // runtime eval pass through the expansion to the runtime driver and never reach
 // this entry. The bootstrap's compile entry (runBootstrapStx) is not wrapped: it
 // runs before any runtime form exists, so no runtime continuation can reach it.
-func controlSignalEscapedExpansion(err error) error {
+//
+// The result is wrapped by the caller (wrapCompilationError), like any other
+// failure of this entry.
+func expansionSignalAsError(err error) error {
 	var plain error
 	var resumeErr *machine.ErrResumeContinuation
 	var abortErr *machine.ErrPromptAbort
 	switch {
 	case errors.As(err, &resumeErr):
 		plain = werr.WrapForeignErrorf(werr.ErrContinuationBarrier,
-			"expansion: a continuation of a runtime form was invoked at expansion time, with no runtime driver to resume it: %v", err)
+			"expansion: a continuation of a runtime form was invoked at expansion time, with no runtime driver to resume it")
 	case errors.As(err, &abortErr):
 		plain = werr.WrapForeignErrorf(werr.ErrInvalidArgument,
-			"abort-current-continuation: no prompt found for tag %s at expansion time: %v", abortErr.Tag.SchemeString(), err)
+			"abort-current-continuation: no prompt found for tag %s at expansion time", abortErr.Tag.SchemeString())
 	default:
 		return err
 	}
 	// The original chain is cut on purpose (the signal must not stay reachable),
-	// so carry its innermost located source over by hand, the one
-	// wrapCompilationError would report. Only that one: re-wrapping every layer
-	// in the order this walk meets them would invert the chain and put the
-	// outermost form innermost.
+	// an exception to the lossless-chain rule, and its text is not pasted in
+	// either: what it said is the signal (named above) and the forms it crossed,
+	// and the one fact worth keeping, the innermost located source (the one
+	// wrapCompilationError would report), is carried over by hand. Only that one:
+	// re-wrapping every layer in the order this walk meets them would invert the
+	// chain and put the outermost form innermost.
 	var innermost *compilation.SourcedError
 	var se *compilation.SourcedError
 	for cause := err; errors.As(cause, &se); cause = se.Cause {
@@ -1565,7 +1570,7 @@ func controlSignalEscapedExpansion(err error) error {
 	if innermost != nil {
 		plain = &compilation.SourcedError{Source: innermost.Source, Cause: plain}
 	}
-	return wrapCompilationError("compile error", plain)
+	return plain
 }
 
 // compileExpr compiles a single syntax value into a CompiledCode, returning a wrapped CompilationError on failure. It
@@ -1716,7 +1721,7 @@ func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
 			Condition:  wrapValue(ee.Condition),
 			structured: true,
 		}
-		re.Source = ee.Source.Location()
+		re.Source = ee.Location()
 		if len(ee.StackTrace) > 0 {
 			re.StackTrace = ee.StackTrace.String()
 		}

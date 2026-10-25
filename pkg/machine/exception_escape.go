@@ -28,11 +28,17 @@ import (
 // Condition / Source / StackTrace). Handler dispatch itself no longer flows through
 // this type — handlers ride the %exception-handlers parameter and are invoked in
 // place by RaiseInPlace (see exception_raise.go), so the old handler-machinery
-// fields (Continuable / Continuation / Handled / WindingStack) are gone.
+// fields (Continuation / Handled / WindingStack) are gone.
 type ErrExceptionEscape struct {
 	Condition  values.Value          // The raised condition/object
 	Source     *syntax.SourceContext // Source location where exception was raised
 	StackTrace StackTrace            // VM stack trace at raise point
+	// Continuable records that the raise was a raise-continuable, and not a
+	// guard's re-raise of a non-continuable raise (reRaisesNonContinuable). Uncaught where
+	// it was raised, it never resumes; an unlinked root's escape is raised again
+	// in the caller's handlers after that root has ended, and a handler that
+	// returns there gets an error naming the raise-continuable (raiseIn).
+	Continuable bool
 }
 
 // Error implements the error interface.
@@ -45,7 +51,7 @@ func (p *ErrExceptionEscape) Error() string {
 	var b strings.Builder
 
 	// Format the source prefix if available
-	loc := p.Source.Location()
+	loc := p.Location()
 	hasSource := loc != ""
 	if hasSource {
 		b.WriteString(loc)
@@ -75,6 +81,22 @@ func (p *ErrExceptionEscape) Error() string {
 	}
 
 	return b.String()
+}
+
+// Location is where the condition was raised: a *NativeError's own location,
+// else Source. For an error object raised more than once (a guard whose clauses
+// all miss re-raises at the guard, and the foreign-call bridge re-raises an
+// expansion-time root's escape at the eval or import) both are its first raise,
+// and so is StackTrace (raiseToHandlers). They differ only for an error object
+// whose location the compiler stamped, which has no raise to take a trace from.
+// A condition of another type carries no location of its own and reports the
+// latest raise.
+func (p *ErrExceptionEscape) Location() string {
+	ne, ok := p.Condition.(*values.NativeError)
+	if ok && ne.SourceLocation() != "" {
+		return ne.SourceLocation()
+	}
+	return p.Source.Location()
 }
 
 // ConditionText returns the raised condition's human-readable text alone —

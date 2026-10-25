@@ -214,13 +214,16 @@ func (p *CompiledLibrary) EnsureInstantiated(ctx context.Context, evaluator mach
 // before the VM noticed, is the body's ordinary failure.
 //
 // Both conversions cut the Unwrap edge to cause on purpose, since a reachable
-// signal or ctx error is what a later importer must not see; cause's text is
-// kept so where and how the body stopped stays readable.
+// signal or ctx error is what a later importer must not see: an exception to the
+// lossless-chain rule. Nor is cause's whole text pasted in, which repeated a
+// stack trace inside the message; the conversion names how the body stopped,
+// and for a cancellation where and in what (cancelledAt), and the error's own
+// location is the library's form, as for first.
 func (p *CompiledLibrary) memoizableInstantiateError(first, cause error, cancelled bool) error {
 	if cancelled {
 		return wrapSourcedError(p.formSource, werr.WrapForeignErrorf(werr.ErrLibraryInstantiationCancelled,
-			"library %s: its body was cancelled when it was first instantiated; %v",
-			p.Name.SchemeString(), cause))
+			"library %s: its body was cancelled when it was first instantiated%s",
+			p.Name.SchemeString(), cancelledAt(cause)))
 	}
 	var how string
 	var resumeErr *machine.ErrResumeContinuation
@@ -229,13 +232,35 @@ func (p *CompiledLibrary) memoizableInstantiateError(first, cause error, cancell
 	case errors.As(cause, &resumeErr):
 		how = "a continuation"
 	case errors.As(cause, &abortErr):
-		how = "an abort"
+		how = "an abort to prompt " + abortErr.Tag.SchemeString()
 	default:
 		return first
 	}
 	return wrapSourcedError(p.formSource, werr.WrapForeignErrorf(werr.ErrContinuationBarrier,
-		"library %s: its body exited through %s when it was first instantiated; %v",
-		p.Name.SchemeString(), how, cause))
+		"library %s: its body exited through %s when it was first instantiated",
+		p.Name.SchemeString(), how))
+}
+
+// cancelledAt renders where a cancelled body stopped and the failure there,
+// without its stack trace: a SRFI-18 wait's raise, or the VM poll's error. The
+// location is left out when there is none, and the whole is "" for a cause that
+// carries neither.
+func cancelledAt(cause error) string {
+	var loc, what string
+	var escape *machine.ErrExceptionEscape
+	var se *machine.SchemeError
+	switch {
+	case errors.As(cause, &escape):
+		loc, what = escape.Location(), escape.ConditionText()
+	case errors.As(cause, &se):
+		loc, what = se.Source.Location(), se.Message
+	default:
+		return ""
+	}
+	if loc == "" {
+		return fmt.Sprintf(" (%s)", what)
+	}
+	return fmt.Sprintf(", at %s (%s)", loc, what)
 }
 
 // NewCompiledLibrary creates a new compiled library.

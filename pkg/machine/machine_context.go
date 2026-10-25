@@ -2033,6 +2033,7 @@ func (p *MachineContext) RunResumable() (rerr error) {
 		// Check for control signals (prompt abort, continuation resume, timer interrupt)
 		var abortErr *ErrPromptAbort
 		if errors.As(err, &abortErr) {
+			p.rebasePassedUpAbort(abortErr)
 			prompt, found := p.FindPrompt(abortErr.Tag)
 			if !found {
 				// Fresh mint (a user abort to a missing tag) → enrich with source +
@@ -2375,11 +2376,21 @@ func (p *MachineContext) RunWithinBoundary() error {
 			return err
 		}
 
+		p.rebasePassedUpAbort(abortErr)
 		prompt, found := p.FindPrompt(abortErr.Tag)
 		if !found {
 			// The abort targets a boundary OUTSIDE this sub-context; re-raise so the
-			// enclosing RunWithinBoundary / RunResumable routes it.
-			return err
+			// enclosing RunWithinBoundary / RunResumable routes it, after an
+			// expansion-time root has left its own extents (passUpAbort).
+			unwindErr := p.passUpAbort(abortErr)
+			if unwindErr == nil {
+				return err
+			}
+			if isControlSignal(unwindErr) || p.supersedingTimerInterrupt(unwindErr) != nil {
+				pending = unwindErr
+				continue
+			}
+			return unwindErr
 		}
 
 		// Reconcile winding, restore past the prompt, and run its handler or deliver
@@ -2567,6 +2578,41 @@ func (p *MachineContext) rebasePassedUpResume(resumeErr *ErrResumeContinuation) 
 	resumeErr.SourceWinding = p.windingStack.Copy()
 	resumeErr.escalatorRevivals = pendingEscalatorRevivals(resumeErr.escalatorRevivals, p)
 	resumeErr.rebaseWinding = false
+}
+
+// passUpAbort is passUpResume for an abort to a prompt outside this driver's
+// chain: an expansion-time root leaves its own extents, from the winding at the
+// abort site (SourceWinding, or its own for a value-delivery abort), and marks
+// the winding for rebase, since the enclosing driver's extents live at the eval
+// site are not in it. A host call's root does not pass an abort up
+// (RunResumable reports a missing prompt), and a sub-context's winding is its
+// root's: nothing to do for either.
+func (p *MachineContext) passUpAbort(abortErr *ErrPromptAbort) error {
+	if !p.expansionRoot {
+		return nil
+	}
+	source := abortErr.SourceWinding
+	if source == nil {
+		source = p.windingStack
+	}
+	unwindErr := p.unwindStackTo(source, 0)
+	if unwindErr != nil {
+		return unwindErr
+	}
+	abortErr.SourceWinding = nil
+	abortErr.rebaseWinding = true
+	return nil
+}
+
+// rebasePassedUpAbort is passUpAbort's other half, run by the first driver
+// above the root that passed the abort up: the winding at the abort site, for
+// the reconcile, is this driver's (rebasePassedUpResume).
+func (p *MachineContext) rebasePassedUpAbort(abortErr *ErrPromptAbort) {
+	if !abortErr.rebaseWinding {
+		return
+	}
+	abortErr.SourceWinding = p.windingStack.Copy()
+	abortErr.rebaseWinding = false
 }
 
 // completeOwnRun is RunWithinBoundary's completion. A sub-context leaves the

@@ -64,8 +64,13 @@ func ExceptionHandlerParam() values.Value {
 // only that path may forward the handler's value. The invoking context is the one
 // that answers, because this frame may sit on a sub-context's chain the reinstating
 // driver never held.
+//
+// cond is the condition the arm's raise raised: a raise-continuable of the same
+// object while the frame is live is that raise's guard re-raise
+// (reRaisesNonContinuable).
 type escalatorArm struct {
 	revived bool
+	cond    values.Value
 }
 
 // RaiseInPlace invokes the current exception handler on cond, in the dynamic
@@ -85,23 +90,37 @@ type escalatorArm struct {
 // embedder (engine.wrapRuntimeError) with the condition, source, and stack trace.
 func RaiseInPlace(mc *MachineContext, cond values.Value, continuable bool) error {
 	handlers := mc.ResolveParameterValue(exceptionHandlerParam)
-	return mc.raiseToHandlers(cond, continuable, handlers)
+	return mc.raiseToHandlers(cond, continuable, handlers, handlerReturnedMessage)
 }
+
+// handlerReturnedMessage is the secondary exception's message when a handler
+// returns from a non-continuable raise (R7RS §6.11).
+const handlerReturnedMessage = "exception handler returned from non-continuable exception"
 
 // raiseToHandlers runs the FIRST handler of `handlers` on cond, escalating to the
 // rest (its cdr) on a non-continuable normal return. handlers is passed explicitly so
 // the non-continuable escalation targets the parent list directly rather than
 // re-resolving from marks (the handler ran with the parent mark, but the finalizer
-// frame that escalates runs after the handler's marks are gone).
-func (mc *MachineContext) raiseToHandlers(cond values.Value, continuable bool, handlers values.Value) error {
+// frame that escalates runs after the handler's marks are gone). returned is the
+// message of that escalation's secondary exception; the escalation itself raises
+// with handlerReturnedMessage.
+func (mc *MachineContext) raiseToHandlers(cond values.Value, continuable bool, handlers values.Value, returned string) error {
 	source := mc.CurrentSource()
 	trace := mc.CaptureStackTrace(DefaultBacktraceDepth)
 	enrichNativeError(cond, source, trace)
 
 	pair, ok := handlers.(*values.Pair)
 	if !ok {
-		// Empty handler stack: uncaught exception. Carry it to the embedder.
-		return &ErrExceptionEscape{Condition: cond, Source: source, StackTrace: trace}
+		// Empty handler stack: uncaught exception. Carry it to the embedder, with
+		// the location and trace of the condition's first raise when it is an
+		// error object raised before (a guard's re-raise, the bridge's re-raise of
+		// an expansion-time root's escape), so the two name the same raise.
+		origin := firstRaiseOf(cond)
+		if origin != nil {
+			source, trace = origin.source, origin.trace
+		}
+		continuable = continuable && !reRaisesNonContinuable(mc, cond)
+		return &ErrExceptionEscape{Condition: cond, Source: source, StackTrace: trace, Continuable: continuable}
 	}
 	handler := pair.Car()
 	parent := pair.Cdr()
@@ -171,7 +190,7 @@ func (mc *MachineContext) raiseToHandlers(cond values.Value, continuable bool, h
 	// (A context-global isolatedMarks gate was WRONG here: it stays true after ANY prior
 	// resume on the driver, so it swallowed the mandatory secondary exception for every
 	// later non-continuable handler return — see TestNonContinuableHandlerReturnErrors.)
-	arm := &escalatorArm{}
+	arm := &escalatorArm{cond: cond}
 	escalateFn := func(finCC CallContext) error {
 		finMC, err := RequireMachineContext(finCC, "raise")
 		if err != nil {
@@ -185,11 +204,8 @@ func (mc *MachineContext) raiseToHandlers(cond values.Value, continuable bool, h
 			finMC.SetValues(vals...)
 			return nil
 		}
-		secondary := values.NewErrorObjectWithCause(
-			"exception handler returned from non-continuable exception",
-			werr.ErrNonContinuableException,
-		)
-		return finMC.raiseToHandlers(secondary, false, parent)
+		secondary := values.NewErrorObjectWithCause(returned, werr.ErrNonContinuableException)
+		return finMC.raiseToHandlers(secondary, false, parent, handlerReturnedMessage)
 	}
 	// Use a runtime env reachable from here, falling back to the live frame: when the
 	// raise fires inside a reified call-with-values producer the live procedure frame
@@ -218,6 +234,44 @@ func enrichNativeError(cond values.Value, source *syntax.SourceContext, trace St
 	}
 	ne.SetSourceLocation(source.Location())
 	ne.SetStackTraceValue(StackTraceToSchemeList(trace))
+	ne.SetRaiseOrigin(&raiseOrigin{source: source, trace: trace})
+}
+
+// reRaisesNonContinuable reports whether a raise of cond on mc is made in the
+// dynamic environment of a non-continuable raise of the same object: a live
+// escalator frame for it is on mc's chain or a parent's. A guard whose clauses
+// miss re-raises that way with raise-continuable (R7RS 4.2.7), so its uncaught
+// re-raise is the program's raise, and is as continuable as that was. The walk
+// runs only for an uncaught raise-continuable.
+func reRaisesNonContinuable(mc *MachineContext, cond values.Value) bool {
+	for c := mc; c != nil; c = c.parentMC {
+		for frame := c.cont; frame != nil; frame = frame.parent {
+			if frame.escalatorArm != nil && values.Eqv(frame.escalatorArm.cond, cond) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// raiseOrigin is the first raise of an error object, kept on it
+// (NativeError.RaiseOrigin) beside the Scheme-visible location and trace that
+// enrichNativeError stamps from the same raise.
+type raiseOrigin struct {
+	source *syntax.SourceContext
+	trace  StackTrace
+}
+
+// firstRaiseOf returns cond's first raise, or nil for a condition that is not
+// an error object or whose location was stamped without one (a compile error
+// carries its location from the compiler, not from a raise).
+func firstRaiseOf(cond values.Value) *raiseOrigin {
+	ne, ok := cond.(*values.NativeError)
+	if !ok {
+		return nil
+	}
+	q, _ := ne.RaiseOrigin().(*raiseOrigin)
+	return q
 }
 
 // StackTraceToSchemeList converts a StackTrace to a Scheme list of alists, one per

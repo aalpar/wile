@@ -55,14 +55,6 @@ func TestControlInACompileTimeBody(t *testing.T) {
   (export cell)
   (begin (define cell (vector #f))))`),
 		},
-		"probe/user.sld": &fstest.MapFile{
-			Data: []byte(`(define-library (probe user)
-  (import (scheme base) (probe box))
-  (export used)
-  (begin
-    (define used 'lib-body-finished)
-    ((vector-ref cell 0) 'from-library-body)))`),
-		},
 		"probe/ab.sld": &fstest.MapFile{
 			Data: []byte(`(define-library (probe ab)
   (import (scheme base))
@@ -157,7 +149,7 @@ func TestControlInACompileTimeBody(t *testing.T) {
 			// The expander keeps m1's context alive while it expands m1's output, so
 			// m1's continuation is stale by then although its context is not yet
 			// released: the token closes when the root's run ends, and m2's root
-			// resolves it (m1's remainder expands to (m2) again, now with n = 10).
+			// resolves it (m1's remainder expands to (m2) again, now with n = 11).
 			name: "a continuation from a transformer body resumes when invoked from that transformer's output",
 			src: `(import (for-syntax (scheme base)))
 			      (begin-for-syntax (define saved #f) (define n 0))
@@ -196,6 +188,99 @@ func TestControlInACompileTimeBody(t *testing.T) {
 			        (lambda () (note 'out)))
 			      (list (reverse (vector-ref st 0)) (eval '(get-plog) (interaction-environment)))`,
 			want: "((in (r k) (r from-macro) out) (p-in p-out))",
+		},
+		{
+			// The abort form of the row above. The abort carries the winding at its
+			// origin, the transformer root's, which started empty; reconciled from it
+			// at the runtime prompt, the extent around the eval was never left (in,
+			// without out).
+			name: "an abort passed up from a transformer reconciles the runtime's extents, not the transformer's",
+			src: `(import (for-syntax (scheme base) (scheme cxr)))
+			      (begin-for-syntax (define plog '()))
+			      (define-syntax m (lambda (stx)
+			        (let ((d (syntax->datum stx)))
+			          (dynamic-wind (lambda () (set! plog (cons 'p-in plog)))
+			                        (lambda () ((caddr d) (cadr d) 'from-macro))
+			                        (lambda () (set! plog (cons 'p-out plog)))))))
+			      (define-syntax get-plog (er-macro-transformer (lambda (f r c) (list 'quote (reverse plog)))))
+			      (define tag (make-continuation-prompt-tag 'p))
+			      (define st (vector '()))
+			      (define (note x) (vector-set! st 0 (cons x (vector-ref st 0))))
+			      (define r
+			        (call-with-continuation-prompt
+			          (lambda ()
+			            (dynamic-wind (lambda () (note 'in))
+			                          (lambda () (eval (list 'm tag abort-current-continuation) (interaction-environment)))
+			                          (lambda () (note 'out))))
+			          tag
+			          (lambda (v) (list 'handled v))))
+			      (list r (reverse (vector-ref st 0)) (eval '(get-plog) (interaction-environment)))`,
+			want: "((handled from-macro) (in out) (p-in p-out))",
+		},
+		{
+			// Two transformer roots nested through eval, the prompt at runtime: each
+			// root leaves its own extents as the abort passes up, and each driver above
+			// rebases the winding, so the runtime extents around both evals are left
+			// once (out2, out). Before, only the innermost driver's winding was used.
+			name: "an abort passed up through two nested transformer roots leaves every extent once",
+			src: `(import (for-syntax (scheme base) (scheme cxr) (scheme eval) (scheme repl)))
+			      (begin-for-syntax (define plog '()) (define (pnote x) (set! plog (cons x plog))))
+			      (define-syntax m2 (lambda (stx)
+			        (let ((d (syntax->datum stx)))
+			          (dynamic-wind (lambda () (pnote 'q-in))
+			                        (lambda () ((caddr d) (cadr d) 'from-m2))
+			                        (lambda () (pnote 'q-out))))))
+			      (define-syntax m1 (lambda (stx)
+			        (let ((d (syntax->datum stx)))
+			          (dynamic-wind (lambda () (pnote 'p-in))
+			                        (lambda () (eval (list 'dynamic-wind '(lambda () (note 'in2)) (list 'lambda '() (list 'eval (list 'quote (list 'm2 (cadr d) (caddr d))) '(interaction-environment))) '(lambda () (note 'out2)))
+			                                         (interaction-environment)))
+			                        (lambda () (pnote 'p-out))))))
+			      (define-syntax get-plog (er-macro-transformer (lambda (f r c) (list 'quote (reverse plog)))))
+			      (define tag (make-continuation-prompt-tag 'p))
+			      (define st (vector '()))
+			      (define (note x) (vector-set! st 0 (cons x (vector-ref st 0))))
+			      (define r
+			        (call-with-continuation-prompt
+			          (lambda ()
+			            (dynamic-wind (lambda () (note 'in))
+			                          (lambda () (eval (list 'm1 tag abort-current-continuation) (interaction-environment)))
+			                          (lambda () (note 'out))))
+			          tag
+			          (lambda (v) (list 'handled v))))
+			      (list r (reverse (vector-ref st 0)) (eval '(get-plog) (interaction-environment)))`,
+			want: "((handled from-m2) (in in2 out2 out) (p-in q-in q-out p-out))",
+		},
+		{
+			// The inner root aborts to a prompt inside the outer transformer: the
+			// outer root's driver resolves it from its own rebased winding, so the
+			// extent between the prompt and the eval is left (w-out) and the one
+			// outside the prompt is not re-entered (p-in once).
+			name: "an abort passed up from a transformer to a prompt in the enclosing transformer",
+			src: `(import (for-syntax (scheme base) (scheme cxr) (scheme eval) (scheme repl)))
+			      (begin-for-syntax (define plog '()) (define (pnote x) (set! plog (cons x plog))))
+			      (define-syntax m2 (lambda (stx)
+			        (let ((d (syntax->datum stx)))
+			          (dynamic-wind (lambda () (pnote 'q-in))
+			                        (lambda () ((caddr d) (cadr d) 'from-m2))
+			                        (lambda () (pnote 'q-out))))))
+			      (define-syntax m1 (lambda (stx)
+			        (let* ((d (syntax->datum stx)) (tag ((cadr d) 'q)) (prompt (caddr d)) (abort (cadddr d)))
+			          (dynamic-wind (lambda () (pnote 'p-in))
+			                        (lambda ()
+			                          (prompt
+			                            (lambda ()
+			                              (dynamic-wind (lambda () (pnote 'w-in))
+			                                            (lambda () (eval (list 'm2 tag abort) (interaction-environment)))
+			                                            (lambda () (pnote 'w-out))))
+			                            tag
+			                            (lambda (v) (pnote (list 'h v)))))
+			                        (lambda () (pnote 'p-out)))
+			          #''ok)))
+			      (define-syntax get-plog (er-macro-transformer (lambda (f r c) (list 'quote (reverse plog)))))
+			      (list (eval (list 'm1 make-continuation-prompt-tag call-with-continuation-prompt abort-current-continuation) (interaction-environment))
+			                   (eval '(get-plog) (interaction-environment)))`,
+			want: "(ok (p-in w-in q-in q-out w-out (h from-m2) p-out))",
 		},
 		{
 			name: "a stale runtime continuation passed up from a transformer leaves the extent the eval sat in",
@@ -693,10 +778,11 @@ func TestLibraryBodyThatExitedThroughAnAbortIsNotReplayedByLaterImports(t *testi
 	qt.Assert(t, errors.Is(err, werr.ErrContinuationBarrier), qt.IsTrue, qt.Commentf("%v", err))
 	var abortErr *machine.ErrPromptAbort
 	qt.Assert(t, errors.As(err, &abortErr), qt.IsFalse, qt.Commentf("%v", err))
-	qt.Assert(t, err.Error(), qt.Contains, "exited through an abort")
 	var se *compilation.SourcedError
 	qt.Assert(t, errors.As(err, &se), qt.IsTrue, qt.Commentf("%v", err))
 	qt.Assert(t, se.Source.Location(), qt.Equals, "probe/user.sld:1:0")
+	qt.Assert(t, se.Cause.Error(), qt.Equals,
+		"library (probe user): its body exited through an abort to prompt #<continuation-prompt-tag:p> when it was first instantiated: continuation barrier violation")
 }
 
 // TestAbortAtTopLevelExpansionIsAnError is the abort form of the stale-resume
@@ -726,6 +812,12 @@ func TestAbortAtTopLevelExpansionIsAnError(t *testing.T) {
 	qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue, qt.Commentf("%v", err))
 	var abortErr *machine.ErrPromptAbort
 	qt.Assert(t, errors.As(err, &abortErr), qt.IsFalse)
+	// One compile-error layer, the location once, at the begin-for-syntax form.
+	var ce *wile.CompilationError
+	qt.Assert(t, errors.As(err, &ce), qt.IsTrue, qt.Commentf("%v", err))
+	qt.Assert(t, ce.Source, qt.Equals, ":2:41")
+	qt.Assert(t, err.Error(), qt.Equals,
+		"expand/compile error: :2:41: abort-current-continuation: no prompt found for tag #<continuation-prompt-tag:nowhere> at expansion time: invalid argument")
 }
 
 // TestBootstrapBodyHasADriver pins the third expansion-time root: a bootstrap
@@ -788,6 +880,11 @@ func assertRememberedAsCancelled(t *testing.T, eng *wile.Engine, src string) {
 	var se *compilation.SourcedError
 	qt.Assert(t, errors.As(err, &se), qt.IsTrue, qt.Commentf("%s: %v", src, err))
 	qt.Assert(t, se.Source.Location(), qt.Equals, "probe/user.sld:1:0")
+	// The conversion names where the body stopped and what failed there; the
+	// first run's stack trace is not pasted into the message.
+	qt.Assert(t, se.Cause.Error(), qt.Matches,
+		`library \(probe user\): its body was cancelled when it was first instantiated, at probe/user\.sld:\d+:\d+ \([^\n]*\): library instantiation was cancelled`,
+		qt.Commentf("%s", src))
 	cell, ok := eng.Get("cell")
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, cell.SchemeString(), qt.Matches, `#\(1 .*`, qt.Commentf("%s: the body ran again", src))
