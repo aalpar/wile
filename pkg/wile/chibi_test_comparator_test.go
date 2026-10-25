@@ -77,14 +77,19 @@ func TestChibiTestComparator(t *testing.T) {
 		},
 		// An explicit comparator is honored even for inexact expected: a #f
 		// comparator makes (test 1.0 1.0) fail (it is not bypassed by approx).
+		// The harness's report goes to a string port and is part of the answer:
+		// on the process's stdout this deliberate FAIL line reached go test's
+		// output unattributed, beside whichever parallel test was running.
 		{
 			name: "custom comparator not bypassed for inexact",
 			code: `(import (chibi test))
-                   (test-begin "custom")
-                   (parameterize ((current-test-comparator (lambda (e a) #f)))
-                     (test 1.0 1.0))
-                   ((test-failure-count))`,
-			want: "1",
+                   (define out (open-output-string))
+                   (parameterize ((current-output-port out))
+                     (test-begin "custom")
+                     (parameterize ((current-test-comparator (lambda (e a) #f)))
+                       (test 1.0 1.0)))
+                   (list ((test-failure-count)) (get-output-string out))`,
+			want: `(1 "Testing custom\n  FAIL: expected 1.0 but got 1.0\n")`,
 		},
 	}
 	for _, tc := range tcs {

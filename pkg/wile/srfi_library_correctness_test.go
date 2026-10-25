@@ -373,17 +373,24 @@ func TestChibiTestRaisingExpressionIsFailure(t *testing.T) {
 	c := qt.New(t)
 	eng := newSRFITestEngine(t)
 
+	// The harness reports to a string port, and the report is asserted. On the
+	// process's stdout the deliberate "FAIL: expected no-error-expected but got
+	// boom" reached go test's output unattributed, where under parallel tests it
+	// sat beside TestRegisterFuncCallbackExceptionToError and was read as that
+	// test failing (filed by the P3.15 crosscheck).
 	program := `(begin
 (import (chibi test))
 (define (fail-count) ((test-failure-count)))
+(define out (open-output-string))
 (define start-fail (fail-count))
-(test-group "raise-then-pass"
-  (test 1 (raise 'boom))
-  (test 2 (+ 1 1)))
+(parameterize ((current-output-port out))
+  (test-group "raise-then-pass"
+    (test 1 (raise 'boom))
+    (test 2 (+ 1 1))))
 (define end-fail (fail-count))
 ;; one new failure recorded (the raising test); the second test still ran and
 ;; passed, adding no failure. Verify exactly one failure was added.
-(- end-fail start-fail))`
+(list (- end-fail start-fail) (get-output-string out)))`
 	got := evalSRFI(c, eng, program)
-	c.Assert(got, qt.Equals, "1")
+	c.Assert(got, qt.Equals, `(1 "Testing raise-then-pass\n  FAIL: expected no-error-expected but got boom\n")`)
 }
