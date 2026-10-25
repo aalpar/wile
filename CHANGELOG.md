@@ -1316,6 +1316,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- **BREAKING (Go API): `values.EqualTo`, the package-level function.** It only
+  forwarded to `values.Equal` (R7RS `equal?`); call `values.Equal`. The
+  `Value.EqualTo` method is unchanged. No caller in the workspace outside this
+  repo.
 - **BREAKING (Go API): `CompileTimeContinuation.SetFileResolver`.** Its only
   caller was `ExpandAndCompile`'s `resolver` parameter (see Changed); the
   compiler takes `env.FileResolver()`, else an `OSFileResolver`, at

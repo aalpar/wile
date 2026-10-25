@@ -553,7 +553,7 @@ func TestCompileContext_CompileSetBang(t *testing.T) {
 	//
 	// The spelling matters to the ASSERTION, not just to the comment. The pins'
 	// heal QUERIES differ between the two spellings, and SamePin now
-	// discriminates on that — but SchemeEquals routes through values.EqualTo and
+	// discriminates on that — but SchemeEquals routes through values.Equal and
 	// hence through GlobalIndex.EqualTo, which this change deliberately leaves
 	// comparing present denotation only. So this row passes either way; it is a
 	// drifted-comment fix, not a consequence of the change, and an implementer

@@ -48,4 +48,4 @@ var PrimEqvQ = makeBinaryPredicate(helpers.Eqv)
 
 // PrimEqualQ implements the equal? predicate for structural equality.
 // Returns #t if both arguments have the same structure and values.
-var PrimEqualQ = makeBinaryPredicate(values.EqualTo)
+var PrimEqualQ = makeBinaryPredicate(values.Equal)

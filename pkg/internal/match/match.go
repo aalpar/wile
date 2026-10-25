@@ -747,7 +747,7 @@ func syntaxValuesEqualForMatch(a, b syntax.SyntaxValue) bool {
 	aObj, aIsObj := a.(*syntax.SyntaxObject)
 	bObj, bIsObj := b.(*syntax.SyntaxObject)
 	if aIsObj && bIsObj {
-		return values.EqualTo(aObj.Unwrap(), bObj.Unwrap())
+		return values.Equal(aObj.Unwrap(), bObj.Unwrap())
 	}
 
 	// Compare empty lists
@@ -756,7 +756,7 @@ func syntaxValuesEqualForMatch(a, b syntax.SyntaxValue) bool {
 	}
 
 	// For pairs and mixed types, use deep comparison
-	return values.EqualTo(a.UnwrapAll(), b.UnwrapAll())
+	return values.Equal(a.UnwrapAll(), b.UnwrapAll())
 }
 
 // vectorToSyntaxPairChain converts a SyntaxVector's elements into a

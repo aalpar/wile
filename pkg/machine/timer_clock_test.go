@@ -149,7 +149,7 @@ func TestResumedTimerThunkReentersItsWindingExtent(t *testing.T) {
 		ctx := machine.WithTimerFiringAfter(context.Background(), k)
 		result, err := testhelpers.RunSchemeCodeWithEnvAndContext(ctx, t, env, code)
 		qt.Assert(t, err, qt.IsNil, qt.Commentf("fired after %d instructions", k))
-		if values.EqualTo(result, inside) {
+		if values.Equal(result, inside) {
 			entered = true
 			continue
 		}

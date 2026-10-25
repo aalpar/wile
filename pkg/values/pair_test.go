@@ -158,7 +158,7 @@ func TestPair_EqualTo(t *testing.T) {
 
 func TestEmptyList_EqualTo(t *testing.T) {
 	qt.Assert(t, values.EmptyList.EqualTo(values.EmptyList), qt.IsTrue)
-	qt.Assert(t, values.EqualTo(values.EmptyList, values.EmptyList), qt.IsTrue)
+	qt.Assert(t, values.Equal(values.EmptyList, values.EmptyList), qt.IsTrue)
 	qt.Assert(t, values.EmptyList.EqualTo(values.NewCons(values.NewInteger(1), values.EmptyList)), qt.IsFalse)
 }
 

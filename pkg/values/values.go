@@ -437,12 +437,6 @@ type RealNumber interface {
 	SignBit() bool
 }
 
-// EqualTo compares two values for structural equality (R7RS equal?).
-// It is the package-level spelling of Equal; see equal.go for the traversal.
-func EqualTo(a, b Value) bool {
-	return Equal(a, b)
-}
-
 // EqIdentity implements R7RS eq? semantics: pointer identity for all types
 // except symbols, which compare by name/key (R7RS §6.1, §6.5). It is the single
 // source of truth for eq?-identity — machine (the VM's promoted OpEqQ and
