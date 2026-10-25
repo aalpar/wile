@@ -70,7 +70,10 @@ func (p *Engine) ParseWithSource(ctx context.Context, code string, source string
 // Unlike [Engine.Parse], ReadExpression does not require the reader to
 // contain exactly one expression — it reads the first complete expression
 // and stops. Trailing input in the reader is ignored (the reader position
-// advances past the consumed expression).
+// advances past the consumed expression). So is a fault r reports just past a
+// complete expression: the expression is returned and the fault is left to
+// whatever reads r next, as one racket read returns a datum whose port fails
+// after it. [Engine.ReadExpressions] reads on and reports it.
 //
 // Use [IsIncompleteInput] to check whether a returned error indicates the
 // input is a valid prefix of an expression that needs more input to complete.

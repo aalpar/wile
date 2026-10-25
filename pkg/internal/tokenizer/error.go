@@ -45,6 +45,9 @@ type TokenizerError struct {
 	r     rune                 // the rune the scanner stopped on
 	state TokenizerState       // lexical state being scanned when it stopped
 	eof   bool                 // r is the EOF sentinel, not a real character
+	// between says the rune is in no token: the previous token's extent was
+	// fixed before it was read (Tokenizer.consumeFinal), or no token had begun.
+	between bool
 }
 
 // NewTokenizerError creates an unlocated tokenizer error with the given message.
@@ -82,6 +85,16 @@ func (p *TokenizerError) At() (syntax.SourceIndexes, bool) {
 // State returns the lexical state the scanner was in when it stopped.
 func (p *TokenizerError) State() TokenizerState {
 	return p.state
+}
+
+// BetweenTokens reports whether the fault is on a rune in no token: one read
+// past a token whose last rune had already fixed its extent, or one in
+// intertoken space. A fault the token being scanned could still have absorbed
+// ("ab", "+i", "12" then the fault) reports false. The state does not decide
+// this: a run still undecided (a sign that may begin a number or a symbol) is
+// scanned in TokenizerStateFailed too.
+func (p *TokenizerError) BetweenTokens() bool {
+	return p.between
 }
 
 // Rune returns the rune the scanner stopped on, and whether it is a real
@@ -220,12 +233,13 @@ func (p *Tokenizer) readerFailed() bool {
 // U+FFFD in the source is indistinguishable from it by rune alone.
 func (p *Tokenizer) stampError(cause error, mess string) *TokenizerError {
 	q := &TokenizerError{
-		err:   cause,
-		mess:  mess,
-		at:    p.runeStart,
-		r:     p.cur,
-		state: p.state,
-		eof:   p.cur == utf8.RuneError && errors.Is(p.err, io.EOF),
+		err:     cause,
+		mess:    mess,
+		at:      p.runeStart,
+		r:       p.cur,
+		state:   p.state,
+		eof:     p.cur == utf8.RuneError && errors.Is(p.err, io.EOF),
+		between: p.between,
 	}
 	return q
 }

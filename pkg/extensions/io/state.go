@@ -271,9 +271,12 @@ func resolveCurrentInputPort(cc machine.CallContext) (*values.PortObject, error)
 // is never held across a read.
 //
 // The cache holds reader state that outlives one datum (fold-case mode, source
-// positions, the dead flag), never input: after each datum the tokenizer's
+// positions, the dead flag), and no input: after each datum the tokenizer's
 // lookahead rune goes back to the port, so read-char and friends continue from
-// the datum's end (R7RS §6.13.2).
+// the datum's end (R7RS §6.13.2). The one exception is a reader fault on that
+// lookahead rune, past a complete datum: the datum is returned and the parser
+// keeps the fault, which the port's next input operation reports
+// (takeDeferredFault for the character readers, the next read here).
 func (p *State) readSyntaxCached(ctx context.Context, port *values.PortObject, mk func() *parser.Parser) (syntax.SyntaxValue, error) {
 	p.mu.Lock()
 	entry, ok := p.parsers[port]
@@ -312,6 +315,27 @@ func (p *State) readSyntaxCached(ctx context.Context, port *values.PortObject, m
 		return nil, err
 	}
 	return q, nil
+}
+
+// takeDeferredFault returns a reader fault port's cached parser holds past the
+// last datum it returned, and evicts the parser so the read after the report
+// starts on whatever the stream yields next, as a reader fault evicts it in
+// readSyntaxLocked. nil when there is none. The caller holds the port's read
+// lock. A character reader calls it before reading: the fault came before any
+// character past it, so racket's read-char reports it there too.
+func (p *State) takeDeferredFault(port *values.PortObject) error {
+	p.mu.Lock()
+	entry := p.parsers[port]
+	p.mu.Unlock()
+	if entry == nil || entry.parser == nil {
+		return nil
+	}
+	err := entry.parser.PendingFault()
+	if err == nil {
+		return nil
+	}
+	evictPortCache(p, port)
+	return err
 }
 
 // seekToPortPosition points the cached parser at where the port stands now. The

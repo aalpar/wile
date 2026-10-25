@@ -2848,6 +2848,17 @@ func TestReadSyntaxReportsAFaultPastADatumOnTheNextRead(t *testing.T) {
 		{src: `#\a`},
 		{src: "#t"},
 		{src: "#f"},
+		// A sign run is undecided between a number and a symbol while it is
+		// scanned, in state failed, yet a fault there still cut it short.
+		{src: "+"},
+		{src: "-"},
+		{src: "+i"},
+		{src: "-i"},
+		{src: "+in"},
+		{src: "-inf.0"},
+		{src: "+nan.0"},
+		{src: "+."},
+		{src: "..."},
 		{src: "#|c|#"},
 		{src: "#;(x)"},
 	}

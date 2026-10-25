@@ -378,6 +378,31 @@ func TestReadFaultPastACloseParenIsIntertoken(t *testing.T) {
 	}
 }
 
+// TestDeferredReadFaultPrecedesTheNextCharacter pins that a reader fault read
+// deferred past (x) is reported by the port's next input operation, whichever
+// it is: the fault came before any character past it, so handing out y first
+// and raising the fault on a later read (at index 3, behind the characters
+// already taken) misordered the stream. racket raises it from read-char too.
+// After the report the port reads on.
+func TestDeferredReadFaultPrecedesTheNextCharacter(t *testing.T) {
+	for _, op := range []string{"(read-char p)", "(peek-char p)", "(read-line p)", "(read-string 1 p)", "(char-ready? p)", "(read p)", "(read-syntax p)"} {
+		t.Run(op, func(t *testing.T) {
+			c := qt.New(t)
+			datum, rest := "(x)", "yz"
+			rdr := &transientReader{chunks: []*string{&datum, nil, &rest}}
+			engine := newEngineWithIOTest(t)
+			err := engine.Define("p", wile.WrapValue(values.NewCharacterInputPortFromReader(rdr)))
+			c.Assert(err, qt.IsNil)
+			c.Check(eval(t, engine, `(read p)`).SchemeString(), qt.Equals, "(x)")
+			_, err = engine.EvalMultiple(context.Background(), op)
+			c.Assert(err, qt.IsNotNil)
+			c.Check(errors.Is(err, os.ErrDeadlineExceeded), qt.IsTrue, qt.Commentf("got: %v", err))
+			c.Check(strings.Contains(err.Error(), "(at index 3, line 1, column 3,"), qt.IsTrue, qt.Commentf("got: %v", err))
+			c.Check(eval(t, engine, `(list (read-char p) (read p))`).SchemeString(), qt.Equals, `(#\y z)`)
+		})
+	}
+}
+
 // TestReplacementCharacterIsAnIdentifierCharacter pins U+FFFD as a symbol
 // constituent in every reader entry, as racket and petite read it, and pins
 // the trap beside it: end of input arrives as the same utf8.RuneError, so a

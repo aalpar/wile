@@ -246,7 +246,11 @@ type Tokenizer struct {
 	radix int
 	// tokRadix is the effective parse base recorded on the emitted integer token
 	// (2/8/10/16); 0 for tokens where base is not meaningful. Reset per token in mark().
-	tokRadix   int
+	tokRadix int
+	// between is set while the scanner is in no token: from Next until mark
+	// starts one, and from a token's consumeFinal until the next mark. A
+	// fault stamped then is past every token (TokenizerError.BetweenTokens).
+	between    bool
 	blockDepth int  // nesting depth for block comments
 	ci         bool // case insensitive symbol mode
 	hashDigit  bool // R7RS §7.1.1: whether # appeared as inexact digit placeholder
@@ -368,6 +372,7 @@ func (p *Tokenizer) Next() (Token, error) {
 	// re-read or in intertoken space is stamped before mark() runs, and would
 	// otherwise carry the previous token's state.
 	p.state = TokenizerStateFailed
+	p.between = true
 	if p.released {
 		p.released = false
 		p.readNextRune()
@@ -656,6 +661,7 @@ func (p *Tokenizer) mark() {
 	// bails out before assigning one (readBoolean on a lexical error) would
 	// otherwise emit this token under the PREVIOUS token's type.
 	p.state = TokenizerStateFailed
+	p.between = false
 }
 
 // term terminates the current token, setting its end position.
@@ -708,6 +714,7 @@ func (p *Tokenizer) readNextRune() {
 func (p *Tokenizer) consumeFinal() {
 	state := p.state
 	p.state = TokenizerStateFailed
+	p.between = true
 	p.next()
 	p.state = state
 }

@@ -151,9 +151,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A reader fault just past a complete datum fails the next read, not the
   one that read the datum.** A port whose reader failed right after `(x)` made
   `(read p)` raise with `(x)` in hand; racket returns `(x)`. The datum is now
-  returned and the next `read`/`read-syntax` on the port reports the fault, at
-  its position. A datum the fault cut short (`ab`, `12`) still fails its own
-  read, and `ReadExpressions`, `load` and a file read on and report it.
+  returned and the port's next input operation (`read`, `read-syntax`,
+  `read-char`, `peek-char`, `read-line`, `read-string`, `char-ready?`) reports
+  the fault, at its position, before any character past it. A datum the fault
+  cut short (`ab`, `12`, `+i`) still fails its own read, and
+  `ReadExpressions`, `load` and a file read on and report it.
 
 - **A thread joined after it was killed by its ctx is an `uncaught-exception`
   wherever it died.** One busy at the VM poll used to reach the joiner's guard as

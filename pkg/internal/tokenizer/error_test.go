@@ -160,6 +160,9 @@ func TestFaultPastACompleteTokenIsIntertoken(t *testing.T) {
 		prefix    string
 		wantTok   TokenizerState
 		wantState TokenizerState
+		// still says the token could have absorbed the rune, so the fault is
+		// not between tokens (BetweenTokens).
+		still bool
 	}{
 		// Complete once their last rune is consumed.
 		{prefix: ")", wantTok: TokenizerStateCloseParen, wantState: TokenizerStateFailed},
@@ -184,12 +187,16 @@ func TestFaultPastACompleteTokenIsIntertoken(t *testing.T) {
 		{prefix: `#\(`, wantTok: TokenizerStateCharGraphic, wantState: TokenizerStateFailed},
 		{prefix: `#\1`, wantTok: TokenizerStateCharGraphic, wantState: TokenizerStateFailed},
 		// Still open when the rune is read: it could have extended the token.
-		{prefix: "(", wantTok: TokenizerStateOpenParen, wantState: TokenizerStateOpenParen},
-		{prefix: "[", wantTok: TokenizerStateOpenBracket, wantState: TokenizerStateOpenBracket},
-		{prefix: ",", wantTok: TokenizerStateUnquote, wantState: TokenizerStateUnquote},
-		{prefix: "#,", wantTok: TokenizerStateUnsyntax, wantState: TokenizerStateUnsyntax},
-		{prefix: "ab", wantTok: TokenizerStateSymbol, wantState: TokenizerStateSymbol},
-		{prefix: `#\a`, wantTok: TokenizerStateCharGraphic, wantState: TokenizerStateCharGraphic},
+		{prefix: "(", wantTok: TokenizerStateOpenParen, wantState: TokenizerStateOpenParen, still: true},
+		{prefix: "[", wantTok: TokenizerStateOpenBracket, wantState: TokenizerStateOpenBracket, still: true},
+		{prefix: ",", wantTok: TokenizerStateUnquote, wantState: TokenizerStateUnquote, still: true},
+		{prefix: "#,", wantTok: TokenizerStateUnsyntax, wantState: TokenizerStateUnsyntax, still: true},
+		{prefix: "ab", wantTok: TokenizerStateSymbol, wantState: TokenizerStateSymbol, still: true},
+		{prefix: `#\a`, wantTok: TokenizerStateCharGraphic, wantState: TokenizerStateCharGraphic, still: true},
+		// A sign run is undecided until an arm claims it, so it scans in
+		// state failed; the state alone does not say "between tokens".
+		{prefix: "+", wantTok: TokenizerStateSymbol, wantState: TokenizerStateFailed, still: true},
+		{prefix: "+i", wantTok: TokenizerStateSymbol, wantState: TokenizerStateFailed, still: true},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.prefix, func(t *testing.T) {
@@ -207,6 +214,7 @@ func TestFaultPastACompleteTokenIsIntertoken(t *testing.T) {
 			c.Assert(located, qt.IsTrue)
 			c.Check(at.Index(), qt.Equals, len(tc.prefix))
 			c.Check(terr.State(), qt.Equals, tc.wantState)
+			c.Check(terr.BetweenTokens(), qt.Equals, !tc.still)
 		})
 	}
 }
