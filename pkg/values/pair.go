@@ -729,7 +729,11 @@ func CarAs[T any](t Tuple, headSentinel error, name, role string) (T, error) {
 func ExactIndex(v Value, name string) (int64, error) {
 	idx, ok := ExactInteger(v)
 	if ok {
-		return idx, CheckIndexNonNegative(idx, name)
+		err := CheckIndexNonNegative(idx, name)
+		if err != nil {
+			return 0, err
+		}
+		return idx, nil
 	}
 	switch n := v.(type) {
 	case *BigInteger:
@@ -809,6 +813,9 @@ func NthCons(ctx context.Context, lst Value, n int64, name string) (Value, error
 				checkpoint = nil
 				power = math.MaxInt64
 			}
+			// power doubles at most 62 times before the walk would need 2^62
+			// steps, so it cannot overflow before detection; after detection it
+			// is MaxInt64 and steps never reaches it.
 			if steps == power {
 				checkpoint = pr
 				power *= 2
@@ -818,7 +825,15 @@ func NthCons(ctx context.Context, lst Value, n int64, name string) (Value, error
 			current = pr[1]
 			continue
 		}
-		steps = power
+		// A generic Tuple cell is invisible to the detector, so a period
+		// counted across it would be short. Drop the checkpoint and force a
+		// re-anchor at the next *Pair; a match then always spans a run of
+		// *Pair cells only. After detection (power is MaxInt64) leave steps
+		// alone, so the re-anchor cannot double power past MaxInt64.
+		checkpoint = nil
+		if power < math.MaxInt64 {
+			steps = power
+		}
 		if IsEmptyList(current) {
 			return nil, werr.WrapForeignErrorf(werr.ErrIndexOutOfRange,
 				"%s: index %d out of bounds at depth %d", name, n, i)

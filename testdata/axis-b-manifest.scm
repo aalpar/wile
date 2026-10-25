@@ -233,7 +233,7 @@
  ("list->vector" "vector" ("list") "github.com/aalpar/wile/pkg/registry/core.PrimListToVector" "pkg/registry/core/prim_vectors.go:107")
  ("list-copy" "list" ("list") "github.com/aalpar/wile/pkg/registry/core.PrimListCopy" "pkg/registry/core/prim_lists.go:314")
  ("list-ref" "any" ("list" "integer") "github.com/aalpar/wile/pkg/registry/core.PrimListRef" "pkg/registry/core/prim_lists.go:232")
- ("list-set!" "void" ("pair" "integer" "any") "github.com/aalpar/wile/pkg/registry/core.PrimListSet" "pkg/registry/core/prim_lists.go:256")
+ ("list-set!" "void" ("list" "integer" "any") "github.com/aalpar/wile/pkg/registry/core.PrimListSet" "pkg/registry/core/prim_lists.go:256")
  ("list-tail" "any" ("list" "integer") "github.com/aalpar/wile/pkg/registry/core.PrimListTail" "pkg/registry/core/prim_lists.go:291")
  ("load" "any" ("string") "github.com/aalpar/wile/extensions/eval.PrimLoad" "extensions/eval/prim_eval.go:169")
  ("log" "number" ("number" "...number") "github.com/aalpar/wile/extensions/math.PrimLog" "extensions/math/prim_transcendental.go:182")

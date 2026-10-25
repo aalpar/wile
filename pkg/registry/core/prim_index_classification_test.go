@@ -81,6 +81,24 @@ func TestIndexArgumentsShareOneClassification(t *testing.T) {
 			want:     "list-ref: index 100000000000000000000 out of range",
 		},
 		{
+			name:     "bignum vector-copy start is out of range",
+			code:     `(vector-copy (vector 1 2) (expt 10 20))`,
+			sentinel: werr.ErrIndexOutOfRange,
+			want:     "vector-copy: start: index 100000000000000000000 out of range",
+		},
+		{
+			name:     "bignum vector-fill! start is out of range",
+			code:     `(vector-fill! (vector 1 2) 0 (expt 10 20))`,
+			sentinel: werr.ErrIndexOutOfRange,
+			want:     "vector-fill!: start: index 100000000000000000000 out of range",
+		},
+		{
+			name:     "a symbol vector-copy end is not an integer, rendered as Scheme",
+			code:     `(vector-copy (vector 1 2) 0 'x)`,
+			sentinel: werr.ErrNotAnInteger,
+			want:     "vector-copy: end: expected an exact integer index but got x",
+		},
+		{
 			name:     "negative vector-ref index",
 			code:     `(vector-ref (vector 1) -1)`,
 			sentinel: werr.ErrIndexOutOfRange,
@@ -181,6 +199,29 @@ func TestIndexArgumentsShareOneClassification(t *testing.T) {
 			c.Assert(err, qt.IsNotNil)
 			c.Check(errors.Is(err, tc.sentinel), qt.IsTrue, qt.Commentf("%v", err))
 			c.Check(err.Error(), qt.Contains, tc.want)
+		})
+	}
+}
+
+// TestSubrangeBoundsAcceptIntegralRationals pins that start/end accept what
+// the single-index family accepts: 4/2 is the exact integer 2.
+func TestSubrangeBoundsAcceptIntegralRationals(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		code string
+		want string
+	}{
+		{`(vector-copy (vector 1 2 3) 4/2)`, "#(3)"},
+		{`(vector-copy (vector 1 2 3) 0 4/2)`, "#(1 2)"},
+		{`(list-ref '(a b c) 4/2)`, "c"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.code, func(t *testing.T) {
+			t.Parallel()
+			c := qt.New(t)
+			v, err := testhelpers.RunSchemeCode(t, tc.code)
+			c.Assert(err, qt.IsNil)
+			c.Check(v.SchemeString(), qt.Equals, tc.want)
 		})
 	}
 }

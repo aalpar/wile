@@ -46,6 +46,7 @@ func TestPromotedVectorRefClassifiesIndexLikeTheCall(t *testing.T) {
 		{"negative", "-1", werr.ErrIndexOutOfRange, "vector-ref: index -1 must be non-negative"},
 		{"past the end", "1", werr.ErrIndexOutOfRange, "vector-ref: index 1 out of bounds for length 1"},
 		{"symbol", "'x", werr.ErrNotAnInteger, "vector-ref: expected an exact integer index but got x"},
+		{"integral rational", "4/2", werr.ErrIndexOutOfRange, "vector-ref: index 2 out of bounds for length 1"},
 	}
 	ctx := context.Background()
 	for _, tc := range tests {

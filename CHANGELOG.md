@@ -644,6 +644,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **BREAKING (Go API): `values.NthCons` takes a `context.Context` first, and
+  index classification has two new exports.** `NthCons(ctx, lst, n, name)`
+  polls `ctx` every 1024 steps and answers a circular list by reducing the
+  index modulo the cycle (R7RS §6.4 lets `list-ref`'s argument be circular);
+  `helpers.NthCons` forwards the same signature. `values.ExactIndex` is the one
+  rule every index-keyed primitive applies (not an exact integer is
+  `ErrNotAnInteger`; an exact integer outside `int64` or a negative one is
+  `ErrIndexOutOfRange`), and `values.CheckIndexNonNegative` owns the negative
+  text. Callers of `NthCons` add a context argument.
+
 - **BREAKING: `ac-match` / `ac-unify` and `term-compare` read the comparator as
   a boolean (I177).** A protocol whose comparator returns a number, such as the
   old three-way -1 / 0 / 1, now raises (`term-compare: comparator returned a

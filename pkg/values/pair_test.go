@@ -921,6 +921,47 @@ func TestNthCons(t *testing.T) {
 	}
 }
 
+// wrappedCell is a Tuple that is not a *values.Pair, so NthCons walks it on
+// its generic arm, which the cycle detector cannot see.
+type wrappedCell struct {
+	*values.Pair
+}
+
+// TestNthConsMixedCycle pins that a cycle through a cell the detector cannot
+// see is walked, not reduced: a period counted across that cell is wrong, and
+// the reduction would land on the wrong cell. Every cycle length up to 9 with
+// the generic cell at every position, against a step-by-step walk.
+func TestNthConsMixedCycle(t *testing.T) {
+	t.Parallel()
+	for size := 2; size <= 9; size++ {
+		for at := range size {
+			cells := make([]*values.Pair, size)
+			for i := range cells {
+				cells[i] = values.NewCons(values.NewInteger(int64(i)), nil)
+			}
+			link := func(i int) values.Value {
+				if i == at {
+					return wrappedCell{cells[i]}
+				}
+				return cells[i]
+			}
+			for i := range cells {
+				cells[i].SetCdr(link((i + 1) % size))
+			}
+			head := link(0)
+			for n := range int64(200) {
+				want := head
+				for range n {
+					want = want.(values.Tuple).Cdr()
+				}
+				got, err := values.NthCons(context.Background(), head, n, "t")
+				qt.Assert(t, err, qt.IsNil)
+				qt.Assert(t, got, qt.Equals, want, qt.Commentf("size=%d at=%d n=%d", size, at, n))
+			}
+		}
+	}
+}
+
 // TestNthConsHonorsContext pins the ctx poll: a long finite walk stops on a
 // cancelled context instead of running to the end.
 func TestNthConsHonorsContext(t *testing.T) {
