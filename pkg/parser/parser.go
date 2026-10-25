@@ -1095,25 +1095,7 @@ func (p *Parser) readSyntax() (syntax.SyntaxValue, tokenizer.Token, error) {
 	case tokenizer.TokenizerStateMarkerBase8:
 		return p.parseBaseWithExactness(8)
 	case tokenizer.TokenizerStateMarkerBase10:
-		// #d is the default (decimal) radix, so the following datum reads normally.
-		markerTok := p.curr()
-		err = p.advance()
-		if err != nil {
-			// "#d" alone: the radix prefix requires a number, so EOF is malformed
-			// input — mirroring the errNoDatum guard below.
-			return nil, p.cur, wrapMidParseEOF(err, markerTok, "decimal number marker")
-		}
-		var tok tokenizer.Token
-		q, tok, err = p.readSyntax()
-		// A radix marker with no number (e.g. "#d)") must be a located error, not a
-		// leaked errNoDatum that a compound reader silently treats as "no datum" —
-		// mirroring readExactnessMarker (#e/#i) and the #b/#o/#x arms, which all
-		// reject a missing number. Without this guard "(#d)" mis-parsed to "()".
-		if errors.Is(err, errNoDatum) {
-			return nil, tok, NewParserErrorWithWrapf(werr.ErrNotANumber, tok,
-				"decimal number marker requires a datum")
-		}
-		return q, tok, err
+		return p.parseBaseWithExactness(10)
 	case tokenizer.TokenizerStateMarkerBase16:
 		return p.parseBaseWithExactness(16)
 	case tokenizer.TokenizerStateSignedInf:

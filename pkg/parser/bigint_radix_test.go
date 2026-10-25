@@ -16,12 +16,14 @@ package parser
 
 import (
 	"context"
+	"errors"
 	"math/big"
 	"strings"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -184,6 +186,10 @@ func TestReadSyntaxRadixPrefixDoesNotTakeAnIntroducer(t *testing.T) {
 		{"#x#z1f", "#z#x1f", 31},
 		{"#b#z1011", "#z#b1011", 11},
 		{"#o#z777", "#z#o777", 511},
+		{"#d#z1", "#z#d1", 1},
+		{"#d#z#x1f", "#z#x1f", 31},
+		{"#x#e#z1f", "#z#x#e1f", 31},
+		{"#d#e#z1", "#z#d#e1", 1},
 	}
 
 	for _, tc := range tcs {
@@ -201,6 +207,67 @@ func TestReadSyntaxRadixPrefixDoesNotTakeAnIntroducer(t *testing.T) {
 			syn, err := NewParser(env, true, strings.NewReader(tc.bad)).ReadSyntax(context.TODO())
 			c.Assert(err, qt.IsNotNil,
 				qt.Commentf("a radix or exactness prefix takes a number, not an introducer; got %v", syn))
+			// The rule's own diagnostic, not strconv's on "0z1f" by accident.
+			c.Check(err.Error(), qt.Contains, "radix prefix requires a numeral")
+			c.Check(errors.Is(err, werr.ErrNotANumber), qt.IsTrue, qt.Commentf("%v", err))
+		})
+	}
+}
+
+// TestReadSyntaxRadixPrefixRequiresANumeral pins the radix operand rule for
+// every non-numeral operand: #m (the BigFloat half of the introducer rule),
+// another radix prefix (one per slot), and non-numbers. The #d arm used to read
+// any datum after the prefix, so #d#m1.5 was 1.5l0, #d#x1 was 1 and #d#t was
+// #t; racket and petite reject them all ("misplaced radix specification",
+// "invalid number syntax").
+func TestReadSyntaxRadixPrefixRequiresANumeral(t *testing.T) {
+	for _, src := range []string{
+		"#d#m1.5", "#x#m1", "#b#m1", "#d#e#m1",
+		"#d#x1", "#d#d1", "#x#x1", "#d#e#x1", "#x#e#x1",
+		"#d#t", "#x#t", `#d"a"`, "#d#&1", "#d)", "(#b)",
+	} {
+		t.Run(src, func(t *testing.T) {
+			c := qt.New(t)
+
+			env := environment.NewNamespace().Runtime()
+			syn, err := NewParser(env, true, strings.NewReader(src)).ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNotNil, qt.Commentf("read %v", syn))
+			c.Check(errors.Is(err, werr.ErrNotANumber), qt.IsTrue, qt.Commentf("%v", err))
+		})
+	}
+}
+
+// TestReadSyntaxRadixPrefixKeepsItsNumerals is the control for the rule above:
+// every numeral shape still reads after #d, and after #d#e the exactness
+// conversion still consults the literal's digits.
+func TestReadSyntaxRadixPrefixKeepsItsNumerals(t *testing.T) {
+	tcs := []struct {
+		src  string
+		want string
+	}{
+		{"#d42", "42"},
+		{"#d-7", "-7"},
+		{"#d1.5", "1.5"},
+		{"#d1/2", "1/2"},
+		{"#d1e3", "1000.0"},
+		{"#d+inf.0", "+inf.0"},
+		{"#d+i", "0+1i"},
+		{"#d1+2i", "1+2i"},
+		{"#d#e0.1", "1/10"},
+		{"#d#i1/2", "0.5"},
+		{"#e#d0.1", "1/10"},
+		{"#x#e1.8", "3/2"},
+		{"#x#i1f", "31.0"},
+		{"#z#d1", "1"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.src, func(t *testing.T) {
+			c := qt.New(t)
+
+			env := environment.NewNamespace().Runtime()
+			syn, err := NewParser(env, true, strings.NewReader(tc.src)).ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNil)
+			c.Check(syn.Unwrap().SchemeString(), qt.Equals, tc.want)
 		})
 	}
 }

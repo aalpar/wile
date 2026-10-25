@@ -279,19 +279,27 @@ func replaceHashDigits(s string) string {
 	return strings.ReplaceAll(s, "#", "0")
 }
 
-// parseBaseWithExactness handles #b, #o, #x prefixes followed by an optional
-// #e/#i exactness marker. R7RS §7.1.1: prefix ordering is either (#e|#i)(#b|#o|#x)
-// or (#b|#o|#x)(#e|#i). The base-marker cases (#b/#o/#x) may see an exactness
-// marker as their next token; this method handles that transparently.
+// parseBaseWithExactness handles a radix prefix (#b, #o, #d, #x) followed by an
+// optional #e/#i exactness marker. R7RS §7.1.1: prefix ordering is either
+// (#e|#i)(#b|#o|#d|#x) or (#b|#o|#d|#x)(#e|#i). The radix prefix may see an
+// exactness marker as its next token; this method handles that transparently.
+//
+// The operand after both prefixes must be a numeral token (requireRadixNumeral):
+// a radix selects the digit set the literal was scanned in, so it cannot apply
+// to an introducer (#d#z1), a second radix (#d#x1), or a non-number (#d#t).
 func (p *Parser) parseBaseWithExactness(base int) (syntax.SyntaxValue, tokenizer.Token, error) {
 	// A radix prefix requires a number after it, so input ending on the prefix
 	// (e.g. "#b") is malformed, not a clean EOF. The prefix token is also the
 	// only located token still in hand — p.cur is nil once the tokenizer hits
 	// EOF — so it carries the error's provenance.
+	label := "radix number marker"
+	if base == 10 {
+		label = "decimal number marker"
+	}
 	markerTok := p.curr()
 	err := p.advance()
 	if err != nil {
-		return nil, p.cur, wrapMidParseEOF(err, markerTok, "radix number marker")
+		return nil, p.cur, wrapMidParseEOF(err, markerTok, label)
 	}
 
 	// Check for trailing exactness prefix: #x#e or #x#i.
@@ -301,25 +309,35 @@ func (p *Parser) parseBaseWithExactness(base int) (syntax.SyntaxValue, tokenizer
 		exactness = 1
 		err = p.advance()
 		if err != nil {
-			return nil, p.cur, wrapMidParseEOF(err, markerTok, "radix number marker")
+			return nil, p.cur, wrapMidParseEOF(err, markerTok, label)
 		}
 	case tokenizer.TokenizerStateMarkerNumberInexact:
 		exactness = -1
 		err = p.advance()
 		if err != nil {
-			return nil, p.cur, wrapMidParseEOF(err, markerTok, "radix number marker")
+			return nil, p.cur, wrapMidParseEOF(err, markerTok, label)
 		}
+	}
+
+	err = p.requireRadixNumeral()
+	if err != nil {
+		return nil, p.cur, err
 	}
 
 	// Parse the number in the given base.
 	var q syntax.SyntaxValue
 	var tok tokenizer.Token
-	switch p.cur.Type() {
-	case tokenizer.TokenizerStateUnsignedRationalFraction,
-		tokenizer.TokenizerStateSignedRationalFraction:
+	switch {
+	case base == 10:
+		// #d is the default radix, so its numeral reads as an unprefixed one,
+		// including the shapes (exponent, infinity, complex) the arms below do
+		// not handle.
+		q, tok, err = p.readSyntax()
+	case p.cur.Type() == tokenizer.TokenizerStateUnsignedRationalFraction,
+		p.cur.Type() == tokenizer.TokenizerStateSignedRationalFraction:
 		q, tok, err = p.parseRationalWithBase(base)
-	case tokenizer.TokenizerStateUnsignedDecimalFraction,
-		tokenizer.TokenizerStateSignedDecimalFraction:
+	case p.cur.Type() == tokenizer.TokenizerStateUnsignedDecimalFraction,
+		p.cur.Type() == tokenizer.TokenizerStateSignedDecimalFraction:
 		q, tok, err = p.parseDecimalFractionWithBase(base)
 	default:
 		q, tok, err = p.parseIntegerWithBase(base)
@@ -331,7 +349,15 @@ func (p *Parser) parseBaseWithExactness(base int) (syntax.SyntaxValue, tokenizer
 	// Apply exactness if a trailing prefix was present.
 	switch exactness {
 	case 1:
-		exact, convErr := p.makeExact(q)
+		// Decimal digits are authoritative for #e (#d#e0.1 is 1/10, as #e#d0.1
+		// is); other radixes defer to the value. See makeExactLiteral.
+		var exact syntax.SyntaxValue
+		var convErr error
+		if base == 10 {
+			exact, convErr = p.makeExactLiteral(q, tok)
+		} else {
+			exact, convErr = p.makeExact(q)
+		}
 		if convErr != nil {
 			return nil, tok, NewParserErrorf(tok, "cannot convert to exact: %v", convErr)
 		}
@@ -344,6 +370,32 @@ func (p *Parser) parseBaseWithExactness(base int) (syntax.SyntaxValue, tokenizer
 		return inexact, tok, nil
 	}
 	return q, tok, nil
+}
+
+// requireRadixNumeral faults unless p.cur, the operand of a radix prefix, is a
+// numeral token. A radix is lexical: it chose the digit set the operand was
+// scanned in, so the operand must be the literal it scanned. Exactness is the
+// one prefix that may intervene, and parseBaseWithExactness has consumed it.
+//
+// Every numeral shape passes, including those a non-decimal radix does not yet
+// parse (#x1+2i): the rule is about the operand being a numeral, and a numeral
+// that fails is reported by its own parser.
+func (p *Parser) requireRadixNumeral() error {
+	switch p.cur.Type() {
+	case tokenizer.TokenizerStateUnsignedInteger, tokenizer.TokenizerStateSignedInteger,
+		tokenizer.TokenizerStateUnsignedDecimalFraction, tokenizer.TokenizerStateSignedDecimalFraction,
+		tokenizer.TokenizerStateUnsignedRationalFraction, tokenizer.TokenizerStateSignedRationalFraction,
+		tokenizer.TokenizerStateUnsignedScientificNotation, tokenizer.TokenizerStateSignedScientificNotation,
+		tokenizer.TokenizerStateSignedInf, tokenizer.TokenizerStateSignedNan,
+		tokenizer.TokenizerStateUnsignedImaginary, tokenizer.TokenizerStateSignedImaginary,
+		tokenizer.TokenizerStateUnsignedImaginaryInf, tokenizer.TokenizerStateSignedImaginaryInf,
+		tokenizer.TokenizerStateUnsignedImaginaryNan, tokenizer.TokenizerStateSignedImaginaryNan,
+		tokenizer.TokenizerStateUnsignedComplex, tokenizer.TokenizerStateSignedComplex,
+		tokenizer.TokenizerStateUnsignedComplexPolar, tokenizer.TokenizerStateSignedComplexPolar:
+		return nil
+	}
+	return NewParserErrorWithWrapf(werr.ErrNotANumber, p.cur,
+		"radix prefix requires a numeral, not %q", p.cur.String())
 }
 
 // parseRational parses a rational number string like "3/4" or "-1/2".
