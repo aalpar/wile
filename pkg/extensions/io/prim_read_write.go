@@ -208,11 +208,11 @@ func getRequiredBinaryOutputPort(o values.Value, name string) (*values.PortObjec
 // not, since nothing was read: it is a plain error, as racket raises a plain
 // exn:fail rather than exn:fail:read. Every read primitive goes through here so
 // the answer does not depend on which one met the closed port.
-func wrapReadFault(err error, msg string, vs ...any) error {
+func wrapReadFault(err error, msg string) error {
 	if errors.Is(err, werr.ErrPortClosed) {
-		return werr.WrapForeignErrorf(err, msg, vs...)
+		return werr.WrapForeignErrorf(err, "%s", msg)
 	}
-	return werr.WrapForeignReadErrorf(err, msg, vs...)
+	return werr.WrapForeignReadErrorf(err, "%s", msg)
 }
 
 // PrimRead implements the (read) primitive.
