@@ -80,8 +80,8 @@
     (guard (outer ((symbol? outer) (list 'o outer)))
       (guard (inner ((number? inner) (list 'i inner)))
         (raise 'sym))))
-  ;; re-raise to an outer with-exception-handler returns its value (no spurious escalate)
-  (test '(caught 42)
+  ;; re-raise to a returning outer with-exception-handler raises the §6.11 secondary
+  (test-error
     (with-exception-handler
       (lambda (e) (list 'caught e))
       (lambda () (guard (inner ((symbol? inner) 'sym)) (raise 42)))))

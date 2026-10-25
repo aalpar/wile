@@ -543,16 +543,6 @@ func (p *MachineContext) ResolveParameterValue(param *Parameter) values.Value {
 //     (first invoke) so a later normal return through a reinstalled frame takes
 //     RestoreAndRelease's copy-don't-pool branch (shared-bit safety; the
 //     tail-frame-recycling-unsound failure class hides here).
-//  3. the escalator-arm revival set is decided by the CALLER, at the invocation
-//     site, and APPLIED here only after RestoreWithWindingFrom succeeds — a failed
-//     reinstatement never re-entered the frame, so it must contribute no revival.
-//
-// revived carries that set (see pendingEscalatorRevivals). It is a caller argument
-// rather than something computed here because this context is not always the one
-// the continuation was invoked on: the call/cc trampoline re-raises out of every
-// sub-context that does not own the continuation's delimiter (resumePrompt), so p.cont here can be a chain that never
-// held the arms' frames. nil for every resume that crosses no escalator, which is
-// essentially all of them.
 //
 // isolate is written unconditionally as a per-resume reset on the (now long-lived)
 // driver context: a stale isolatedMarks from a prior resume must not leak into a
@@ -566,7 +556,6 @@ func (p *MachineContext) reinstallSegment(
 	srcWinding, outside WindingStack,
 	vals []values.Value,
 	isolate bool,
-	revived []*escalatorArm,
 ) (bool, error) {
 	p.capturedMarks = comp.capturedMarks
 	p.isolatedMarks = isolate
@@ -590,9 +579,6 @@ func (p *MachineContext) reinstallSegment(
 	err := p.RestoreWithWindingFrom(nil, srcWinding, target)
 	if err != nil {
 		return false, err
-	}
-	for _, arm := range revived {
-		arm.revived = true
 	}
 
 	if segment == nil {
@@ -660,23 +646,11 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 	// p.isolatedMarks is the driver's current value. Composable resume composes
 	// the invoker's marks; see call-with-composable-continuation, which does not
 	// snapshot.
-	// Composable resume runs directly on the invoking context, so p (its chain and
-	// those above it) IS the live continuation the arms must be judged against; read
-	// it before reinstallSegment, whose winding reconcile runs dynamic-wind thunks
-	// that can re-point it.
-	revived := pendingEscalatorRevivals(cc.escalatorArms, p)
-	if cc.interrupted {
-		// A timer's hard suspension dropped the thunk's frames without leaving their
-		// extents, so the arms it carries were live at the interrupt: resuming
-		// continues inside them, which is no revival, though the live chain lacks
-		// the frames.
-		revived = nil
-	}
 	outside := p.windingStack
 	if cc.inPlace != nil {
 		outside = cc.inPlace.windingStack
 	}
-	wasEmpty, err := p.reinstallSegment(cc, p.cont, p.windingStack, outside, vals, p.isolatedMarks, revived)
+	wasEmpty, err := p.reinstallSegment(cc, p.cont, p.windingStack, outside, vals, p.isolatedMarks)
 	if err != nil {
 		return p, err
 	}
@@ -684,70 +658,4 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 		return p.returnImmediate(), nil
 	}
 	return p, nil
-}
-
-// pendingEscalatorRevivals selects the escalator arms this resume would REVIVE:
-// those among arms that no chain of live, or of a context above it, carries.
-//
-// The discrimination is the whole mechanism. An arm the live continuation still
-// carries means the resume never left that finalizer frame's dynamic extent (an
-// ordinary call/cc jump taken inside the handler), and the R7RS §6.11 secondary
-// must still fire on the handler's return. An arm only in the segment means the
-// frame had been discarded (guard-k's call-with-exit abort) and reinstating the
-// segment re-enters its extent from outside, which is the one path allowed to
-// forward the handler's value.
-//
-// live MUST be the context the continuation was INVOKED on, which is not always
-// the context that reinstates the segment: the call/cc trampoline re-raises past
-// every sub-context that does not own the continuation's delimiter, so an
-// escalator armed inside a dynamic-wind thunk's sub-context is absent from the
-// driver's chain even though the jump never left its extent. Both call sites
-// therefore read the live continuation before handing the result on: the (k v)
-// site in applyCapturedContinuation, and applyComposableContinuation, which
-// resumes in place.
-//
-// The live continuation is live's chain AND every chain up the parentMC walk: a
-// sub-context's chain is nil-rooted, and the parent it returns into is suspended
-// in the call that started it, so a handler that invokes its continuation through
-// eval has the finalizer frame on its own context's chain, one hop up. An
-// expansion-time root has no parent; the first driver above it filters the set
-// again (rebasePassedUpResume).
-//
-// Returns nil for the overwhelmingly common capture that carries no arm at all,
-// so the resume path pays one length test.
-func pendingEscalatorRevivals(arms []*escalatorArm, live *MachineContext) []*escalatorArm {
-	if len(arms) == 0 {
-		return nil
-	}
-	var q []*escalatorArm
-	for _, arm := range arms {
-		if contextsCarryEscalatorArm(live, arm) {
-			continue
-		}
-		q = append(q, arm)
-	}
-	return q
-}
-
-// contextsCarryEscalatorArm reports whether the chain of mc, or of any context up
-// its parentMC walk, holds arm.
-func contextsCarryEscalatorArm(mc *MachineContext, arm *escalatorArm) bool {
-	for c := mc; c != nil; c = c.parentMC {
-		if chainCarriesEscalatorArm(c.cont, arm) {
-			return true
-		}
-	}
-	return false
-}
-
-// chainCarriesEscalatorArm reports whether any frame reachable from head holds
-// arm. Identity, not equality: every copy of a finalizer frame shares the one arm
-// pointer its escalator closure captured.
-func chainCarriesEscalatorArm(head *MachineContinuation, arm *escalatorArm) bool {
-	for current := head; current != nil; current = current.parent {
-		if current.escalatorArm == arm {
-			return true
-		}
-	}
-	return false
 }

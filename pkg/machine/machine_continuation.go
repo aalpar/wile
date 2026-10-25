@@ -49,8 +49,8 @@ type MachineContinuation struct {
 	//   releaseContinuation (pool reset) zeros the struct, clearing inline slots.
 	inlineEvalsLen uint8
 	inlineEvals    [inlineEvalsCap]values.Value
-	// non-nil only on a non-continuable handler's finalizer frame; shared by
-	// every copy of that frame.
+	// non-nil only on a non-continuable handler's finalizer frame, and on every
+	// copy of that frame.
 	escalatorArm *escalatorArm
 }
 
@@ -196,11 +196,9 @@ func (p *MachineContinuation) Copy() *MachineContinuation {
 	q.promptHandler = p.promptHandler
 	q.inlineEvalsLen = p.inlineEvalsLen
 	q.inlineEvals = p.inlineEvals // array copy (value semantics)
-	// SHARE, never clone: the arm's whole job is to be one flag observed by the
-	// escalator closure and by every copy of its frame. SliceContinuationAt copies
-	// each captured frame through here, so dropping this line makes the revival
-	// signal silently unreachable from the closure — a green build with a dead
-	// mechanism.
+	// SliceContinuationAt copies each captured frame through here: a reinstated
+	// handler-k must still mark its finalizer frame, or a guard's uncaught re-raise
+	// stops reading as the program's raise (reRaisesNonContinuable).
 	q.escalatorArm = p.escalatorArm
 	return q
 }

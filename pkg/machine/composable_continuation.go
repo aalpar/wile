@@ -81,10 +81,6 @@ type ComposableContinuation struct {
 	// capture records this field and not capturedMarks (RecordLiveMarksInto). See
 	// CollectMarksFromCapture.
 	liveMarks []markEntry
-	// escalatorArms are the non-continuable finalizer frames' arms carried by this
-	// segment, precomputed at capture. Nil for essentially every capture, which is
-	// what keeps the resume path's added cost to one length test.
-	escalatorArms []*escalatorArm
 	// interrupted marks a continuation captured at an interrupt between two
 	// instructions (a fired with-timeout timer), not at a call that awaits values.
 	// The value register its top frame holds is live state, the operand the next
@@ -105,19 +101,6 @@ func bottomOfChain(head *MachineContinuation) *MachineContinuation {
 	return current
 }
 
-// collectEscalatorArms gathers the escalator arms of every frame in a chain.
-// Deliberately a second walk rather than a return value bolted onto bottomOfChain:
-// composable_continuation_test.go pins that helper's signature.
-func collectEscalatorArms(head *MachineContinuation) []*escalatorArm {
-	var q []*escalatorArm
-	for current := head; current != nil; current = current.parent {
-		if current.escalatorArm != nil {
-			q = append(q, current.escalatorArm)
-		}
-	}
-	return q
-}
-
 // NewComposableContinuation creates a composable continuation from a
 // continuation chain segment and the winding stack captured at the point
 // of capture. barrierValid is mc.BarrierValid() at capture time; nil means
@@ -135,7 +118,6 @@ func NewComposableContinuation(cont *MachineContinuation, windingStack WindingSt
 		threadID:      threadID,
 		barrierValid:  barrierValid,
 		bottom:        bottomOfChain(cont),
-		escalatorArms: collectEscalatorArms(cont),
 	}
 	return q
 }

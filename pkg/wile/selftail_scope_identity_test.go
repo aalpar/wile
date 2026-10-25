@@ -246,9 +246,11 @@ func TestSelfTailArmingCountRatchet(t *testing.T) {
 	// The raise family. All three are procedure-invokers, so a loop calling any of
 	// them must DEOPT to PullApply: OpSelfTailCall rebinds the parameter slots in
 	// place, and a handler that captures the live activation would then see the
-	// rebind on replay (pkg/wile/error_selftail_capture_gate_test.go pins the
-	// observable). `error` reached this set late — it carried no InvokesProcedure
-	// stamp and armed 1 site, which is review-wave-1 item 5.
+	// rebind on replay. pkg/wile/raise_selftail_capture_gate_test.go pins the
+	// observable for raise-continuable, the one whose handler may return into the
+	// loop; these rows are the only pin for `error` and `raise`. `error` reached
+	// this set late: it carried no InvokesProcedure stamp and armed 1 site, which
+	// is review-wave-1 item 5.
 	//
 	// The three rows are a DISCRIMINATOR, not three copies of one assertion: they
 	// are the same loop shape and differ only in which primitive is called, so a

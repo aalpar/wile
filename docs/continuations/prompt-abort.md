@@ -123,7 +123,7 @@ routed by `FindPrompt`, a resume by `reinstallSegment`.
 │    │                                                               │
 │    ├─ ErrResumeContinuation  (the trampoline bounce)               │
 │    │   boundary := FindPrompt(tag)                                 │
-│    │   reinstallSegment(seg, bnd, srcWinding, vals, true, arms)    │
+│    │   reinstallSegment(seg, bnd, srcWinding, vals, true)          │
 │    │   control signal? → pending; continue loop                    │
 │    │   wasEmpty? boundary == nil → return nil; else Restore(bnd)   │
 │    │   continue loop                                               │
@@ -341,16 +341,12 @@ applyComposableContinuation(cc, args)
   │
   ├─ copy args off the eval stack (Restore recycles the backing array)
   │
-  ├─ select the escalator arms this resume revives, against p.cont
-  │    (segment carries them, the invoker's live chain does not)
-  │
-  └─ reinstallSegment(cc, boundary = p.cont, p.windingStack, outside = p.windingStack, vals, p.isolatedMarks, revived)
+  └─ reinstallSegment(cc, boundary = p.cont, p.windingStack, outside = p.windingStack, vals, p.isolatedMarks)
        ├─ install captured marks
        ├─ segment = cc.AcquireSegment()
        │    first invocation: original frames, chain marked shared
        │    re-invocation:    deep copy, so resumes are independent
        ├─ RestoreWithWindingFrom(nil, srcWinding, outside ++ cc's carried extents)
-       ├─ mark the selected arms revived   // only once the reconcile succeeded
        ├─ GraftContinuation(segment, boundary)   // p.cont = EXTEND (compose)
        ├─ Restore(segment)
        └─ SetValues(vals...)
@@ -434,22 +430,21 @@ it loops):
 
 1. `applyCapturedContinuation` invoked with value 42
 2. Thread check and barrier check pass
-3. It selects the escalator arms to revive against **its own** `p.cont`, then returns
-   `ErrResumeContinuation{DefaultPromptTag, segment, [42], SourceWinding: [], escalatorRevivals: …}`.
-   The segment is **not** run here. Both site-local fields are frozen now for the
-   same reason: step 5 may hand the signal to a driver several sub-contexts out.
+3. It returns `ErrResumeContinuation{DefaultPromptTag, segment, [42], SourceWinding: []}`.
+   The segment is **not** run here. `SourceWinding` is frozen now because step 5
+   may hand the signal to a driver several sub-contexts out.
 4. `applyCallableError` passes the signal through unchanged
 5. `Run()` returns it to `RunResumable`
 6. `boundary, _ = FindPrompt(DefaultPromptTag)` → nil (context-level boundary),
    so the reinstalled segment *replaces* the live chain
-7. `reinstallSegment(segment, nil, [], outside = [], [42], isolate = true, revivals)`
+7. `reinstallSegment(segment, nil, [], outside = [], [42], isolate = true)`
    (outside: the extents the boundary keeps, the prompt frame's recorded stack or
    the context's inherited extents at its own boundary; none at top level):
    a. install the captured mark snapshot
    b. `AcquireSegment()`: original frames on first invoke, deep copy after
    c. `RestoreWithWindingFrom(nil, [], [D1])`:
       `FindCommonWindingPrefix([], [D1])` = 0; no unwinding (source is empty);
-      rewind D1 → before thunk prints "before"; then mark the selected arms
+      rewind D1 → before thunk prints "before"
    d. `GraftContinuation(segment, nil)`, `Restore(segment)`, `SetValues(42)`
 8. The driver loops; the resumed chain runs on its own `Run()` loop, O(1) Go frames
 9. The dynamic-wind body returns 42; its after thunk prints "after"

@@ -24,32 +24,22 @@ import (
 )
 
 // REGRESSION (crosscheck 2026-06-28, machine.raiseToHandlers): the non-continuable
-// escalation in raiseToHandlers gated the R7RS §6.11 secondary exception on the
-// CONTEXT-GLOBAL, sticky `isolatedMarks` flag. Once ANY call/cc continuation had
-// been resumed on the driver, isolatedMarks stayed true, so a later non-continuable
-// `raise` whose handler returned NORMALLY took the "forward the value" branch — the
-// mandatory secondary exception was silently swallowed and the illegal handler
-// return was converted into a normal value.
+// escalation once forwarded a handler's return instead of raising the R7RS §6.11
+// secondary exception, gated first on the sticky context-global `isolatedMarks`, then
+// on a per-driver resume counter, then on a per-arm "revived" flag that still
+// forwarded a guard miss and any re-entry after the guard's exit (decided 2026-10-25:
+// match Chez). A return from the handler raises the secondary however its
+// continuation was reached; the rows below pin each route that used to forward.
 //
-// The replacement, a per-driver `resumeGeneration` counter, fixed that and was
-// still too coarse: it answered "did any resume happen between arm and fire", so
-// a call/cc escape taken INSIDE the handler — which never leaves the escalator
-// frame's extent — cleared the gate too. The rows below pin that second failure.
-//
-// The signal must be per-arm and directional: forward ONLY when a reinstatement
-// REVIVED this escalator frame (the segment carried it, the live chain did not),
-// which is the guard re-raise-continuable case.
-//
-// And "the live chain" must be read at the (k v) site. A raise handled inside a
-// sub-context — every dynamic-wind before/after thunk is one — arms its finalizer
-// frame on the SUB's chain, while the call/cc trampoline reinstates on the top
-// driver's; judging there scored every such jump as a revival. The last two rows
-// pin that third failure.
+// A raise handled inside a sub-context (every dynamic-wind before/after thunk is one)
+// arms its finalizer frame on the SUB's chain while the call/cc trampoline reinstates
+// on the top driver's; the dynamic-wind rows pin that route.
 
 // TestNonContinuableHandlerReturnErrors: a handler that RETURNS from a
-// non-continuable raise must always raise the §6.11 secondary exception —
-// whether an unrelated continuation was resumed earlier on the same driver, or
-// the handler itself takes a call/cc jump inside its own body.
+// non-continuable raise must always raise the §6.11 secondary exception:
+// whether an unrelated continuation was resumed earlier on the same driver, the
+// handler itself takes a call/cc jump inside its own body, or a guard whose
+// clauses miss re-raises to a handler that returns. Chez raises in every row.
 func TestNonContinuableHandlerReturnErrors(t *testing.T) {
 	t.Parallel()
 
@@ -71,10 +61,8 @@ func TestNonContinuableHandlerReturnErrors(t *testing.T) {
   (with-exception-handler (lambda (e) 'recovered) (lambda () (raise 'oops))))`,
 		},
 		{
-			// The resume happens INSIDE the handler's own dynamic extent, so the
-			// escalator frame is on the live chain when the segment is reinstated:
-			// a within-extent jump, not a revival. The handler still returns
-			// normally, so §6.11 must still fire.
+			// The resume happens INSIDE the handler's own dynamic extent; the
+			// handler still returns normally, so §6.11 must still fire.
 			Name: "call/cc resumed INSIDE the handler",
 			Code: `(with-exception-handler
                      (lambda (e) (call/cc (lambda (k) (k 1))) 42)
@@ -102,9 +90,7 @@ func TestNonContinuableHandlerReturnErrors(t *testing.T) {
 		{
 			// The raise is handled inside a dynamic-wind AFTER thunk, i.e. on a
 			// sub-context's chain, and the (k 1) trampolines out of that sub-context
-			// to the top driver. Judging live-chain membership on the DRIVER scores
-			// the jump as a revival and forwards 42; the arms are decided at the
-			// (k v) site precisely so this stays a within-extent jump.
+			// to the top driver, a chain that never held the finalizer frame.
 			Name: "call/cc INSIDE a handler running in a dynamic-wind after thunk",
 			Code: `(call/cc
                      (lambda (esc)
@@ -133,6 +119,23 @@ func TestNonContinuableHandlerReturnErrors(t *testing.T) {
                      (if (< n 2) (saved #f))
                      'done)`,
 		},
+		{
+			// A guard whose clauses miss re-raises with raise-continuable in the
+			// dynamic environment of the raise (R7RS 4.2.7); the outer handler's
+			// value returns from guard's handler, which raises the secondary.
+			// This program forwarded (outer 99) before 2026-10-25.
+			Name: "guard miss re-raises continuable to a returning outer handler",
+			Code: `(with-exception-handler
+                     (lambda (e) (list 'outer e))
+                     (lambda () (guard (x ((string? x) 'str)) (raise 99))))`,
+		},
+		{
+			// The same route under an expression context: it answered 43.
+			Name: "guard miss under an enclosing expression",
+			Code: `(with-exception-handler
+                     (lambda (e) 42)
+                     (lambda () (+ 1 (guard (e (#f 0)) (raise 'x)))))`,
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
@@ -140,32 +143,6 @@ func TestNonContinuableHandlerReturnErrors(t *testing.T) {
 			qt.Assert(t, err, qt.IsNotNil)
 			qt.Assert(t, strings.Contains(err.Error(), "non-continuable"), qt.IsTrue,
 				qt.Commentf("expected a non-continuable secondary exception, got: %v", err))
-		})
-	}
-}
-
-// TestNonContinuableForwardBranchPreserved: the load-bearing forward branch must
-// survive the fix. A guard whose clauses miss re-raises via raise-continuable to an
-// outer handler; that handler's value RESUMES guard's handler-k back THROUGH the
-// escalator frame and must be forwarded, not escalated. (Same program as the golden
-// corpus cell `guard-reraise-to-weh`, pinned here next to the regression it must not
-// trade against.)
-func TestNonContinuableForwardBranchPreserved(t *testing.T) {
-	t.Parallel()
-
-	tcs := []testhelpers.SchemeCodeTestCase{
-		{
-			Name: "guard miss re-raises continuable to outer weh",
-			Code: `(with-exception-handler
-                     (lambda (e) (list 'outer e))
-                     (lambda () (guard (x ((string? x) 'str)) (raise 99))))`,
-		},
-	}
-	for _, tc := range tcs {
-		t.Run(tc.Name, func(t *testing.T) {
-			result, err := testhelpers.RunSchemeCode(t, tc.Code)
-			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result.SchemeString(), qt.Equals, "(outer 99)")
 		})
 	}
 }

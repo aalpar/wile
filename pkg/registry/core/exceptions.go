@@ -41,8 +41,9 @@ func addExceptions(r *registry.PrimitiveRegistry) error {
 		// installed handler on the LIVE chain. Without the stamp the binding is
 		// CaptureSafe and Stable, so a self-recursive loop calling `error` arms
 		// OpSelfTailCall — whose in-place slot rebind then corrupts a continuation
-		// captured over that activation's parameter frame (see
-		// pkg/wile/error_selftail_capture_gate_test.go). The stamp affects capture
+		// captured over that activation's parameter frame (pinned by the error row
+		// of TestSelfTailArmingCountRatchet; pkg/wile/raise_selftail_capture_gate_test.go
+		// shows the corruption with raise-continuable). The stamp affects capture
 		// safety and Stable stamping only (registry/apply.go), never dispatch or
 		// catchability.
 		{Name: "error", InvokesProcedure: true, ParamCount: 2, IsVariadic: true, Impl: PrimError,

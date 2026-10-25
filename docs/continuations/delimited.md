@@ -192,16 +192,15 @@ When a `ComposableContinuation` is called as a procedure (dispatched by `ApplyCa
 
 1. Thread check: reject if invoked from a different SRFI-18 thread. Barrier check: reject if the barrier token differs.
 2. Copy the argument values off the eval stack, whose backing array `Restore` recycles.
-3. Select the escalator arms this resume revives, against `p.cont` — the invoking context's live chain, which the winding reconcile below can re-point.
-4. Delegate to `reinstallSegment` with `boundary = p.cont`, which:
+3. Delegate to `reinstallSegment` with `boundary = p.cont`, which:
    a. installs the captured marks;
    b. calls `AcquireSegment()`: the original frames on first invocation (marking the chain shared), a deep copy on re-invocation;
-   c. reconciles dynamic-wind to the invoker's current extents with the carried ones on top (Flatt et al. 2007: a composable continuation's frames are appended to the invoker's), so nothing of the invoker's is unwound and the carried extents are re-entered (their before thunks run), and rebases each prompt frame in the segment, whose winding record is the capture site's, onto those extents, then marks the selected arms revived (only a reconcile that succeeded re-entered the frame);
+   c. reconciles dynamic-wind to the invoker's current extents with the carried ones on top (Flatt et al. 2007: a composable continuation's frames are appended to the invoker's), so nothing of the invoker's is unwound and the carried extents are re-entered (their before thunks run), and rebases each prompt frame in the segment, whose winding record is the capture site's, onto those extents;
    d. grafts the segment's bottom frame onto `boundary`, restores from the segment's top frame, and delivers the values.
 
-`reinstallSegment` is the *single* resume primitive: the abortive `call/cc` resume goes through it too, differing only in `boundary` (from `FindPrompt`, `nil` = replace the whole chain), the extents kept (those outside the boundary: the prompt frame's recorded stack, or the context's inherited extents at its own boundary, so the live extents inside the boundary are unwound), `isolate` (true, restoring the captured mark snapshot), and where step 3 ran — at the `(k v)` site, carried on the signal, because the trampoline reinstates on a driver whose chain is not the invoker's.
+`reinstallSegment` is the *single* resume primitive: the abortive `call/cc` resume goes through it too, differing only in `boundary` (from `FindPrompt`, `nil` = replace the whole chain), the extents kept (those outside the boundary: the prompt frame's recorded stack, or the context's inherited extents at its own boundary, so the live extents inside the boundary are unwound), and `isolate` (true, restoring the captured mark snapshot).
 
-The share-then-copy discipline in step 4b is essential in both directions. Without the first-invocation shared marking, a normal return through a reinstalled frame could pool an environment the captured segment still needs. Without the re-invocation copy, a second resume would corrupt frames the first one mutated.
+The share-then-copy discipline in step 3b is essential in both directions. Without the first-invocation shared marking, a normal return through a reinstalled frame could pool an environment the captured segment still needs. Without the re-invocation copy, a second resume would corrupt frames the first one mutated.
 
 ## Interaction with dynamic-wind
 

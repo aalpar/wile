@@ -105,17 +105,18 @@
             (guard (exn ((string? exn) 'was-string))
               (raise 42)))))))
 
-  ;; R7RS §4.2.7: re-raise in original dynamic extent allows
-  ;; non-escaping outer handler (raise-continuable path)
-  (test '(caught 42)
+  ;; R7RS §4.2.7 re-raises in the dynamic environment of the raise; a
+  ;; non-escaping outer handler's value returns from guard's handler for a
+  ;; non-continuable raise, which raises the §6.11 secondary (Chez agrees)
+  (test-error
     (with-exception-handler
       (lambda (e) (list 'caught e))
       (lambda ()
         (guard (inner ((symbol? inner) 'sym))
           (raise 42)))))
 
-  ;; re-raise with non-escaping handler, string exception
-  (test '(handled oops)
+  ;; the same with a symbol exception
+  (test-error
     (with-exception-handler
       (lambda (e) (list 'handled e))
       (lambda ()

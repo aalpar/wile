@@ -25,15 +25,11 @@ import (
 	"github.com/aalpar/wile/pkg/wile"
 )
 
-// TestNonContinuableSecondaryAcrossContexts pins that a jump taken inside a
-// non-continuable raise's handler is judged a within-extent jump wherever the
-// (k v) site runs: on a sub-context (eval, a dynamic-wind thunk inside eval),
-// or on a macro transformer's expansion-time root, whose chain has no parent.
-// Each reads the handler's finalizer frame as absent from its own chain; the
-// frame is on the handler context's chain, which the sub-context's parentMC
-// reaches and which the first driver above the transformer's root holds. The
-// handler then returns, so R7RS 6.11's secondary exception must fire, as it
-// does for the same jump taken directly (the last row, a control).
+// TestNonContinuableSecondaryAcrossContexts pins that a non-continuable raise's
+// handler which takes a jump and then returns raises R7RS 6.11's secondary
+// exception wherever the (k v) site runs: on a sub-context (eval, a dynamic-wind
+// thunk inside eval), or on a macro transformer's expansion-time root, whose chain
+// has no parent. The direct jump (the last row) is the control.
 // Chez raises &non-continuable on the eval, dynamic-wind, after-thunk escape and
 // direct rows; the composable and transformer rows have no Chez equivalent and
 // are pinned by agreement with the direct jump.
@@ -95,10 +91,7 @@ func TestNonContinuableSecondaryAcrossContexts(t *testing.T) {
 		},
 		{
 			// The after thunk runs on a sub-context while the handler's escape is in
-			// flight, so the handler context's chain still holds the finalizer frame:
-			// re-entering it there is a within-extent jump. The same re-entry made
-			// after the escape lands still forwards (a re-entry from outside, the
-			// guard miss-path's rule), which Chez does not; that is filed separately.
+			// flight and re-enters the handler, which then returns.
 			name: "call/cc continuation invoked from an after thunk the handler's escape runs",
 			src: `(let ()
 			        (define k #f)
@@ -137,25 +130,60 @@ func TestNonContinuableSecondaryAcrossContexts(t *testing.T) {
 	}
 }
 
-// TestNonContinuableForwardAcrossContexts is the other side of the rows above:
-// a guard whose clauses miss re-enters its handler's extent from outside, which
-// stays a revival (the handler's value is forwarded) when the raise, and the
-// re-raise's resume, run inside eval. Walking the parent contexts must not find
-// the finalizer frame the guard's exit discarded.
-func TestNonContinuableForwardAcrossContexts(t *testing.T) {
+// TestNonContinuableReentryAfterGuardExitRaises: a handler returning from a
+// non-continuable raise raises the secondary in its own dynamic environment also
+// when its continuation is re-entered after the enclosing guard has exited, or is
+// reached by a guard miss's re-raise (decided 2026-10-25: match Chez). Before,
+// each row forwarded the handler's value: (2 handler-returned), (outer 99).
+//
+// The re-entry rows use a call/cc guard (R7RS 7.3's shape, catch-all) because
+// Wile's guard escapes with call-with-exit, whose one-shot exit procedure is
+// expired when the re-entered handler's secondary reaches it.
+// petite agrees on every row.
+func TestNonContinuableReentryAfterGuardExitRaises(t *testing.T) {
 	t.Parallel()
+
+	// cell holds the handler's continuation, for eval to reach: the top level
+	// is immutable under the Engine's default.
+	const reentry = `
+(define cell (vector #f))
+(define (cc-guard on-catch thunk)
+  ((call/cc
+     (lambda (guard-k)
+       (with-exception-handler
+         (lambda (c) (guard-k (lambda () (on-catch c))))
+         (lambda () (let ((v (thunk))) (lambda () v))))))))
+(let ((n 0) (out '()))
+  (let ((r (cc-guard (lambda (o) (list 'outer 'non-continuable))
+             (lambda ()
+               (with-exception-handler
+                 (lambda (e) (call/cc (lambda (k) (vector-set! cell 0 k))) 'handler-returned)
+                 (lambda () (raise 'boom)))))))
+    (set! n (+ n 1))
+    (set! out (cons (list n r) out))
+    (if (= n 1) REENTER (reverse out))))`
+	const caughtTwice = "((1 (outer non-continuable)) (2 (outer non-continuable)))"
 
 	tcs := []struct {
 		name string
 		src  string
-		want string
+		want string // "" = the program raises the secondary exception
 	}{
+		{
+			name: "handler re-entered directly after the guard exited",
+			src:  strings.Replace(reentry, "REENTER", "((vector-ref cell 0) 7)", 1),
+			want: caughtTwice,
+		},
+		{
+			name: "handler re-entered through eval after the guard exited",
+			src:  strings.Replace(reentry, "REENTER", "(eval '((vector-ref cell 0) 7) (interaction-environment))", 1),
+			want: caughtTwice,
+		},
 		{
 			name: "guard miss inside eval re-raises to an outer handler",
 			src: `(with-exception-handler
 			        (lambda (e) (list 'outer e))
 			        (lambda () (eval '(guard (x ((string? x) 'str)) (raise 99)) (interaction-environment))))`,
-			want: "(outer 99)",
 		},
 		{
 			name: "guard miss inside eval re-raises to a handler inside eval",
@@ -163,7 +191,6 @@ func TestNonContinuableForwardAcrossContexts(t *testing.T) {
 			               (lambda (e) (list 'outer e))
 			               (lambda () (guard (x ((string? x) 'str)) (raise 99))))
 			        (interaction-environment))`,
-			want: "(outer 99)",
 		},
 	}
 	for _, tc := range tcs {
@@ -176,8 +203,16 @@ func TestNonContinuableForwardAcrossContexts(t *testing.T) {
 			)
 			qt.Assert(t, err, qt.IsNil)
 			v, err := eng.EvalMultiple(context.Background(), tc.src)
-			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, v.SchemeString(), qt.Equals, tc.want)
+			if tc.want != "" {
+				qt.Assert(t, err, qt.IsNil)
+				qt.Assert(t, v.SchemeString(), qt.Equals, tc.want)
+				return
+			}
+			if err == nil {
+				t.Fatalf("handler return was forwarded as %s", v.SchemeString())
+			}
+			qt.Assert(t, strings.Contains(err.Error(), "non-continuable"), qt.IsTrue,
+				qt.Commentf("expected the non-continuable secondary exception, got: %v", err))
 		})
 	}
 }

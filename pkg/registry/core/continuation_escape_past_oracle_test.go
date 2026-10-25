@@ -502,25 +502,6 @@ func TestConsumerHandlerVisibility(t *testing.T) {
 	qt.Assert(t, result.SchemeString(), qt.Equals, "consumer-error")
 }
 
-// TestEscalateViaResumeNoSpuriousEscalate: a guard whose clauses miss re-raises via
-// raise-continuable, RESUMING the handler's handler-k continuation; that continuation
-// now spans the inline handler's non-continuable escalate frame, so the continuable
-// re-raise's result flows back through it. The escalate must NOT fire (the handler did
-// not return naturally, it was resumed) — the outer handler's value is the result.
-func TestEscalateViaResumeNoSpuriousEscalate(t *testing.T) {
-	t.Parallel()
-
-	const code = `
-(with-exception-handler
-  (lambda (e) (list 'caught e))
-  (lambda ()
-    (guard (inner ((symbol? inner) 'sym))
-      (raise 42))))`
-	result, err := testhelpers.RunSchemeCode(t, code)
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, result.SchemeString(), qt.Equals, "(caught 42)")
-}
-
 // TestTailPromotedOpUnderGuard: a promoted op (car / *) in TAIL position of a procedure
 // body, erroring under guard, must be CAUGHT — not crash. The Go-error bridge invokes
 // the in-place handler inline; building the escalate closure resolved the runtime env
