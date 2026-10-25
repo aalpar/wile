@@ -695,7 +695,7 @@ func TestSpineEndIsZeroWhenAbandoned(t *testing.T) {
 	}
 }
 
-func Test_List(t *testing.T) {
+func TestList(t *testing.T) {
 	tcs := []struct {
 		in     values.Tuple
 		out    values.Tuple
@@ -731,7 +731,7 @@ func Test_List(t *testing.T) {
 	}
 }
 
-func Test_List_MutationSemantics(t *testing.T) {
+func TestList_MutationSemantics(t *testing.T) {
 	// Block-allocated pairs must support set-car!/set-cdr! identically
 	// to individually allocated pairs.
 	c := qt.New(t)
@@ -757,7 +757,7 @@ func Test_List_MutationSemantics(t *testing.T) {
 	c.Assert(p2.Car(), valuestest.SchemeEquals, values.NewInteger(10))
 }
 
-func Test_FlipVectorToList(t *testing.T) {
+func TestFlipVectorToList(t *testing.T) {
 	tcs := []struct {
 		name string
 		in   *values.Vector
@@ -808,7 +808,7 @@ func Test_FlipVectorToList(t *testing.T) {
 	}
 }
 
-func Test_ForEach(t *testing.T) {
+func TestForEach(t *testing.T) {
 	list := values.List(values.NewInteger(1), values.NewInteger(2), values.NewInteger(3))
 	count := 0
 	sum := int64(0)
@@ -828,7 +828,7 @@ func Test_ForEach(t *testing.T) {
 	qt.Assert(t, sum, qt.Equals, int64(6))
 }
 
-func Test_ForEach_NonTuple(t *testing.T) {
+func TestForEach_NonTuple(t *testing.T) {
 	i := values.NewInteger(42)
 	tail, err := values.ForEach(context.TODO(), i, func(_ context.Context, _ int, _ bool, _ values.Value) error {
 		return fmt.Errorf("should not be called")
@@ -837,7 +837,7 @@ func Test_ForEach_NonTuple(t *testing.T) {
 	qt.Assert(t, tail, valuestest.SchemeEquals, i)
 }
 
-func Test_IsList(t *testing.T) {
+func TestIsList(t *testing.T) {
 	tests := []struct {
 		name string
 		in   values.Value
