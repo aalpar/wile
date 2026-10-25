@@ -152,10 +152,11 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	savedCont := p.cont
 	p.reconfigured = false
 
+	subContexts := p.counters.SubContextsCreated
 	err = fcls.fn(p)
 	if err != nil {
 		if !p.reconfigured && p.template == savedTemplate && p.cont == savedCont {
-			interrupt := p.interruptFailedCall(fcls, vs, err)
+			interrupt := p.interruptFailedCall(fcls, vs, err, subContexts)
 			if interrupt != nil {
 				return nil, interrupt
 			}

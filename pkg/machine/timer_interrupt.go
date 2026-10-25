@@ -20,6 +20,7 @@ import (
 	"slices"
 
 	"github.com/aalpar/wile/pkg/security"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -121,27 +122,57 @@ func (p *MachineContext) interruptPendingReturn() error {
 
 // interruptFailedCall is the eager recheck for a foreign call fcls, applied to vs,
 // that failed after a timer fired: the failure is the timeout's
-// (supersedingTimerInterrupt), typically a wait the cancellation woke or a
-// sub-context it stopped. It leaves p about to re-issue the call, fcls applied
-// again to its operands with the result returned to p.cont (applyToValuesCode),
-// and answers the interrupt, so a resume answers what the uninterrupted call would
-// have. Left on the call instruction, a resume re-ran the call on the operands it
-// had drained. The call is re-issued whole: what a sub-context it ran had done
-// (an eval'd body's side effects) is done again. Nil when the timer does not
-// claim err, which bridgeForeignError then handles.
-func (p *MachineContext) interruptFailedCall(fcls *ForeignClosure, vs []values.Value, err error) error {
+// (supersedingTimerInterrupt). It answers the interrupt with p left on a pending
+// call at the call's source, so a resume neither re-runs the call instruction on
+// the operands it had drained nor silently repeats work.
+//
+// A pure wait the cancellation woke (ErrOperationCancelled, and no sub-context
+// started during the call) ran no Scheme code, so the pending call re-issues it:
+// fcls applied again to its operands, which is the uninterrupted answer. A call
+// that ran Scheme in a sub-context (eval, load, a port procedure, a Go callback
+// into Scheme) cannot be re-issued without running that code twice, nor resumed
+// mid-way, since the sub-context is gone; its pending call raises ErrNotImplemented
+// instead, catchable at the resume. subContexts is p's SubContextsCreated before
+// the call. Nil when the timer does not claim err, which bridgeForeignError then
+// handles.
+func (p *MachineContext) interruptFailedCall(fcls *ForeignClosure, vs []values.Value, err error, subContexts uint64) error {
 	q := p.supersedingTimerInterrupt(err)
 	if q == nil {
 		return nil
 	}
-	p.template = &NativeTemplate{code: applyToValuesCode, literals: MultipleValues{fcls}}
+	if p.counters.SubContextsCreated == subContexts && errors.Is(err, werr.ErrOperationCancelled) {
+		// vs can be a drained eval stack's view (Stack.Drain), valid until the
+		// stack is next pushed. A call that left p where it found it has not pushed
+		// it, so vs still holds the operands; cloned, since the stack is pushed next.
+		p.pendCall(fcls, slices.Clone(vs))
+		return q
+	}
+	name := fcls.name
+	refuse := NewForeignClosure(p.ClosureEnv(), 0, false, func(CallContext) error {
+		return werr.WrapForeignErrorf(werr.ErrNotImplemented,
+			"with-timeout: cannot resume: the timeout interrupted %s after it ran Scheme code", name)
+	})
+	p.pendCall(refuse, nil)
+	return q
+}
+
+// pendCall leaves p about to apply applied to operands and return the result to
+// p.cont (applyToValuesCode), reporting the source of the instruction p is on,
+// the interrupted call's.
+func (p *MachineContext) pendCall(applied values.Value, operands []values.Value) {
+	tpl := &NativeTemplate{code: applyToValuesCode, literals: MultipleValues{applied}}
+	src := p.template.SourceAt(p.pc)
+	if src != nil {
+		tpl.sourceTable = []*syntax.SourceContext{nil, src}
+		tpl.sourceTableRefs = make(values.SourceTableRefs, len(applyToValuesCode))
+		for i := range tpl.sourceTableRefs {
+			tpl.sourceTableRefs[i] = 1
+		}
+	}
+	p.template = tpl
 	p.free = nil
 	p.pc = 0
-	// vs can be a drained eval stack's view (Stack.Drain), valid until the stack
-	// is next pushed. A call that left p where it found it has not pushed it, so
-	// vs still holds the operands; cloned, since the stack is pushed next.
-	p.SetValues(slices.Clone(vs)...)
-	return q
+	p.SetValues(operands...)
 }
 
 // ErrTimerInterrupt signals that a wall-clock timer has expired.

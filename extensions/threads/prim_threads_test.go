@@ -983,29 +983,37 @@ func TestTimerClaimsAHandlerFailure(t *testing.T) {
 	}
 }
 
-// TestResumedTimerReissuesTheInterruptedCall pins that a with-timeout handler's
-// continuation, resumed after the timer interrupted a foreign call that then failed
-// with the timeout (a wait the cancellation woke, an eval it stopped), re-issues
-// the call: the interrupt is taken with the call ready to run again, not on its
-// call instruction with the operands drained, which a resume re-ran ("expected 1
-// arguments, got 0", or a Stack.PullDrain underflow inside eval). The eval'd body
-// runs again from its start, as the answer's 0 shows. These rows use the wall
-// clock (WithTimerFiringAfter cannot fire inside a wait or a sub-context), but the
-// answer does not depend on when the 10 ms timer fires: the sleep outlasts it, and
-// the eval'd loop spins until the handler has run.
+// TestResumedTimerReissuesTheInterruptedCall pins what a with-timeout handler's
+// continuation does when resumed after the timer interrupted a foreign call that
+// then failed with the timeout. A pure wait the cancellation woke is re-issued,
+// the uninterrupted answer. A call that ran Scheme code in a sub-context (eval, a
+// port procedure) cannot be re-issued without running that code again, so the
+// resume raises a catchable error at the call and the code runs once. Taken on the
+// call instruction with its operands drained, every resume re-ran the call on
+// nothing ("expected 1 arguments, got 0", or a Stack.PullDrain underflow inside
+// eval). These rows use the wall clock (WithTimerFiringAfter cannot fire inside a
+// wait or a sub-context), but no answer depends on when the 10 ms timer fires: the
+// sleep outlasts it, and the Scheme code spins until the handler has run.
 func TestResumedTimerReissuesTheInterruptedCall(t *testing.T) {
+	// spin counts its runs in (vector-ref st 1) and spins until the handler sets
+	// (vector-ref st 0); caught runs the handler's resume under a guard.
+	const spin = `(begin (vector-set! st 1 (+ 1 (vector-ref st 1))) (let loop () (if (vector-ref st 0) 'done (loop))))`
+	const caught = `(lambda (k) (vector-set! st 0 #t) (guard (e ((error-object? e) (list 'caught (error-object-message e)))) (k)))`
+	path := filepath.Join(t.TempDir(), "port.txt")
 	tcs := []struct {
 		name string
 		code string
 		want string
 	}{
-		{"a woken wait", `(let ((fired #f))
+		{"a woken wait is re-issued", `(let ((fired #f))
   (list (with-timeout 10 (lambda (k) (set! fired #t) (k)) (lambda () (list 1 (thread-sleep! 0.5) 'woke))) fired))`,
 			"((1 #<void> woke) #t)"},
-		{"a stopped eval", `(define fired (vector #f))
-(with-timeout 10 (lambda (k) (vector-set! fired 0 #t) (list 'h (k)))
-  (lambda () (eval '(let loop ((i 0)) (if (vector-ref fired 0) (list 'done i) (loop (+ i 1)))) (interaction-environment))))`,
-			"(h (done 0))"},
+		{"an eval that ran Scheme code refuses", `(define st (vector #f 0))
+(list (with-timeout 10 ` + caught + ` (lambda () (eval '` + spin + ` (interaction-environment)))) (vector-ref st 1))`,
+			`((caught "with-timeout: cannot resume: the timeout interrupted eval after it ran Scheme code") 1)`},
+		{"a port procedure that ran Scheme code refuses", `(define st (vector #f 0))
+(list (with-timeout 10 ` + caught + ` (lambda () (call-with-output-file "` + path + `" (lambda (port) ` + spin + `)))) (vector-ref st 1))`,
+			`((caught "with-timeout: cannot resume: the timeout interrupted call-with-output-file after it ran Scheme code") 1)`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1017,6 +1025,16 @@ func TestResumedTimerReissuesTheInterruptedCall(t *testing.T) {
 			c.Assert(result.SchemeString(), qt.Equals, tc.want)
 		})
 	}
+	t.Run("the refusal names the call's source", func(t *testing.T) {
+		c := qt.New(t)
+		engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
+		c.Assert(err, qt.IsNil)
+		_, err = evalWithWatchdog(t, engine, `(define st (vector #f 0))
+(with-timeout 10 (lambda (k) (vector-set! st 0 #t) (k)) (lambda () (eval '`+spin+` (interaction-environment))))`, 5*time.Second)
+		c.Assert(errors.Is(err, werr.ErrNotImplemented), qt.IsTrue, qt.Commentf("%v", err))
+		// Column 68 of line 2 is the (eval ...) call.
+		c.Assert(err.Error(), qt.Contains, ":2:68:", qt.Commentf("%v", err))
+	})
 }
 
 // TestEscapeFromATimerEndsIt pins that leaving a with-timeout's extent by an escape

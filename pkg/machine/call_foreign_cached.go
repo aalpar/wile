@@ -79,10 +79,11 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 	savedTemplate := mc.template
 	savedCont := mc.cont
 	mc.reconfigured = false
+	subContexts := mc.counters.SubContextsCreated
 	err = fcls.fn(mc)
 	if err != nil {
 		if !mc.reconfigured && mc.template == savedTemplate && mc.cont == savedCont {
-			interrupt := mc.interruptFailedCall(fcls, vs, err)
+			interrupt := mc.interruptFailedCall(fcls, vs, err, subContexts)
 			if interrupt != nil {
 				return nil, interrupt
 			}
