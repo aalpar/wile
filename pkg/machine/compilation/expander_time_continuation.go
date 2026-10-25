@@ -879,8 +879,8 @@ func (p *ExpanderTimeContinuation) invokeERTransformer(
 	// anaphoric binder hygienic.
 	rawForm, spine := syntax.UnwrapSpine(inputForm)
 
-	// Create a fresh intro scope for this invocation. Unbound renamed symbols
-	// (like temporary names) get this scope to prevent variable capture.
+	// Create a fresh intro scope for this invocation. Every renamed symbol gets
+	// it, so a renamed binder cannot capture a pass-through identifier.
 	introScope := syntax.NewScopeWithLabel("intro")
 
 	// Create rename closure. It reads the DEFINITION-SITE store — that is what
@@ -918,7 +918,7 @@ func (p *ExpanderTimeContinuation) invokeERTransformer(
 	// p.env.PhaseLevel() rather than a constant: a macro defined at phase 0 and
 	// used inside a transformer body emits phase-1 code, and the rename follows
 	// the use.
-	renameCls := NewERRenameClosure(erTransformer.DefEnv().AtPhase(p.env.PhaseLevel()), introScope)
+	renameCls := NewERRenameClosure(erTransformer.DefEnv().AtPhase(p.env.PhaseLevel()), erTransformer.DefScopes(), introScope)
 
 	// Create compare closure (captures use-site env)
 	compareCls := NewERCompareClosure(p.env)

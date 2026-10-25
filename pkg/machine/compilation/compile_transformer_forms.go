@@ -80,7 +80,13 @@ func (p *CompileTimeContinuation) CompileERMacroTransformerExpr(ctctx CompileTim
 		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments,
 			"er-macro-transformer: lambda must accept exactly 3 arguments (form rename compare)"))
 	}
-	litIdx := p.template.MaybeAppendLiteral(NewERMacroTransformer(closure, p.env))
+	// The keyword's scopes are the definition site's context (ERMacroTransformer).
+	// A nil keyword (a head that is not an identifier) leaves them empty.
+	var defScopes syntax.Scopes
+	if ctctx.keyword != nil {
+		defScopes = ctctx.keyword.Scopes()
+	}
+	litIdx := p.template.MaybeAppendLiteral(NewERMacroTransformer(closure, p.env, defScopes))
 	p.AppendOperations(machine.NewOperationLoadLiteralByLiteralIndexImmediate(litIdx))
 	return nil
 }

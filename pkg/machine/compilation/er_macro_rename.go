@@ -31,21 +31,27 @@ import (
 // a name means. See invokeERTransformer for the contract and what the phase-up
 // read was measured to do.
 //
-// introScope is a fresh scope unique to this macro invocation, used to ensure
-// that renamed symbols not found in defEnv (e.g., temporary names like 'tmp)
-// get a unique identity that prevents variable capture.
+// defScopes is the er-macro-transformer keyword's scope set
+// (ERMacroTransformer.DefScopes) and introScope is a fresh scope unique to this
+// invocation. Every rename carries both: (datum->syntax #'k sym) followed by the
+// introduction flip, as the Scheme layer spells it.
+//
 // The returned closure takes one symbol or identifier. A bare symbol becomes a
-// SyntaxSymbol resolving to the definition-site binding, cached per name so
-// that (eq? (rename 'x) (rename 'x)) is #t. An identifier is returned
-// unchanged, as the Scheme layer's (datum->syntax #'k id) returns it, and never
-// enters the cache: its scopes are its meaning, and re-resolving its spelling
-// at the definition site would turn a use-site local into the definition-site
-// global of the same name.
+// SyntaxSymbol cached per name so that (eq? (rename 'x) (rename 'x)) is #t. An
+// identifier is returned unchanged, as the Scheme layer's (datum->syntax #'k id)
+// returns it, and never enters the cache: its scopes are its meaning, and
+// re-resolving its spelling at the definition site would turn a use-site local
+// into the definition-site global of the same name.
 func NewERRenameClosure(
 	defEnv *environment.EnvironmentFrame,
+	defScopes syntax.Scopes,
 	introScope *syntax.Scope,
 ) *machine.ForeignClosure {
 	cache := make(map[string]*syntax.SyntaxSymbol)
+	scopes := defScopes
+	if introScope != nil {
+		scopes = scopes.Add(introScope)
+	}
 
 	fn := func(mc machine.CallContext) error {
 		switch v := mc.Arg(0).(type) {
@@ -59,7 +65,7 @@ func NewERRenameClosure(
 				mc.SetValue(cached)
 				return nil
 			}
-			result := resolveRenamedSymbol(defEnv, v, introScope)
+			result := renameSymbol(defEnv, v, scopes)
 			cache[v.Key] = result
 			mc.SetValue(result)
 			return nil
@@ -76,71 +82,30 @@ func NewERRenameClosure(
 	return cls
 }
 
-// resolveRenamedSymbol creates a SyntaxSymbol that resolves to the
-// definition-site binding for the given symbol.
-// For symbols not found in any definition-site environment, the introScope
-// is added to ensure the renamed identifier is distinct from any use-site
-// binding with the same name, preventing variable capture.
-func resolveRenamedSymbol(defEnv *environment.EnvironmentFrame, sym *values.Symbol, introScope *syntax.Scope) *syntax.SyntaxSymbol {
-	// Definition-site lookup, at defEnv's own phase — the phase the output lands
-	// in. The ranked probe is a candidate only against slots at exactly that
-	// phase; hermeticity is that key disjointness, not a parent link —
-	// createPhaseEnv (environment/phase_registry.go) mints a view with no lexical
-	// parent at all.
-	//
-	// The comment this replaces was wrong on both halves, and both were measured.
-	// It said the probe reaches base bindings "via the ambient T3 tier": Stage A
-	// deleted that tier (probeTiersLocked's tierOf has no ambient arm), and the
-	// base is reached through a BULK ROW instead, which resolves to the phase-0
-	// slot's own *Binding rather than to a copy. And it said level-0 user and
-	// import bindings are "intentionally invisible": true of the frame the caller
-	// used to pass (a phase-0 (define (helper) 'def) probed nil from phase 1, and
-	// the ER test that looked like a counterexample was reaching the global through
-	// the intro-scope branch below, not through this one), but the invisibility was
-	// the defect rather than the design — a rename of a phase-0 name is meant to
-	// find it.
-	bnd := defEnv.GetBinding(sym, syntax.AllScopes())
-	if bnd != nil {
-		return symbolWithBindingScopes(sym.Key, bnd, defEnv)
-	}
-
-	// Not found — return symbol with the intro scope. This ensures that
-	// renamed temporaries like (rename 'tmp) are distinct from any use-site
-	// binding of 'tmp', providing ER macro hygiene for introduced identifiers.
+// renameSymbol builds the renamed identifier for sym: its scopes are the
+// definition site's plus the invocation's intro scope, so it resolves wherever
+// the definition site's name does (a binding's scopes are a subset of the
+// site's, and a fresh scope removes no candidate) and, used as a binder, binds
+// only references that carry the intro scope, which a pass-through identifier
+// does not. A rename used to drop the intro scope when the name was bound at
+// the definition site, and (let ((,(r 'tmp) ,a)) …) then captured the user's tmp.
+//
+// The pin is for the store the use site cannot see: a library macro's rename of
+// one of the library's own globals. It is resolved under the identifier's own
+// scopes, at defEnv's phase, the phase the output lands in; a name the
+// definition site's globals do not bind (a temporary, or a macro, whose slot is
+// a phase up) gets none and resolves at the use site by its scopes alone.
+func renameSymbol(defEnv *environment.EnvironmentFrame, sym *values.Symbol, scopes syntax.Scopes) *syntax.SyntaxSymbol {
 	sctx := syntax.NewSourceContext(
 		"", "",
 		syntax.NewSourceIndexes(0, 0, 0),
 		syntax.NewSourceIndexes(0, 0, 0),
 	)
-	if introScope != nil {
-		sctx = sctx.WithScope(introScope)
-	}
-	return syntax.NewSyntaxSymbol(sym.Key, sctx)
-}
-
-// symbolWithBindingScopes creates a SyntaxSymbol with the binding's scopes
-// and optionally a ResolvedBinding for cross-library hygiene.
-func symbolWithBindingScopes(key string, bnd *environment.Binding, env *environment.EnvironmentFrame) *syntax.SyntaxSymbol {
-	bindingScopes := bnd.Scopes()
-	sctx := syntax.NewSourceContext(
-		"", "",
-		syntax.NewSourceIndexes(0, 0, 0),
-		syntax.NewSourceIndexes(0, 0, 0),
-	)
-	// Iterated in the set's canonical (descending-id) order. The order this loop
-	// sees used to be the binding's STORED order and WithScope prepended, so the
-	// result was that order reversed; now both sides are canonical, so the loop's
-	// order and the result's order are the same thing and the reversal is gone.
-	// Set membership is all any consumer reads, so no answer moves.
-	for scope := range bindingScopes.All() {
-		sctx = sctx.WithScope(scope)
-	}
-	result := syntax.NewSyntaxSymbol(key, sctx)
-
-	gi := env.GetGlobalIndex(values.NewSymbol(key))
+	sctx.Scopes = scopes
+	q := syntax.NewSyntaxSymbol(sym.Key, sctx)
+	gi := defEnv.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(scopes))
 	if gi != nil {
-		result = result.WithResolvedBinding(gi)
+		q = q.WithResolvedBinding(gi)
 	}
-
-	return result
+	return q
 }

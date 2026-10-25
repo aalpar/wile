@@ -17,6 +17,7 @@ package compilation
 import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 )
 
@@ -31,15 +32,23 @@ var _ values.Value = (*ERMacroTransformer)(nil)
 // rung up the tower, and the output lands one rung down. invokeERTransformer
 // re-phases it to the expansion under way before handing it to the rename
 // closure.
+//
+// defScopes is the scope set of the er-macro-transformer keyword as written,
+// the Go spelling of the Scheme shim's #'k: it is the definition site's lexical
+// context, so a rename carries it and reaches what the name means there,
+// including a body-local macro, which the store keys by the body's scopes and
+// which no frame lookup by name can tell from another body's.
 type ERMacroTransformer struct {
-	closure *machine.MachineClosure
-	defEnv  *environment.EnvironmentFrame
+	closure   *machine.MachineClosure
+	defEnv    *environment.EnvironmentFrame
+	defScopes syntax.Scopes
 }
 
-func NewERMacroTransformer(closure *machine.MachineClosure, defEnv *environment.EnvironmentFrame) *ERMacroTransformer {
+func NewERMacroTransformer(closure *machine.MachineClosure, defEnv *environment.EnvironmentFrame, defScopes syntax.Scopes) *ERMacroTransformer {
 	return &ERMacroTransformer{
-		closure: closure,
-		defEnv:  defEnv,
+		closure:   closure,
+		defEnv:    defEnv,
+		defScopes: defScopes,
 	}
 }
 
@@ -49,6 +58,11 @@ func (p *ERMacroTransformer) Closure() *machine.MachineClosure {
 
 func (p *ERMacroTransformer) DefEnv() *environment.EnvironmentFrame {
 	return p.defEnv
+}
+
+// DefScopes is the er-macro-transformer keyword's scope set (see the type doc).
+func (p *ERMacroTransformer) DefScopes() syntax.Scopes {
+	return p.defScopes
 }
 
 func (p *ERMacroTransformer) IsVoid() bool {

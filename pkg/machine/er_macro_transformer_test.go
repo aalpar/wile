@@ -21,6 +21,7 @@ import (
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/machine/compilation"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 
 	qt "github.com/frankban/quicktest"
@@ -33,7 +34,7 @@ func TestERMacroTransformer_IsValue(t *testing.T) {
 	tpl := machine.NewNativeTemplate(3, 0, false)
 	cls := machine.NewClosureWithTemplate(tpl, env)
 
-	ert := compilation.NewERMacroTransformer(cls, env)
+	ert := compilation.NewERMacroTransformer(cls, env, syntax.Scopes{})
 
 	// Satisfies values.Value
 	var v values.Value = ert
@@ -53,8 +54,8 @@ func TestERMacroTransformer_EqualTo(t *testing.T) {
 	tpl := machine.NewNativeTemplate(3, 0, false)
 	cls := machine.NewClosureWithTemplate(tpl, env)
 
-	ert1 := compilation.NewERMacroTransformer(cls, env)
-	ert2 := compilation.NewERMacroTransformer(cls, env)
+	ert1 := compilation.NewERMacroTransformer(cls, env, syntax.Scopes{})
+	ert2 := compilation.NewERMacroTransformer(cls, env, syntax.Scopes{})
 
 	// Identity semantics
 	c.Assert(ert1.EqualTo(ert1), qt.IsTrue)
