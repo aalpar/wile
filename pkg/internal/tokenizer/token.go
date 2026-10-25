@@ -15,10 +15,7 @@
 package tokenizer
 
 import (
-	"fmt"
-
 	"github.com/aalpar/wile/pkg/syntax"
-	"github.com/aalpar/wile/pkg/values"
 )
 
 // Token is the interface for tokenizer output tokens.
@@ -101,36 +98,4 @@ func (p *SimpleToken) HasHashDigit() bool {
 // that to a hex one (makeExactLiteral, pkg/parser).
 func (p *SimpleToken) Radix() int {
 	return p.rad
-}
-
-// SchemeString returns the Scheme representation of the token.
-func (p *SimpleToken) SchemeString() string {
-	q := fmt.Sprintf("<simple-token %q %d:%d %d>", p.src, p.istart, p.iend, p.typ)
-	return q
-}
-
-// IsVoid returns true if the token is nil.
-func (p *SimpleToken) IsVoid() bool {
-	return p == nil
-}
-
-// EqualTo returns true if this token equals the given value.
-func (p *SimpleToken) EqualTo(v values.Value) bool {
-	other, ok := v.(*SimpleToken)
-	if !ok {
-		return false
-	}
-	if p.typ != other.typ {
-		return false
-	}
-	if p.istart != other.istart {
-		return false
-	}
-	if p.iend != other.iend {
-		return false
-	}
-	if p.src != other.src {
-		return false
-	}
-	return true
 }

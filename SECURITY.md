@@ -58,11 +58,9 @@ behavior, and review the CHANGELOG when upgrading.
 
 ### Build toolchain
 
-`go.mod` declares a minimum of Go 1.24, but building Wile with **Go 1.26.4 or
-later** is recommended: Go 1.26.3 and earlier ship stdlib packages with
-reachable vulnerabilities. The published release binaries are built with a
-patched toolchain; embedders compiling Wile into their own programs should use
-Go 1.26.4+ to avoid inheriting those CVEs.
+`go.mod` declares a minimum of Go 1.27, which is past the Go 1.26.3-and-earlier
+toolchains whose stdlib packages carry reachable vulnerabilities. Embedders
+compiling Wile into their own programs should stay on a patched Go 1.27 release.
 
 ## Security Model
 

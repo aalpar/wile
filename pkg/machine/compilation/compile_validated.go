@@ -30,7 +30,7 @@ import (
 // case-lambda, dynamic-wind, apply, with-continuation-mark, let, let*,
 // letrec, letrec* (binding forms compiled in compile_let.go).
 //
-// Extension forms (define-syntax, import, include, syntax-case, etc.) pass through
+// Extension forms (define-syntax, import, a malformed or resolver-less include, syntax-case, etc.) pass through
 // validation as ValidatedLiteral and are compiled via the syntaxCompiler adapter
 // in register.go, whose init() registers each entry with forms.RegisterCompiler.
 //
@@ -106,7 +106,7 @@ func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext,
 		return p.CompileSymbol(ctctx, v.Symbol)
 	case *validate.ValidatedLiteral:
 		// A bare self-eval literal has no compiler and self-evaluates. A Tier-2
-		// passthrough form (include, import) is the SAME Go type but
+		// passthrough form (a malformed or resolver-less include, import) is the SAME Go type but
 		// carries a FormName a compiler claims; it must be compiled, never folded.
 		// isSelfEvaluatingLiteral is the single predicate shared with the if-fold
 		// (isLiteralFalse), so the two cannot disagree about what a literal is.
@@ -210,7 +210,7 @@ func CompileValidatedIf(p *CompileTimeContinuation, ctctx CompileTimeCallContext
 // self-evaluating datum rather than a Tier-2 passthrough form.
 //
 // *validate.ValidatedLiteral carries BOTH: real literals (5, #f, "s") and
-// passthrough forms (include, import), whose FormName is
+// passthrough forms (a malformed or resolver-less include, import), whose FormName is
 // overwritten with the keyword during validation. The only thing that separates
 // them is whether a compiler claims the FormName — which is exactly the question
 // compileValidated asks at dispatch. Asking the identical question here is what

@@ -904,8 +904,9 @@ func createTransformerClosure(env *environment.EnvironmentFrame, clauses []*Synt
 	)
 	template.Optimize()
 
-	// Create closure with a local environment frame for the input parameter
-	// This is required because machine.MachineContext.Apply expects LocalEnvironment() to be non-nil
+	// Create closure with a one-slot local environment frame: the slot holds the
+	// input form the transformer is applied to. (Apply itself tolerates a nil
+	// LocalEnvironment.)
 	lenv := environment.NewLocalEnvironment(1) // 1 parameter: the input form
 	closureEnv := environment.NewEnvironmentFrameWithParent(lenv, env)
 	return machine.NewClosureWithTemplate(template, closureEnv), nil
