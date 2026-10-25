@@ -15,6 +15,7 @@
 package values
 
 import (
+	"math"
 	"math/big"
 	"math/rand"
 	"strings"
@@ -77,4 +78,76 @@ func TestLongDecimalFractionRoundTrips(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestOperandPrecision pins the operand-max working precision: the widest
+// BigFloat operand or BigFloat part, the default when none carries one (an exact
+// operand, a NaN), and the cap for a derived precision past the literal bound.
+func TestOperandPrecision(t *testing.T) {
+	at := func(prec uint) *BigFloat {
+		return NewBigFloat(new(big.Float).SetPrec(prec).SetInt64(3))
+	}
+	tcs := []struct {
+		name string
+		ns   []Value
+		want uint
+	}{
+		{"no operand", nil, DefaultBigFloatPrecision},
+		{"exact operands only", []Value{NewInteger(1), NewRationalFromRat(big.NewRat(1, 3))}, DefaultBigFloatPrecision},
+		{"float operand", []Value{NewFloat(1.5)}, DefaultBigFloatPrecision},
+		{"nan carries no precision", []Value{NewBigFloatNaN()}, DefaultBigFloatPrecision},
+		{"widest bigfloat", []Value{at(300), NewInteger(2), at(500)}, 500},
+		{"narrow bigfloat", []Value{at(100)}, 100},
+		{"bigcomplex bigfloat part", []Value{NewBigComplex(NewRationalFromRat(big.NewRat(1, 3)), at(700))}, 700},
+		{"bigcomplex exact parts", []Value{NewBigComplex(NewBigIntegerFromInt64(1), NewBigIntegerFromInt64(2))}, DefaultBigFloatPrecision},
+		{"capped", []Value{at(MaxBigFloatLiteralPrecision + 1)}, MaxBigFloatLiteralPrecision},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.Assert(t, OperandPrecision(tc.ns...), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestPromoteToBigFloatPair pins that arithmetic converts an operand at its
+// BigFloat partner's precision, in either operand order.
+func TestPromoteToBigFloatPair(t *testing.T) {
+	wide := NewBigFloat(new(big.Float).SetPrec(500).SetInt64(1))
+	third := NewRationalFromRat(big.NewRat(1, 3))
+	tcs := []struct {
+		name string
+		p, o Number
+	}{
+		{"bigfloat receiver", wide, third},
+		{"exact receiver", third, wide},
+		{"integer receiver", NewInteger(7), wide},
+		{"float receiver", NewFloat(0.1), wide},
+		{"bigfloat receiver float operand", wide, NewFloat(0.1)},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			a, b := promoteToBigFloatPair(tc.p, tc.o)
+			qt.Assert(t, a.(*BigFloat).value.Prec(), qt.Equals, uint(500))
+			qt.Assert(t, b.(*BigFloat).value.Prec(), qt.Equals, uint(500))
+		})
+	}
+	nan, x := promoteToBigFloatPair(NewBigFloatNaN(), third)
+	qt.Assert(t, nan.IsNaN(), qt.IsTrue)
+	qt.Assert(t, x.(*BigFloat).value.Prec(), qt.Equals, uint(DefaultBigFloatPrecision))
+	_, f := promoteToBigFloatPair(wide, NewFloat(math.NaN()))
+	qt.Assert(t, f.IsNaN(), qt.IsTrue)
+}
+
+// TestBigFloatSqrtArms pins (*BigFloat).Sqrt's NaN arm, which answers before the
+// sign test (a NaN's zero value would otherwise read as zero), and its
+// precision, the operand's own on both the real and the branch-cut arm.
+func TestBigFloatSqrtArms(t *testing.T) {
+	nan := NewBigFloatNaN()
+	qt.Assert(t, nan.Sqrt().IsNaN(), qt.IsTrue)
+	pos := NewBigFloat(new(big.Float).SetPrec(500).SetInt64(2))
+	qt.Assert(t, pos.Sqrt().(*BigFloat).value.Prec(), qt.Equals, uint(500))
+	neg := NewBigFloat(new(big.Float).SetPrec(500).SetInt64(-2))
+	root := neg.Sqrt().(*BigComplex)
+	qt.Assert(t, root.Imag().(*BigFloat).value.Prec(), qt.Equals, uint(500))
+	qt.Assert(t, root.Imag().(*BigFloat).value.Cmp(pos.Sqrt().(*BigFloat).value), qt.Equals, 0)
 }

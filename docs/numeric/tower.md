@@ -70,6 +70,15 @@ The rule, stated once: **contagion is a promotion question and the table owns it
 
 Big* arithmetic remains significantly slower (heap-allocated, no hardware acceleration), so keeping ordinary float arithmetic out of it matters.
 
+**The precision of a BigFloat result is the operands' (operand-max).** Every operation computes at the widest precision among its `BigFloat` operands, counting the `BigFloat` parts of a `BigComplex` (`values.OperandPrecision`):
+
+- an exact operand meeting a `BigFloat` converts at that `BigFloat`'s precision, exactly when it fits and rounded otherwise (`promoteToBigFloatPair` in `pkg/values/promotion.go`; the unary `→BigFloat` promoters are not used by arithmetic);
+- the transcendentals (`exp`, `log`, the trigonometric family, one- and two-argument `atan`, `expt`, `magnitude`, `angle`, a `BigComplex`'s `sqrt`) take the same precision as their working precision;
+- `DefaultBigFloatPrecision` (256 bits) applies only when no operand carries a precision: `(exp 1/3)`, `(sqrt 2/3)`. The exception is `sqrt` of a non-square `BigInteger`, which rounds at its bit length when that is wider, so a wide integer keeps its digits;
+- the transcendental working precision is capped at `MaxBigFloatLiteralPrecision` (65536 bits). Only a derived value can exceed it, since a literal that wide is refused, and the kernels, which cannot be interrupted, take about 2.5 s at the cap and grow superlinearly past it. Arithmetic and `sqrt` of a `BigFloat` are not capped.
+
+So beside a 256-bit `#m0`, the 333-bit `(+ (expt 10 100) 1)` still rounds, and `(exact (+ #m0 (+ (expt 10 100) 1)))` is `10^100`; beside a 403-bit `BigFloat` it converts exactly.
+
 ### Arithmetic Promotes; Comparison Does Not
 
 Contagion is a property of ARITHMETIC, not of comparison. Arithmetic brings two operands into a common kind via `values.promotionTable`. **Comparison does not promote at all.**

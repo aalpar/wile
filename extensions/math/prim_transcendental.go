@@ -79,7 +79,7 @@ func rescueBigComplex(mc machine.CallContext, arg values.Value, result complex12
 	if !ok {
 		return false
 	}
-	ro, io := bigFn(re, im, values.DefaultBigFloatPrecision)
+	ro, io := bigFn(re, im, values.OperandPrecision(arg))
 	if ro.IsInf() || io.IsInf() {
 		// Genuinely infinite (e.g. log(0) = −∞), not a float64 overflow of a finite
 		// value — keep the float64 result rather than reboxing an infinity.
@@ -111,7 +111,7 @@ func makeComplexPrimitive(name string, fn func(complex128) complex128, bigRealFn
 		bf := numberToBigFloat(arg)
 		if bigRealFn != nil && isUnboundedReal(arg) && bf != nil && !bf.IsInf() {
 			// A nil return declines (e.g. asin/acos of |x|>1 is complex); fall through.
-			q := bigRealFn(bf, values.DefaultBigFloatPrecision)
+			q := bigRealFn(bf, values.OperandPrecision(arg))
 			if q != nil {
 				mc.SetValue(values.NewBigFloat(q))
 				return nil
@@ -153,7 +153,7 @@ func PrimExp(mc machine.CallContext) error {
 		return nil
 	}
 	if isUnboundedReal(arg) {
-		mc.SetValue(values.NewBigFloat(values.BigExp(numberToBigFloat(arg), values.DefaultBigFloatPrecision)))
+		mc.SetValue(values.NewBigFloat(values.BigExp(numberToBigFloat(arg), values.OperandPrecision(arg))))
 		return nil
 	}
 	z, err := helpers.ToComplex128(arg)
@@ -193,7 +193,7 @@ func PrimLog(mc machine.CallContext) error {
 		if isUnboundedReal(o) {
 			ob := numberToBigFloat(o)
 			if ob.Sign() > 0 {
-				mc.SetValue(values.NewBigFloat(values.BigLog(ob, values.DefaultBigFloatPrecision)))
+				mc.SetValue(values.NewBigFloat(values.BigLog(ob, values.OperandPrecision(o))))
 				return nil
 			}
 		}
@@ -216,21 +216,22 @@ func PrimLog(mc machine.CallContext) error {
 	if !values.IsEmptyList(restAfter) {
 		return werr.WrapForeignErrorf(werr.ErrWrongNumberOfArguments, "log: expected 1 or 2 arguments")
 	}
-	// log base b: big path when the argument is unbounded-positive-real and the
-	// base is positive-real (a bounded base is converted exactly).
-	if isUnboundedReal(o) {
-		ob := numberToBigFloat(o)
-		bb := numberToBigFloat(baseVal)
+	// log base b: big path when either operand is unbounded and both are
+	// positive reals, at the operands' precision.
+	if isUnboundedReal(o) || isUnboundedReal(baseVal) {
+		prec := values.OperandPrecision(o, baseVal)
+		ob := numberToBigFloatAt(o, prec)
+		bb := numberToBigFloatAt(baseVal, prec)
 		if ob != nil && ob.Sign() > 0 && bb != nil && bb.Sign() > 0 {
-			lo := bigLogOfPositive(ob)
-			lb := bigLogOfPositive(bb)
+			lo := bigLogOfPositive(ob, prec)
+			lb := bigLogOfPositive(bb, prec)
 			zeroOverZero := lo.Sign() == 0 && lb.Sign() == 0 // (log 1 1)
 			if zeroOverZero || (lo.IsInf() && lb.IsInf()) {
 				// big.Float.Quo panics on exactly these two; IEEE answers NaN.
 				mc.SetValue(values.NewBigFloatNaN())
 				return nil
 			}
-			mc.SetValue(values.NewBigFloat(new(big.Float).SetPrec(values.DefaultBigFloatPrecision).Quo(lo, lb)))
+			mc.SetValue(values.NewBigFloat(new(big.Float).SetPrec(prec).Quo(lo, lb)))
 			return nil
 		}
 	}
@@ -275,7 +276,7 @@ func PrimAtan(mc machine.CallContext) error {
 				mc.SetValue(values.NewBigFloatNaN())
 				return nil
 			}
-			mc.SetValue(values.NewBigFloat(values.BigAtan(bf, values.DefaultBigFloatPrecision)))
+			mc.SetValue(values.NewBigFloat(values.BigAtan(bf, values.OperandPrecision(o))))
 			return nil
 		}
 		bc, isBigComplex := o.(*values.BigComplex)
@@ -288,7 +289,7 @@ func PrimAtan(mc machine.CallContext) error {
 			reF, _ := reBig.Float64()
 			imF, _ := imBig.Float64()
 			if math.IsInf(reF, 0) || math.IsInf(imF, 0) {
-				reOut, imOut := values.BigComplexAtan(reBig, imBig, values.DefaultBigFloatPrecision)
+				reOut, imOut := values.BigComplexAtan(reBig, imBig, values.OperandPrecision(bc))
 				if imOut.Sign() == 0 {
 					mc.SetValue(values.NewBigFloat(reOut))
 				} else {
@@ -319,10 +320,11 @@ func PrimAtan(mc machine.CallContext) error {
 	// A NaN on either side (nil here) takes the float64 path, which answers NaN
 	// or raises for a non-real operand.
 	if isUnboundedReal(o) || isUnboundedReal(xVal) {
-		y := numberToBigFloat(o)
-		x := numberToBigFloat(xVal)
+		prec := values.OperandPrecision(o, xVal)
+		y := numberToBigFloatAt(o, prec)
+		x := numberToBigFloatAt(xVal, prec)
 		if y != nil && x != nil {
-			mc.SetValue(values.NewBigFloat(values.BigAtan2(y, x, values.DefaultBigFloatPrecision)))
+			mc.SetValue(values.NewBigFloat(values.BigAtan2(y, x, prec)))
 			return nil
 		}
 	}
@@ -371,13 +373,13 @@ func realBigFloat(r complex128) (values.Value, bool) {
 	return values.NewBigFloatFromFloat64(re), true
 }
 
-// bigLogOfPositive is BigLog extended to +Inf, which logAt cannot reduce
-// (its mantissa split divides Inf by Inf): ln(+Inf) = +Inf.
-func bigLogOfPositive(x *big.Float) *big.Float {
+// bigLogOfPositive is BigLog at prec extended to +Inf, which logAt cannot
+// reduce (its mantissa split divides Inf by Inf): ln(+Inf) = +Inf.
+func bigLogOfPositive(x *big.Float, prec uint) *big.Float {
 	if x.IsInf() {
-		return new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetInf(false)
+		return new(big.Float).SetPrec(prec).SetInf(false)
 	}
-	return values.BigLog(x, values.DefaultBigFloatPrecision)
+	return values.BigLog(x, prec)
 }
 
 // isUnboundedReal reports whether v is a real number whose range or precision
@@ -494,7 +496,7 @@ func PrimSqrt(mc machine.CallContext) error {
 		// at the operand's bit length when that is wider, so a wide operand
 		// keeps its digits; both signs share the rule and so the digits.
 		f := new(big.Float).SetInt(bi)
-		mc.SetValue(realBigSqrt(f, max(f.Prec(), values.DefaultBigFloatPrecision)))
+		mc.SetValue(values.BigSqrt(f, max(f.Prec(), values.DefaultBigFloatPrecision)))
 	case *values.Float:
 		if v.Value < 0 {
 			mc.SetValue(values.NewComplex(cmplx.Sqrt(complex(v.Value, 0))))
@@ -523,11 +525,11 @@ func PrimSqrt(mc machine.CallContext) error {
 		}
 		// The quotient carries guard bits so the root rounds once, at the default.
 		f := new(big.Float).SetPrec(values.DefaultBigFloatPrecision + 64).SetRat(v.Rat())
-		mc.SetValue(realBigSqrt(f, values.DefaultBigFloatPrecision))
+		mc.SetValue(values.BigSqrt(f, values.DefaultBigFloatPrecision))
 	case *values.Complex:
 		mc.SetValue(values.NewComplex(complexSqrtR7RS(v.Value)))
 	case *values.BigFloat:
-		mc.SetValue(bigFloatSqrt(v))
+		mc.SetValue(v.Sqrt())
 	case *values.BigComplex:
 		// Compute at big.Float precision; truncating to complex128 first
 		// overflows to +inf when a component exceeds the float64 range.
@@ -536,50 +538,6 @@ func PrimSqrt(mc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrNotANumber, "sqrt: expected a number but got %T", o)
 	}
 	return nil
-}
-
-// bigFloatSqrt returns the square root of bf at bf's own precision.
-//
-// The order of the tests is the fix. A NaN BigFloat carries a nan flag over a
-// zero value, so Sign reports 0 for it and a sign test run first would answer
-// as if it were zero; NaN therefore goes first. The sign test precedes any
-// handling of infinity, and there is none: -Inf is negative, so it takes the
-// branch cut to 0.0+inf.0i, as (sqrt -inf.0) does on the Float arm and in
-// Racket and Chez, and big.Float.Sqrt maps +Inf to +Inf. Short-circuiting an
-// infinite operand before the sign test would answer -inf.0 for -Inf, which
-// is wrong.
-//
-// realBigSqrt builds the negative arm directly rather than calling
-// (*BigComplex).Sqrt, which opens at DefaultBigFloatPrecision and would
-// return fewer digits than the positive arm for an operand wider than that.
-//
-// Precision policy: sqrt keeps a BigFloat operand's precision (big.Float.Sqrt
-// rounds at the receiver's); a BigInteger operand rounds at
-// max(bit length, DefaultBigFloatPrecision), and a Rational, which has none,
-// at DefaultBigFloatPrecision. exp, log, atan and the
-// makeComplexPrimitive family compute at DefaultBigFloatPrecision, as does the
-// BigComplex arm of sqrt.
-func bigFloatSqrt(bf *values.BigFloat) values.Number {
-	if bf.IsNaN() {
-		return bf
-	}
-	f := bf.BigFloatValue()
-	return realBigSqrt(f, f.Prec())
-}
-
-// realBigSqrt returns the square root of x rounded to prec bits: a BigFloat, or
-// for a negative x the branch-cut value 0+sqrt(|x|)i as a BigComplex with
-// BigFloat parts. It is the kernel shared by the BigFloat, BigInteger and
-// Rational arms of sqrt, so sqrt(-n) and sqrt(n) carry the same digits.
-func realBigSqrt(x *big.Float, prec uint) values.Number {
-	if x.Sign() < 0 {
-		root := new(big.Float).SetPrec(prec).Sqrt(new(big.Float).Abs(x))
-		return values.NewBigComplexFromBigFloats(
-			values.NewBigFloat(new(big.Float).SetPrec(prec)),
-			values.NewBigFloat(root),
-		)
-	}
-	return values.NewBigFloat(new(big.Float).SetPrec(prec).Sqrt(x))
 }
 
 // complexSqrtR7RS computes square root with R7RS branch cut semantics.
@@ -725,22 +683,6 @@ func isRealKind(n values.Number) bool {
 	}
 }
 
-// bigFloatOperandPrecision is the widest precision among the BigFloat operands,
-// or DefaultBigFloatPrecision when none carries one.
-func bigFloatOperandPrecision(ns ...values.Number) uint {
-	var q uint
-	for _, n := range ns {
-		bf, ok := n.(*values.BigFloat)
-		if ok && !bf.IsNaN() {
-			q = max(q, bf.BigFloatValue().Prec())
-		}
-	}
-	if q == 0 {
-		return values.DefaultBigFloatPrecision
-	}
-	return q
-}
-
 // bigFloatExpt computes base^exp in big.Float for real operands at least one of
 // which is a BigFloat, rounded to the widest BigFloat operand's precision.
 //
@@ -753,7 +695,7 @@ func bigFloatOperandPrecision(ns ...values.Number) uint {
 // A negative base with a non-integer exponent has a complex value and keeps the
 // float64 complex path, as on the Float arm.
 func bigFloatExpt(base, exp values.Number) values.Number {
-	prec := bigFloatOperandPrecision(base, exp)
+	prec := values.OperandPrecision(base, exp)
 	wp := prec + 64
 	x := numberToBigFloatAt(base, wp)
 	y := exponentToBigFloat(exp, wp)

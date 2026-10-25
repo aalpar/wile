@@ -73,11 +73,12 @@ func PrimMakeRectangular(mc machine.CallContext) error {
 	_, iIsBigFloat := i.(*values.BigFloat)
 
 	if rIsBigFloat || iIsBigFloat {
-		realPart, err := toBigComplexPart(r, "make-rectangular")
+		prec := values.OperandPrecision(r, i)
+		realPart, err := toBigComplexPart(r, prec, "make-rectangular")
 		if err != nil {
 			return err
 		}
-		imagPart, err := toBigComplexPart(i, "make-rectangular")
+		imagPart, err := toBigComplexPart(i, prec, "make-rectangular")
 		if err != nil {
 			return err
 		}
@@ -158,7 +159,9 @@ func isRealNumber(v values.Value) bool {
 	}
 }
 
-func toBigComplexPart(v values.Value, name string) (values.Number, error) {
+// toBigComplexPart converts a real to a part of an inexact BigComplex whose
+// other part is a BigFloat; a Rational rounds at prec, that part's precision.
+func toBigComplexPart(v values.Value, prec uint, name string) (values.Number, error) {
 	switch n := v.(type) {
 	case *values.BigInteger:
 		return n, nil
@@ -169,7 +172,7 @@ func toBigComplexPart(v values.Value, name string) (values.Number, error) {
 	case *values.Float:
 		return values.NewBigFloatFromFloat64(n.Value), nil
 	case *values.Rational:
-		return values.NewBigFloat(new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetRat(n.Rat())), nil
+		return values.NewBigFloat(new(big.Float).SetPrec(prec).SetRat(n.Rat())), nil
 	default:
 		return nil, werr.WrapForeignErrorf(werr.ErrNotAReal, "%s: expected a real number but got %T", name, v)
 	}
