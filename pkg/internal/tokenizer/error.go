@@ -175,7 +175,7 @@ func (p *TokenizerError) ErrorInFile(name string) string {
 		return p.Error()
 	}
 	return fmt.Sprintf("%s (at %s:%d:%d, index %d, character %s, tokenizer state %s)",
-		p.mess, name, p.at.Line(), p.at.Column(), p.at.Index(), p.describeRune(), p.state)
+		p.message(), name, p.at.Line(), p.at.Column(), p.at.Index(), p.describeRune(), p.state)
 }
 
 func (p *TokenizerError) Unwrap() error {

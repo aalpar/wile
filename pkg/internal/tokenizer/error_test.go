@@ -281,6 +281,9 @@ func TestReaderFaultIsNotEndOfInput(t *testing.T) {
 			c.Check(strings.Contains(err.Error(), "<end of input>"), qt.IsFalse, qt.Commentf("got: %v", err))
 			// The generic message is rendered with the cause that explains it.
 			c.Check(strings.Contains(err.Error(), "string-input-port is closed"), qt.IsTrue, qt.Commentf("got: %v", err))
+			// A named input renders through ErrorInFile, which must keep it too.
+			inFile := terr.ErrorInFile("f.scm")
+			c.Check(strings.Contains(inFile, "string-input-port is closed"), qt.IsTrue, qt.Commentf("got: %v", inFile))
 		})
 	}
 }

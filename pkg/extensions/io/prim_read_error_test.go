@@ -17,9 +17,12 @@ package io_test
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/aalpar/wile/extensions/files"
 	extio "github.com/aalpar/wile/pkg/extensions/io"
 	"github.com/aalpar/wile/pkg/internal/extensions/iotest"
 	"github.com/aalpar/wile/pkg/values"
@@ -206,4 +209,35 @@ func TestReadOnClosedPortRaises(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngineWithIOTest(t)
 	c.Check(eval(t, engine, `(eof-object? (read (open-input-string "")))`).Internal(), qt.Equals, values.TrueValue)
+}
+
+// TestReadOnClosedFilePortNamesTheFile pins that a closed file port's refusal
+// names the file through read and read-syntax as well as read-char. read
+// renders its fault through the parser's file:line:col form, which once
+// dropped the cause and printed only "reader failed".
+func TestReadOnClosedFilePortNamesTheFile(t *testing.T) {
+	c := qt.New(t)
+	path := filepath.Join(t.TempDir(), "ok.scm")
+	err := os.WriteFile(path, []byte("(a b c)"), 0o600)
+	c.Assert(err, qt.IsNil)
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithExtension(extio.Extension),
+		wile.WithExtension(files.Extension),
+	)
+	c.Assert(err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = engine.Close()
+	})
+	err = engine.Define("path", wile.WrapValue(values.NewString(path)))
+	c.Assert(err, qt.IsNil)
+	for _, op := range []string{"read", "read-syntax", "read-char"} {
+		t.Run(op, func(t *testing.T) {
+			c := qt.New(t)
+			code := `(let ((p (open-input-file path))) (close-port p) (` + op + ` p))`
+			_, err := engine.EvalMultiple(context.Background(), code)
+			c.Assert(err, qt.IsNotNil)
+			c.Check(errors.Is(err, werr.ErrPortClosed), qt.IsTrue, qt.Commentf("got: %v", err))
+			c.Check(strings.Contains(err.Error(), path+" is closed"), qt.IsTrue, qt.Commentf("got: %v", err))
+		})
+	}
 }
