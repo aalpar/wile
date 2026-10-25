@@ -17,6 +17,7 @@ package parser
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -309,6 +310,87 @@ func TestReader_MidParseEOFReportsOpenerLocation(t *testing.T) {
 			}
 			if perr.Location() != tc.want {
 				t.Errorf("reader error for %q located at %q; want %q", tc.src, perr.Location(), tc.want)
+			}
+		})
+	}
+}
+
+// TestReader_EOFAfterIntroducerAndCommentIsReadError pins that an introducer
+// whose datum never arrives is malformed input even when intertoken space, a
+// comment, sits between the marker and the end of input. Only the introducer's
+// first advance was guarded; its inner readSyntax skipped the comment, hit EOF
+// and handed back a bare io.EOF, so `wile -e '#z;c'` printed nothing and exited
+// 0, like an empty file. Racket and Chez both reject every row.
+//
+// Comments are skipped, the mode every production reader runs in. With comments
+// preserved an introducer takes the comment itself as its datum, which is a
+// separate defect; only the rows whose datum cannot arrive in either mode run
+// there too, since #; is readDatumComment in that mode and readSyntax's skip
+// loop in this one.
+func TestReader_EOFAfterIntroducerAndCommentIsReadError(t *testing.T) {
+	tcs := []struct {
+		name string
+		src  string
+		// preserving also runs the row with comments preserved.
+		preserving bool
+	}{
+		{name: "big_integer", src: "#z;c"},
+		{name: "big_float", src: "#m;c"},
+		{name: "exact", src: "#e;c"},
+		{name: "inexact_block_comment", src: "#i #|c|#"},
+		{name: "quote", src: "' ;c"},
+		{name: "quasiquote", src: "` ;c"},
+		{name: "unquote_splicing", src: ",@;c"},
+		{name: "box", src: "#&;c"},
+		{name: "datum_comment_then_comment", src: "#;;c"},
+		{name: "datum_comment_alone", src: "#;", preserving: true},
+		{name: "datum_comment_then_space", src: "#; ", preserving: true},
+		{name: "datum_comment_of_datum_comment", src: "#;#;5"},
+		{name: "label_assignment", src: "#0=;c"},
+	}
+	for _, skip := range fuzzSkipModes {
+		for _, tc := range tcs {
+			if !skip && !tc.preserving {
+				continue
+			}
+			t.Run(fmt.Sprintf("%s/skip=%t", tc.name, skip), func(t *testing.T) {
+				env := environment.NewNamespace().Runtime()
+				p := NewParserWithFile(env, skip, strings.NewReader(tc.src), "in.scm")
+				_, err := p.ReadSyntax(context.TODO())
+				var perr *ParserError
+				if !errors.As(err, &perr) {
+					t.Fatalf("ReadSyntax(%q) = %v (%T); want a located *ParserError", tc.src, err, err)
+				}
+				if !errors.Is(err, io.ErrUnexpectedEOF) {
+					t.Errorf("ReadSyntax(%q) = %v; want errors.Is io.ErrUnexpectedEOF", tc.src, err)
+				}
+				if errors.Is(err, io.EOF) {
+					t.Errorf("ReadSyntax(%q) = %v; reads as a clean end of input", tc.src, err)
+				}
+				// The marker is the only located token in hand at EOF.
+				if perr.Location() != "in.scm:1:0" {
+					t.Errorf("ReadSyntax(%q) located at %q; want in.scm:1:0", tc.src, perr.Location())
+				}
+			})
+		}
+	}
+}
+
+// TestReader_TrailingCommentIsCleanEOF is the control for the test above: the
+// wrap belongs at the introducer, not in readSyntax's comment loop, so a comment
+// or a completed datum comment before the end of input is still a clean end.
+func TestReader_TrailingCommentIsCleanEOF(t *testing.T) {
+	for _, src := range []string{";c", "#|c|#", "#;5", "#;5 ;c", "#; ;c\n5", "#!fold-case"} {
+		t.Run(src, func(t *testing.T) {
+			env := environment.NewNamespace().Runtime()
+			p := NewParserWithFile(env, true, strings.NewReader(src), "in.scm")
+			_, err := p.ReadSyntax(context.TODO())
+			if !errors.Is(err, io.EOF) {
+				t.Fatalf("ReadSyntax(%q) = %v; want a clean io.EOF", src, err)
+			}
+			var perr *ParserError
+			if errors.As(err, &perr) {
+				t.Fatalf("ReadSyntax(%q) = %v; want a clean io.EOF, not a read error", src, err)
 			}
 		})
 	}

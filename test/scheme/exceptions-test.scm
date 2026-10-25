@@ -534,6 +534,21 @@
   (test #f (read-error? "hello"))
   (test #f (read-error? 42)))
 
+;; An introducer whose datum is cut off by a comment and the end of input is a
+;; read error, not the end of the port.  A trailing comment alone is still eof.
+(test-group "read: introducer, comment, end of input"
+  (test #t
+    (read-error? (guard (exn (else exn))
+                   (read (open-input-string "#z;c")))))
+  (test #t
+    (read-error? (guard (exn (else exn))
+                   (read (open-input-string "' ;c")))))
+  (test #t
+    (read-error? (guard (exn (else exn))
+                   (read (open-input-string "#;;c")))))
+  (test #t (eof-object? (read (open-input-string ";c"))))
+  (test #t (eof-object? (read (open-input-string "#;5")))))
+
 (test-group "file-error? predicate"
   (test #t
     (file-error? (guard (exn (else exn))
