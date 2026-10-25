@@ -664,7 +664,8 @@ func w16LibEngine(t *testing.T, libs map[string]string) *wile.Engine {
 // BOUNDARY and the unit row TestLiteralNotShadowed/any_imported_binding_of_the_
 // same_name_is_accepted are the ones a refusal of every import turns red. BASE
 // pins the #%base exception: an unrooted literal can be a library's copy of a
-// base binding, so a base-rooted import still decides by spelling.
+// base binding, so a base-rooted import still decides by spelling, and
+// RESIDUAL-BASE is what that exception still over-accepts.
 //
 // The BOUNDARY row records the opposite direction: a legitimate re-export of
 // the SAME `lit` binding, reached through a prefix rename, is refused rather
@@ -727,6 +728,32 @@ func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
   (export mc)
   (import (scheme base))
   (begin
+    (define-syntax mc
+      (syntax-rules (car)
+        ((_ car) 'MATCHED-LITERAL)
+        ((_ x) 'OTHER)))))
+`
+
+	const libLitOnly = `(define-library (w16lit)
+  (export lit)
+  (import (scheme base))
+  (begin
+    (define lit 1)))
+`
+	const libRulesOverImportedLit = `(define-library (w16mac)
+  (export mg)
+  (import (scheme base) (w16lit))
+  (begin
+    (define-syntax mg
+      (syntax-rules (lit)
+        ((_ lit) 'MATCHED-LITERAL)
+        ((_ x) 'OTHER)))))
+`
+	const libRulesPrivateCar = `(define-library (w16lib)
+  (export mc)
+  (import (only (scheme base) define define-syntax syntax-rules quote))
+  (begin
+    (define car 42)
     (define-syntax mc
       (syntax-rules (car)
         ((_ car) 'MATCHED-LITERAL)
@@ -800,6 +827,28 @@ func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
 			// both come from the base, and the import is rooted there.
 			name: "BASE: a literal naming a base procedure matches its import",
 			libs: map[string]string{"w16lib.scm": libRulesBaseLiteral},
+			src:  "(import (scheme base) (w16lib))\n(mc car)",
+			want: "MATCHED-LITERAL",
+		},
+		{
+			// A literal the macro's library IMPORTS is rooted at its source, so
+			// the program's import of the same source is the same binding.
+			// petite agrees.
+			name: "a literal imported into the macro's library matches the same import",
+			libs: map[string]string{"w16lit.scm": libLitOnly, "w16mac.scm": libRulesOverImportedLit},
+			src:  "(import (w16mac) (w16lit))\n(mg lit)",
+			want: "MATCHED-LITERAL",
+		},
+		{
+			// RESIDUAL of the #%base exception, today's answer and not the
+			// R7RS one. w16lib's car is a private define, the program's is the
+			// base's, so §4.3.2 wants OTHER (petite answers OTHER). Both sides
+			// look alike to literalNotShadowed: defB unrooted and not imported,
+			// useB rooted at #%base, exactly as in BASE, so spelling decides.
+			// Closing it needs the definition-side binding's library identity
+			// at pin time.
+			name: "RESIDUAL-BASE: a private define over a base name still matches the base import",
+			libs: map[string]string{"w16lib.scm": libRulesPrivateCar},
 			src:  "(import (scheme base) (w16lib))\n(mc car)",
 			want: "MATCHED-LITERAL",
 		},

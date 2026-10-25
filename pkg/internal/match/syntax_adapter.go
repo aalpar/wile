@@ -649,11 +649,14 @@ func sameLiteralBinding(a, b *environment.Binding) bool {
 // answer this arm needs.
 //
 // A useB rooted at environment.BaseOriginLib is the exception, and it falls back
-// to spelling as before: exportRoot's own premise is that a library's
-// un-imported copy of a base binding carries no root either, so an unrooted
-// defB can be the base definition a #%base import denotes. Measured: refusing
-// there flips "BASE: a literal naming a base procedure matches its import" and
-// TestPatternLiteralNamingAUserMacroMatches's define-syntax-over-else row.
+// to spelling as before, because an unrooted defB can be the base definition a
+// #%base import denotes. Measured: a library that imports (scheme base) and
+// lists `car` as a literal pins a `car` with no root that is not IsImported
+// (the library sees the base binding itself, exportRoot's premise), and
+// refusing there flips "BASE: a literal naming a base procedure matches its
+// import" and TestPatternLiteralNamingAUserMacroMatches's define-syntax-over-else
+// row. The cost is "RESIDUAL-BASE": a library's private (define car 42) looks the
+// same from here, so it still matches a base import of car.
 //
 // The sameSpelling fallback is NOT deletable, and that was measured rather than
 // assumed: replacing it with `return false` breaks
