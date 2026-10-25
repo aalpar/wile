@@ -16,13 +16,17 @@ package io_test
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/aalpar/wile/extensions/threads"
 	extio "github.com/aalpar/wile/pkg/extensions/io"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
 
 	qt "github.com/frankban/quicktest"
@@ -213,5 +217,79 @@ func TestTwoThreadsReadingOneBinaryPortSerialise(t *testing.T) {
 			want := strings.TrimSuffix(strings.Repeat(strconv.Itoa(serialiseRounds)+" ", 256), " ")
 			c.Assert(result.SchemeString(), qt.Equals, "("+want+")")
 		})
+	}
+}
+
+// signallingPipe is a pipe's read end that announces the first Read before
+// making it, so a test can close the port only once a read is past the port's
+// closed check and inside the stream. A pipe read that is blocked, or about to
+// block, when its file is closed returns os.ErrClosed.
+type signallingPipe struct {
+	*os.File
+	entered chan struct{}
+	once    sync.Once
+}
+
+func (p *signallingPipe) Read(b []byte) (int, error) {
+	p.once.Do(func() {
+		close(p.entered)
+	})
+	return p.File.Read(b)
+}
+
+// TestCloseDuringABlockedRead pins that a read the close interrupts reports
+// the closed port, as a read that starts after the close does: errors.Is
+// ErrPortClosed, and not read-error?. The stream's own error (os.ErrClosed)
+// stays in the chain as the cause. The close waits on the reader's signal,
+// so the read is always in flight when it lands; nothing depends on timing.
+func TestCloseDuringABlockedRead(t *testing.T) {
+	tests := []struct {
+		name   string
+		code   string
+		binary bool
+	}{
+		{"read-char", `(read-char p)`, false},
+		{"peek-char", `(peek-char p)`, false},
+		{"read-line", `(read-line p)`, false},
+		{"read-string", `(read-string 2 p)`, false},
+		{"read", `(read p)`, false},
+		{"read-syntax", `(read-syntax p)`, false},
+		{"read-u8", `(read-u8 p)`, true},
+		{"peek-u8", `(peek-u8 p)`, true},
+		{"read-bytevector", `(read-bytevector 2 p)`, true},
+	}
+	for _, tt := range tests {
+		for _, classify := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/classify=%t", tt.name, classify), func(t *testing.T) {
+				c := qt.New(t)
+				r, w, err := os.Pipe()
+				c.Assert(err, qt.IsNil)
+				t.Cleanup(func() {
+					_ = w.Close()
+				})
+				src := &signallingPipe{File: r, entered: make(chan struct{})}
+				var port *values.PortObject
+				if tt.binary {
+					port = values.NewBinaryInputPortFromReader(src)
+				} else {
+					port = values.NewCharacterInputPortFromReader(src)
+				}
+				engine := newEngine(t)
+				err = engine.Define("p", wile.WrapValue(port))
+				c.Assert(err, qt.IsNil)
+				go func() {
+					<-src.entered
+					_ = port.Close()
+				}()
+				if classify {
+					got := eval(t, engine, classifyCondition(tt.code))
+					c.Assert(got.SchemeString(), qt.Equals, "(#f #f)")
+					return
+				}
+				_, err = engine.EvalMultiple(context.Background(), tt.code)
+				c.Assert(err, qt.ErrorIs, werr.ErrPortClosed)
+				c.Assert(err, qt.ErrorIs, os.ErrClosed)
+			})
+		}
 	}
 }

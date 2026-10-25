@@ -53,12 +53,31 @@ type Flusher interface {
 // Guard-and-delegate helpers. Each guards on portBase.closed,
 // then delegates to the backing type via the narrowest interface.
 
+// closedDuring reports a read's stream error as the port's closed error when
+// the port was closed while the read was in flight. The close takes no read
+// lock, so it can land after guardClosed passed; the stream then fails with
+// its own error (os.ErrClosed for a file or pipe), which would otherwise make
+// the answer depend on whether the read met the close before or inside the
+// stream. The stream's error stays in the chain as the cause. End of input is
+// not a fault and passes through.
+func closedDuring(b *portBase, err error) error {
+	if err == nil || errors.Is(err, io.EOF) {
+		return err
+	}
+	closed := b.guardClosed()
+	if closed == nil {
+		return err
+	}
+	return werr.WrapForeignErrorWithCause(closed, err, "read interrupted")
+}
+
 func guardedRead(b *portBase, r io.Reader, bs []byte) (int, error) {
 	err := b.guardClosed()
 	if err != nil {
 		return 0, err
 	}
-	return r.Read(bs)
+	n, err := r.Read(bs)
+	return n, closedDuring(b, err)
 }
 
 func guardedReadByte(b *portBase, r io.ByteReader) (byte, error) {
@@ -66,7 +85,8 @@ func guardedReadByte(b *portBase, r io.ByteReader) (byte, error) {
 	if err != nil {
 		return 0, err
 	}
-	return r.ReadByte()
+	c, err := r.ReadByte()
+	return c, closedDuring(b, err)
 }
 
 func guardedUnreadByte(b *portBase, r ByteUnreader) error {
@@ -83,6 +103,7 @@ func guardedReadRune(b *portBase, r io.RuneReader) (rune, int, error) {
 		return 0, 0, err
 	}
 	c, n, err := r.ReadRune()
+	err = closedDuring(b, err)
 	if n > 0 {
 		b.consumed(c, n)
 		return c, n, err

@@ -148,7 +148,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   primitive now holds the port's read lock for the whole call. A port also refuses a second `UnreadRune` in a row itself
   (`bufio.ErrInvalidUnreadRune`), whatever its Go reader allows, so the
   counted position cannot run ahead of the stream; and `close-port` racing a
-  read is no longer a data race on the closed flag.
+  read is no longer a data race on the closed flag. A read that a close
+  interrupts inside the stream (a pipe read blocked when the port closes)
+  reports the closed port, not a read error, as a read started after the close
+  does: it was `read-char: error reading character: read |0: file already
+  closed` with `read-error?` true.
 
 - **A source that opens with a UTF-8 byte order mark reads.** A file an editor
   saved with a BOM failed at 1:0 with "unknown token type ... character U+FEFF"
