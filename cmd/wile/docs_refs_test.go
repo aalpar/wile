@@ -193,22 +193,12 @@ func atOrBeyondAny(path string, links []string) bool {
 // uncleanedDocs are the tracked docs that still cite gitignored working notes.
 // They predate this guard, which exists to stop the set from growing: a doc not
 // listed here must keep its references resolvable in a fresh clone. Delete an
-// entry once its references are inlined or dropped — never add one. The
-// todo/*.md entries are not additions: they are the files TODO.md was split
-// into on 2026-10-17, carrying its rows and its citations verbatim.
+// entry once its references are inlined or dropped — never add one.
 var uncleanedDocs = map[string]bool{
 	".github/pull_request_template.md":       true,
 	"CHANGELOG.md":                           true,
 	"CODING_STYLE.md":                        true,
 	"TODO.md":                                true,
-	"todo/closed.md":                         true,
-	"todo/exceptions-and-rejected.md":        true,
-	"todo/tier1-security-correctness.md":     true,
-	"todo/tier2-embedding-api.md":            true,
-	"todo/tier3-tooling-dx.md":               true,
-	"todo/tier4-performance.md":              true,
-	"todo/tier5-tech-debt.md":                true,
-	"todo/tier6-nice-to-haves.md":            true,
 	"docs/algebra/reference.md":              true,
 	"docs/compiler/inlining.md":              true,
 	"docs/compiler/macro-system.md":          true,
@@ -387,68 +377,6 @@ var correctedDocClaims = []correctedDocClaim{
 			"`(import (rnrs hashtables (6)))` resolves and (hashtable? (make-eq-hashtable)) " +
 			"answers #t. r7rs-differences.md item 15 documents the drop.",
 	},
-	{
-		name:  "TODO_versioned_name_rejected",
-		doc:   "todo/tier6-nice-to-haves.md",
-		stale: "import-set resolver rejects a list as a name part",
-		why: "The resolver accepts a list in the final position and drops it as an R6RS version " +
-			"reference; only a list elsewhere in the name is an error.",
-	},
-	{
-		name:  "TODO_four_blind_guards",
-		doc:   "todo/tier5-tech-debt.md",
-		stale: "and 4 more are guarded by a test",
-		why: "Three, not four: TestRunEval is not blind. runCLI re-execs the test binary through " +
-			"TestMain, which calls main(), so go-flags parsing is exercised end to end.",
-	},
-	{
-		name:  "TODO_sameImportedBinding",
-		doc:   "todo/tier1-security-correctness.md",
-		stale: "`sameImportedBinding`",
-		why: "Deleted by 5d654b3f (2026-09-16). The live symbol is importConflicts " +
-			"(pkg/machine/compilation/library_bindings.go), which compares provenance roots.",
-	},
-	{
-		name:  "TODO_origin_rejected_for_import_conflict",
-		doc:   "todo/tier1-security-correctness.md",
-		stale: "REJECTED for import-conflict detection",
-		why: "Provenance-root origin is what SHIPPED for import-conflict detection (5d654b3f); " +
-			"importConflicts compares *OriginRef and nothing else. What PR #793 rejected was a " +
-			"SOURCE-LOCATION origin, a different signal.",
-	},
-	{
-		name:  "TODO_compileTransformerToMachineClosure",
-		doc:   "todo/tier1-security-correctness.md",
-		stale: "`compileTransformerToMachineClosure`",
-		why: "Absent from every .go file. The live symbol is compileTransformerValue " +
-			"(pkg/machine/compilation/compile_transformer.go:60), which expands and evaluates the " +
-			"right-hand side instead of switching on its head symbol — measured 2026-09-26: the " +
-			"macro-produced transformer, let-syntax and letrec-syntax shapes print 1, 42 and 43.",
-	},
-	{
-		name:  "TODO_TestMachineClosureIsTwoWords",
-		doc:   "todo/tier4-performance.md",
-		stale: "`TestMachineClosureIsTwoWords`",
-		why: "Absent from every .go file. The live pin is TestMachineClosureSize " +
-			"(pkg/machine/machine_closure_test.go:44), and it asserts FIVE words, not two: " +
-			"flat-closure conversion re-opened the 16 B trade deliberately, so MachineClosure is " +
-			"{link, template, free} = 40 B.",
-	},
-	{
-		name:  "TODO_applyClosure",
-		doc:   "todo/tier4-performance.md",
-		stale: "`applyClosure`",
-		why: "Absent from every .go file. The apply path is (*MachineContext).Apply " +
-			"(pkg/machine/machine_context_apply.go:28).",
-	},
-	{
-		name:  "TODO_TestLibraryExportTakesFirstPresentPhase",
-		doc:   "todo/tier1-security-correctness.md",
-		stale: "`TestLibraryExportTakesFirstPresentPhase`",
-		why: "Renamed by d691ded5 (2026-09-17), which retired the export-phase fork the old name " +
-			"asserted. The live test is TestLibraryExportRoundTripByPhase " +
-			"(pkg/wile/library_export_phase_order_test.go:115).",
-	},
 }
 
 // resolveRef turns a reference as written in doc into a repo-relative path.
@@ -500,9 +428,9 @@ func gitOutput(t *testing.T, dir string, args ...string) string {
 
 // The two citation checks below, TestCitedSymbolsExistWhereCited and
 // TestLineCitationCensusOnlyShrinks, walk `git ls-files -- '*.md'`. That set
-// holds no file under plans/ or memory/, so every plan file's citations are
+// holds no file under plans/, memory/ or todo/, so their citations are
 // outside these gates by construction, not by omission. The mechanism is the
-// symlink, not the ignore rule: plans/ and memory/ are tracked as mode-120000
+// symlink, not the ignore rule: the three are tracked as mode-120000
 // symlinks, nothing beneath a symlink is in the index, and the /plans/ and
 // /memory/ patterns in .gitignore are inert for a tracked path (the file's own
 // comment is the authority). Every count quoted in these tests is a count over
@@ -560,20 +488,20 @@ var lineSpanCitation = regexp.MustCompile(`([A-Za-z0-9_./-]+\.(?:go|scm|sh|md)):
 // others derive their bound or regenerate it. There is no regen mechanism here
 // on purpose: the number is a claim a maintainer re-reads, and the failure
 // message names the value to write.
-const lineCitationCeiling = 130
+const lineCitationCeiling = 12
 
 // symbolCitationsResolved is the number of symbol citations that resolve to a
-// tracked file (the grammar matches 109; the other two name no tracked file),
+// tracked file (the grammar matches 34, all resolving),
 // pinned exactly in both directions. A citation that stops resolving (a
 // rename, a move) drops it and fails; a new one raises it and fails until the
 // pin is raised. Together with the per-citation findings this keeps the check
 // from going vacuous or from quietly shrinking.
-const symbolCitationsResolved = 107
+const symbolCitationsResolved = 34
 
 // lineCitationsResolved is the number of "file:N" spans that name a tracked
-// file (130 match; 27 do not), pinned exactly in both directions. Renaming a
+// file (12 match; 10 do not), pinned exactly in both directions. Renaming a
 // file that is cited only by line number moves it and nothing else.
-const lineCitationsResolved = 103
+const lineCitationsResolved = 2
 
 // sourceIndex resolves the file paths a doc cites to tracked files and reads
 // them.
