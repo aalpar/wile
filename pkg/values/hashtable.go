@@ -49,36 +49,41 @@ type hashtableEntry struct {
 // R6RS inversion: the hash belongs to the TABLE, not to the key, so any object can
 // be a key of any table.
 //
+// The type is OPAQUE: its field is unexported, so the three variables below are
+// the only kinds that exist and HashtableKind(7) does not compile. As a uint8 it
+// was not: NewHashtable is exported, an out-of-range kind stored and retrieved as
+// an equal table through hashKey's and keyEqual's default arms, and the two
+// inspection accessors refused it, so one table answered two ways.
+//
 // HashtableEqual is deliberately the ZERO VALUE, so a table whose kind was never
 // set keeps the equal?-keyed semantics every table had before kinds existed.
-// Reordering this iota silently reinterprets them. Pinned by
-// TestHashtableZeroValueIsEqualKind.
+// Pinned by TestHashtableZeroValueIsEqualKind.
 //
 // Do NOT read that as "a bare &Hashtable{} is a usable table". It is not, though
 // an earlier version of this comment claimed otherwise: the mutable field's zero
 // value is false, so a zero Hashtable is an IMMUTABLE equal table that rejects
 // every write. Construct through NewHashtable or NewEmptyHashtable, as every
 // site in the tree does.
-type HashtableKind uint8
+type HashtableKind struct {
+	code uint8
+}
 
-const (
+var (
 	// HashtableEqual hashes with EqualHash and compares with Equal (equal?).
-	HashtableEqual HashtableKind = iota
+	HashtableEqual = HashtableKind{}
 	// HashtableEq hashes by object identity and compares with EqIdentity (eq?).
-	HashtableEq
+	HashtableEq = HashtableKind{code: 1}
 	// HashtableEqv hashes leaves by content and compares with Eqv (eqv?).
-	HashtableEqv
+	HashtableEqv = HashtableKind{code: 2}
 )
 
 // HashtableKindCount is the number of defined kinds. It is a ratchet:
 // TestHashtableKindsAreExhaustive fails when a kind is added without a row in
-// hashKey, keyEqual, String, equivIdentity and PrimHashtableHashFunction.
-//
-// The first four used to reach an unlisted kind through a `default:` arm
-// answering EQUAL, so a new kind would have inherited equal? key identity —
-// collapsing keys silently rather than failing loudly. hashKey and keyEqual
-// still do; the two inspection sites refuse instead, which is why they are
-// listed separately from them rather than described as one policy.
+// hashKey, keyEqual, String, equivIdentity and PrimHashtableHashFunction. Each
+// of those answers the equal kind from its default arm, which only
+// HashtableEqual can reach now that the type is opaque; a fourth kind added
+// without its rows would silently inherit equal? key identity, which is what the
+// ratchet is for.
 const HashtableKindCount = 3
 
 // String renders the kind as its R6RS-facing name, for error messages and
@@ -86,14 +91,12 @@ const HashtableKindCount = 3
 // and hashtable-equivalence-function hand back procedure objects, not kind names.
 func (p HashtableKind) String() string {
 	switch p {
-	case HashtableEqual:
-		return "equal"
 	case HashtableEq:
 		return "eq"
 	case HashtableEqv:
 		return "eqv"
 	default:
-		return "unknown"
+		return "equal"
 	}
 }
 
@@ -270,7 +273,7 @@ func (p *Hashtable) Kind() HashtableKind {
 // hashKey computes the bucket hash for key under this table's kind.
 func (p *Hashtable) hashKey(key Value) uint64 {
 	switch p.kind {
-	case HashtableEq: //nolint:exhaustive // default is HashtableEqual; see HashtableKindCount
+	case HashtableEq:
 		// Symbols FIRST, and this is load-bearing: EqIdentity compares symbols by
 		// Key (Wile de-interns them), so two eq? symbols are distinct pointers and
 		// an identity hash would file them in different buckets — a lookup that
@@ -324,7 +327,7 @@ func (p *Hashtable) hashKey(key Value) uint64 {
 // one order means a future asymmetric kind cannot silently invert at one site.
 func (p *Hashtable) keyEqual(a, b Value) bool {
 	switch p.kind {
-	case HashtableEq: //nolint:exhaustive // default is HashtableEqual; see HashtableKindCount
+	case HashtableEq:
 		return EqIdentity(a, b)
 	case HashtableEqv:
 		return Eqv(a, b)

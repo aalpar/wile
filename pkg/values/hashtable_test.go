@@ -339,7 +339,7 @@ func TestHashtableKinds(t *testing.T) {
 // Reordering the iota silently reinterprets every existing table.
 func TestHashtableZeroValueIsEqualKind(t *testing.T) {
 	qt.Assert(t, values.NewEmptyHashtable().Kind(), qt.Equals, values.HashtableEqual)
-	qt.Assert(t, values.HashtableEqual, qt.Equals, values.HashtableKind(0))
+	qt.Assert(t, values.HashtableEqual, qt.Equals, values.HashtableKind{})
 }
 
 // TestHashtableCyclicKeyTerminates is what lifting key admission buys and what it
@@ -431,22 +431,34 @@ func TestHashtableNestedKeyTerminates(t *testing.T) {
 // This test fails when the count changes, which is the prompt to give the new
 // kind a row in all four. It cannot check the arms directly (they are
 // unexported), so it checks the two things it can see: the count, and that every
-// kind in range renders a distinct name rather than falling to "unknown".
+// kind renders a distinct name (String's default arm answers "equal", so a kind
+// without its own row collides with HashtableEqual).
 func TestHashtableKindsAreExhaustive(t *testing.T) {
 	qt.Assert(t, values.HashtableKindCount, qt.Equals, 3,
 		qt.Commentf("a kind was added or removed: give it a row in hashKey, keyEqual, String, equivIdentity and PrimHashtableHashFunction"))
 
+	kinds := []values.HashtableKind{values.HashtableEqual, values.HashtableEq, values.HashtableEqv}
+	qt.Assert(t, kinds, qt.HasLen, values.HashtableKindCount)
 	seen := make(map[string]bool, values.HashtableKindCount)
-	for i := range values.HashtableKindCount {
-		name := values.HashtableKind(i).String()
-		qt.Assert(t, name, qt.Not(qt.Equals), "unknown",
-			qt.Commentf("HashtableKind(%d) has no String row", i))
+	for _, kind := range kinds {
+		name := kind.String()
 		qt.Assert(t, seen[name], qt.IsFalse,
 			qt.Commentf("two kinds render as %q", name))
 		seen[name] = true
 	}
-	// Out of range must be identifiable rather than silently equal.
-	qt.Assert(t, values.HashtableKind(values.HashtableKindCount).String(), qt.Equals, "unknown")
+}
+
+// TestHashtableKindIsOpaque pins the opacity that makes the three variables the
+// only kinds: a struct with no exported field cannot be built outside the
+// package, so HashtableKind(7) does not compile and no out-of-range kind can
+// reach NewHashtable. A uint8 kind admitted 253 kinds that stored as equal
+// tables while the inspection accessors refused them.
+func TestHashtableKindIsOpaque(t *testing.T) {
+	typ := reflect.TypeOf(values.HashtableKind{})
+	qt.Assert(t, typ.Kind(), qt.Equals, reflect.Struct)
+	for i := range typ.NumField() {
+		qt.Assert(t, typ.Field(i).IsExported(), qt.IsFalse, qt.Commentf("field %s is exported", typ.Field(i).Name))
+	}
 }
 
 // TestHashtableEqualGateUsesOneSnapshot pins that the leaf gate and the
