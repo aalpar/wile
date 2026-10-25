@@ -127,42 +127,82 @@ func TestInlineDefineLibraryStillMintsItsOwnEnv(t *testing.T) {
 	c.Assert(*n, qt.Equals, 3)
 }
 
-// TestNestedDefineLibraryDoesNotShareTheOuterEnv pins that a (define-library
-// ...) nested in a file library's body gets its own environment. The nested
-// form compiles on the library compiler, which must not carry the outer hint;
-// if it did, the nested library's (import (dep)) would land in the outer
-// library's environment and make `depval` visible to the outer body.
-func TestNestedDefineLibraryDoesNotShareTheOuterEnv(t *testing.T) {
+// TestDefineLibraryInAProgramProcedureBodyIsRefused: a define-library inside a
+// lambda body is not a top-level form of a program either; it compiled, minted
+// an environment and registered nothing. An inline top-level one stays legal.
+func TestDefineLibraryInAProgramProcedureBodyIsRefused(t *testing.T) {
 	t.Parallel()
-
 	c := qt.New(t)
 	ctx := context.Background()
+	engine, err := newLibraryCountEngine(ctx, fstest.MapFS{})
+	c.Assert(err, qt.IsNil)
+	for _, src := range []string{
+		`(define (g) (define-library (q) (import (scheme base)) (export)) 1)`,
+		`(let () (define-library (q) (import (scheme base)) (export)) 1)`,
+		`(letrec ((x 1)) (define-library (q) (import (scheme base)) (export)) x)`,
+		`(define-syntax m (lambda (stx) (syntax-case stx () (_ #'1)))) (define (h x) (syntax-case x () (_ (define-library (q) (import (scheme base)) (export)))))`,
+	} {
+		_, err = engine.EvalMultiple(ctx, src)
+		c.Assert(errors.Is(err, werr.ErrInvalidSyntax), qt.IsTrue, qt.Commentf("%s\nerr: %v", src, err))
+		c.Assert(err.Error(), qt.Contains, "define-library: not permitted inside a procedure body", qt.Commentf("%s", src))
+	}
+	_, err = engine.EvalMultiple(ctx, `(define-library (top) (import (scheme base)) (export z) (begin (define z 5)))`)
+	c.Assert(err, qt.IsNil)
+}
 
-	fsys := fstest.MapFS{
-		"lib/dep.sld": &fstest.MapFile{
-			Data: []byte(`(define-library (dep)
-  (import (scheme base))
-  (export depval)
-  (begin (define depval 99)))`),
-		},
-		"lib/leak.sld": &fstest.MapFile{
-			Data: []byte(`(define-library (leak)
+// TestNestedDefineLibraryIsRefused pins the refusal of a (define-library ...)
+// inside a file library, in a body and in declaration position. R7RS 5.6.1
+// lists the declarations, and define-library is not one, nor an expression or
+// definition. Compiled anyway (the former behaviour this test pinned only
+// half of), the nested library got its own environment and was never
+// registered, so an export of its own name read as "no binding" and nothing
+// could import it. The refusal names the nested form's location; the outer
+// library's import of (dep) must not have leaked either way.
+func TestNestedDefineLibraryIsRefused(t *testing.T) {
+	t.Parallel()
+
+	tcs := []struct {
+		name, file, src, at string
+	}{
+		{"in a begin body", "lib/leak.sld", `(define-library (leak)
   (import (scheme base))
   (export answer)
   (begin
     (define-library (leak-inner)
       (import (dep))
       (export))
-    (define answer depval)))`),
-		},
+    (define answer depval)))`, "leak.sld:5:5"},
+		{"in declaration position", "lib/leak.sld", `(define-library (leak)
+  (import (scheme base))
+  (export answer)
+  (define-library (leak-inner) (import (dep)) (export))
+  (begin (define answer 1)))`, "leak.sld:4:2"},
+		{"in a procedure body inside the library", "lib/leak.sld", `(define-library (leak)
+  (import (scheme base))
+  (export answer)
+  (begin
+    (define (answer) (define-library (leak-inner) (import (dep)) (export)) 1)))`, "leak.sld:5:22"},
 	}
-
-	engine, err := newLibraryCountEngine(ctx, fsys)
-	c.Assert(err, qt.IsNil)
-
-	_, err = engine.EvalMultiple(ctx, `(import (scheme base))`)
-	c.Assert(err, qt.IsNil)
-
-	_, err = engine.EvalMultiple(ctx, `(import (leak)) answer`)
-	c.Assert(errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue, qt.Commentf("err: %v", err))
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c := qt.New(t)
+			ctx := context.Background()
+			fsys := fstest.MapFS{
+				"lib/dep.sld": &fstest.MapFile{
+					Data: []byte(`(define-library (dep)
+  (import (scheme base))
+  (export depval)
+  (begin (define depval 99)))`),
+				},
+				tc.file: &fstest.MapFile{Data: []byte(tc.src)},
+			}
+			engine, err := newLibraryCountEngine(ctx, fsys)
+			c.Assert(err, qt.IsNil)
+			_, err = engine.EvalMultiple(ctx, `(import (leak))`)
+			c.Assert(errors.Is(err, werr.ErrInvalidSyntax), qt.IsTrue, qt.Commentf("err: %v", err))
+			c.Assert(err.Error(), qt.Contains, "define-library: not permitted inside a")
+			c.Assert(err.Error(), qt.Contains, tc.at)
+		})
+	}
 }

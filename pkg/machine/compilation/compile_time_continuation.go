@@ -50,6 +50,12 @@ type CompileTimeContinuation struct {
 	// Threaded to CompileSyntaxRules so free identifiers in macro templates
 	// can carry the library scope for cross-library hygiene.
 	libraryScope *syntax.Scope
+
+	// inProcedureBody is set on every compiler compileBody builds, so a
+	// define-library reached inside a lambda body (at any depth, in a program or
+	// a library) is refused: R7RS allows it in neither. libraryScope alone
+	// cannot say it, because compileBody does not pass the library scope down.
+	inProcedureBody bool
 	// patternVarSyntax carries the enclosing syntax-case clause's pattern
 	// variables into CompileSyntax so that (syntax template) forms with
 	// ellipsis can be expanded hygienically (the runtime ellipsis path mirrors

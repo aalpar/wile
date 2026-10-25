@@ -253,6 +253,7 @@ func (p *CompileTimeContinuation) selfFreeSlot(layout []freeVar, selfSym *syntax
 func (p *CompileTimeContinuation) compileBody(ctctx CompileTimeCallContext, clause validate.ValidatedBodyAndParams, childEnv *environment.EnvironmentFrame, tpl *machine.NativeTemplate, fr frameReuse, layout []freeVar, mergeLets bool) error {
 	childCompiler := NewCompileTimeContinuation(tpl, childEnv, p.evaluator)
 	childCompiler.SetInlineThreshold(p.inlineThreshold)
+	childCompiler.inProcedureBody = true
 	// The body's own free layout: how it reaches a variable of an enclosing
 	// lambda now that the static link has no lexical parent. Not shared with the
 	// parent continuation — a layout belongs to exactly one lambda.

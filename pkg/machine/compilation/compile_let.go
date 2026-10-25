@@ -149,10 +149,12 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 	registeredBIDs := p.registerInlineCandidates(childEnv, v.Bindings)
 	defer p.unregisterInlineCandidates(registeredBIDs)
 
-	savedEnv := p.env
-	p.env = childEnv
+	// A let body compiles on this compiler, not on one compileBody builds, so it
+	// marks itself a procedure body for the define-library refusal.
+	savedEnv, savedInBody := p.env, p.inProcedureBody
+	p.env, p.inProcedureBody = childEnv, true
 	defer func() {
-		p.env = savedEnv
+		p.env, p.inProcedureBody = savedEnv, savedInBody
 	}()
 
 	// Predeclare body defines to count total slots needed.
