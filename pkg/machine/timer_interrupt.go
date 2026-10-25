@@ -254,8 +254,7 @@ func (p *MachineContext) FailureClaimedByTimer(err error) bool {
 // debugger break already carry their own control flow); and a security denial,
 // which must reach the embedder however the program is written.
 func timerClaimable(err error) bool {
-	var escape *ErrExceptionEscape
-	if isControlSignal(err) && !errors.As(err, &escape) {
+	if IsControlTransfer(err) {
 		return false
 	}
 	return !errors.Is(err, security.ErrAccessDenied)

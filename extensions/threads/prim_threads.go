@@ -25,6 +25,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry/helpers"
+	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -297,7 +298,7 @@ func PrimThreadJoin(mc machine.CallContext) error {
 	//
 	//	(guard (e ((join-timeout-exception? e) ...)        ; TIMEOUT elapsed
 	//	          ((terminated-thread-exception? e) ...)   ; joinee was terminated
-	//	          ((uncaught-exception? e) ...)            ; joinee raised
+	//	          ((uncaught-exception? e) ...)            ; joinee raised or died
 	//	          ((error-object? e) ...))                 ; joiner was cancelled
 	//	  (thread-join! t))
 	//
@@ -388,16 +389,36 @@ func joinConditionFor(err error) values.Value {
 		return termErr
 	}
 
-	// A thread that ended via an uncaught Scheme exception surfaces it here as an
-	// *ErrExceptionEscape carrier (wrapped in *UncaughtThreadException). The
-	// carrier is already-formed control flow, so applyCallableError would pass it
-	// through untouched — straight past any guard around the join.
-	var escErr *machine.ErrExceptionEscape
-	if errors.As(err, &escErr) {
-		return values.NewUncaughtException(escErr.Condition)
+	// Every other joinee outcome arrives as an *UncaughtThreadException, and every
+	// one is an uncaught-exception to the joiner, wherever the joinee died: a
+	// thread killed by its ctx dies with the wait's raised condition when it was
+	// parked and with the VM poll's error when it was busy, and the joiner must not
+	// tell the two apart (the bare error would reach its guard as an error-object,
+	// the arm for the joiner's OWN cancellation). The joinee's error is the Cause,
+	// so an uncaught join keeps it matchable at the embedder.
+	//
+	// Except a security denial: it is the sandbox's answer, not a Scheme condition,
+	// and it reaches the embedder past the joiner's guards as it does past the
+	// joinee's (applyCallableError, pkg/machine).
+	var uncaught *values.UncaughtThreadException
+	if !errors.As(err, &uncaught) || errors.Is(err, security.ErrAccessDenied) {
+		return nil
+	}
+	cause := uncaught.Reason
+	if machine.IsControlTransfer(cause) {
+		// A transfer addressed to the joinee's drivers is not forwarded, not even
+		// as a cause, where the joiner's drivers would find it with errors.As.
+		cause = werr.WrapForeignErrorf(werr.ErrThreadEndedByControlTransfer, "thread-join!: %s", cause.Error())
 	}
 
-	return nil
+	// A thread that ended via an uncaught Scheme exception surfaces it as an
+	// *ErrExceptionEscape carrier, and its condition is the reason; anything else
+	// is converted as a primitive's failure would be.
+	var escErr *machine.ErrExceptionEscape
+	if errors.As(cause, &escErr) {
+		return &values.UncaughtException{Reason: escErr.Condition, Cause: cause}
+	}
+	return &values.UncaughtException{Reason: machine.ConditionFromError(cause), Cause: cause}
 }
 
 // PrimThreadState returns the thread's state as a symbol: new, runnable,

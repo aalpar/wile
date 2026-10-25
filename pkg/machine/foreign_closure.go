@@ -261,6 +261,17 @@ func isControlSignal(err error) bool {
 	return errors.As(err, &resumeErr)
 }
 
+// IsControlTransfer reports whether err is a control signal other than the
+// uncaught-exception carrier: a transfer addressed to a driver's dispatch loop (an
+// abort, a timer interrupt, a debugger break, a continuation resume). An uncaught
+// raise is the one control signal that also describes a failure, and a site that
+// reports failures (a timer superseding one, a thread's outcome reaching its
+// joiner) keeps it; a transfer it must not forward.
+func IsControlTransfer(err error) bool {
+	var escape *ErrExceptionEscape
+	return isControlSignal(err) && !errors.As(err, &escape)
+}
+
 // applyCallableError converts a Go error from a primitive into a Scheme exception
 // by invoking the current handler in place (RaiseInPlace) — the single bridge
 // between Go-level failures and the mark-based handler chain, so they are catchable

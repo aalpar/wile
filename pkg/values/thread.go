@@ -518,6 +518,7 @@ var (
 	_ error = (*JoinTimeoutException)(nil)
 	_ error = (*TerminatedThreadException)(nil)
 	_ error = (*AbandonedMutexException)(nil)
+	_ error = (*UncaughtException)(nil)
 )
 
 // JoinTimeoutException is raised when thread-join! times out
@@ -608,8 +609,15 @@ func (p *UncaughtThreadException) Unwrap() error {
 // a Reason cycle (equal.go documents that hazard for non-DeepEqualer recursive
 // types). Each thread-join! mints a fresh wrapper, so structural equality would
 // buy nothing.
+//
+// Cause is how the joined thread ended, as a Go error, and Unwrap returns it: an
+// uncaught join reaches the embedder as an exception escape carrying this object,
+// and the escape unwraps into its condition when the condition is an error, so the
+// joinee's cause (a cancellation, a sentinel) stays matchable with errors.Is. A nil
+// Cause ends the chain.
 type UncaughtException struct {
 	Reason Value
+	Cause  error
 }
 
 // NewUncaughtException wraps the original raised condition in an SRFI-18
@@ -617,6 +625,18 @@ type UncaughtException struct {
 func NewUncaughtException(reason Value) *UncaughtException {
 	q := &UncaughtException{Reason: reason}
 	return q
+}
+
+func (p *UncaughtException) Error() string {
+	if p.Reason != nil {
+		return fmt.Sprintf("uncaught exception in thread: %s", p.Reason.SchemeString())
+	}
+	return "uncaught exception in thread"
+}
+
+// Unwrap returns how the joined thread ended; see the type doc.
+func (p *UncaughtException) Unwrap() error {
+	return p.Cause
 }
 
 // IsVoid reports whether the receiver is nil, per the default Value convention.
