@@ -26,6 +26,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/pkg/machine/compilation"
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
 )
 
@@ -428,6 +429,7 @@ func TestIncludeErrorsKeepTheirLocations(t *testing.T) {
 	}{
 		{name: "missing file names the include's line", code: "(define a 1)\n(define b 2)\n(include \"absent.scm\")", want: "includer.scm:3:"},
 		{name: "expansion failure keeps the file's line", code: `(include "badexp.scm")`, want: "badexp.scm:2:"},
+		{name: "include-ci names itself on an expansion failure", code: `(include-ci "badexp.scm")`, want: "include-ci: failed to expand badexp.scm"},
 		{name: "parse error names the included file's position", code: "(define a 1)\n(include \"badread.scm\")", want: "(at badread.scm:2:13, index 27,"},
 		{name: "lexical error names the included file", code: "(define a 1)\n(include \"badlex.scm\")", want: "(at badlex.scm:2:4, index 18, character '9' (U+0039), tokenizer state unsigned-integer)"},
 	}
@@ -632,4 +634,273 @@ func TestKnownLimitationDeferredIncludeUnderALiveStackWithRelativePaths(t *testi
 	result, err := engine.EvalProgram(loadCtx, `(include "sub/b.scm") cv`, "includer.scm")
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.SchemeString(), qt.Equals, `"decoy"`)
+}
+
+// libraryIncludeEngine is evalIncludeProgram's engine with "lib" as the library
+// search path, for includes reached from a library declaration.
+func libraryIncludeEngine(t *testing.T, fsys fstest.MapFS) *wile.Engine {
+	t.Helper()
+	engine, err := wile.NewEngine(context.Background(),
+		wile.WithProfile(wile.KitchenSink),
+		wile.WithAuthorizer(nil), // the test exercises include resolution, not the sandbox
+		wile.WithSourceFS(fsys),
+		wile.WithLibraryPaths("lib"),
+	)
+	qt.Assert(t, err, qt.IsNil)
+	return engine
+}
+
+// TestIncludeCycleIsRefused pins A10: a file included from inside itself,
+// directly or through other files, is refused with ErrIncludeCycle naming the
+// files of the cycle, once, at the first revisit. Before, the splice recursed
+// until the expansion depth guard fired (~1 min, a ~5.5 MB error of one wrapped
+// layer per level). Racket and Chez do not detect it either (both loop until
+// killed), so this is a robustness choice, not conformance.
+//
+// The exact chain is what pins each push site: without the declaration-level
+// include's own check, the expander's would catch the same cycle one hop late
+// and print the file three times.
+func TestIncludeCycleIsRefused(t *testing.T) {
+	fsys := fstest.MapFS{
+		"self.scm":           &fstest.MapFile{Data: []byte(`(define s 1) (include "self.scm")`)},
+		"cyca.scm":           &fstest.MapFile{Data: []byte(`(define a 1) (include "cycb.scm")`)},
+		"cycb.scm":           &fstest.MapFile{Data: []byte(`(define b 2) (include "cyca.scm")`)},
+		"dot.scm":            &fstest.MapFile{Data: []byte(`(include "./dot.scm")`)},
+		"ci.scm":             &fstest.MapFile{Data: []byte(`(include-ci "ci.scm")`)},
+		"top.scm":            &fstest.MapFile{Data: []byte(`(include "sub/back.scm")`)},
+		"sub/back.scm":       &fstest.MapFile{Data: []byte(`(include "../top.scm")`)},
+		"lib/declinc.sld":    &fstest.MapFile{Data: []byte(`(define-library (declinc) (include-library-declarations "declinc-d.scm"))`)},
+		"lib/declinc-d.scm":  &fstest.MapFile{Data: []byte(`(include "declinc-d.scm")`)},
+		"lib/declself.sld":   &fstest.MapFile{Data: []byte(`(define-library (declself) (include-library-declarations "declself-d.scm"))`)},
+		"lib/declself-d.scm": &fstest.MapFile{Data: []byte(`(include-library-declarations "declself-d.scm")`)},
+		"lib/declci.sld":     &fstest.MapFile{Data: []byte(`(define-library (declci) (include-library-declarations "declci-d.scm"))`)},
+		"lib/declci-d.scm":   &fstest.MapFile{Data: []byte(`(include-ci "declci-d.scm")`)},
+	}
+	tcs := []struct {
+		name  string
+		code  string
+		chain string
+	}{
+		{name: "self include", code: `(include "self.scm")`, chain: "include: self.scm -> self.scm: include cycle"},
+		{name: "two-file cycle", code: `(include "cyca.scm")`, chain: "include: cyca.scm -> cycb.scm -> cyca.scm: include cycle"},
+		{name: "operand spelled with ./", code: `(include "dot.scm")`, chain: "include: dot.scm -> dot.scm: include cycle"},
+		{name: "include-ci", code: `(include-ci "ci.scm")`, chain: "include-ci: ci.scm -> ci.scm: include cycle"},
+		{name: "cycle through a subdirectory", code: `(include "top.scm")`, chain: "include: top.scm -> sub/back.scm -> top.scm: include cycle"},
+		{name: "declaration-level include", code: `(import (declinc))`, chain: "include: lib/declinc-d.scm -> lib/declinc-d.scm: include cycle"},
+		{name: "include-library-declarations", code: `(import (declself))`, chain: "include-library-declarations: lib/declself-d.scm -> lib/declself-d.scm: include cycle"},
+		{name: "declaration-level include-ci", code: `(import (declci))`, chain: "include-ci: lib/declci-d.scm -> lib/declci-d.scm: include cycle"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			engine := libraryIncludeEngine(t, fsys)
+			_, err := engine.EvalProgram(context.Background(), tc.code, "includer.scm")
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, errors.Is(err, werr.ErrIncludeCycle), qt.IsTrue, qt.Commentf("%v", err))
+			qt.Assert(t, strings.Count(err.Error(), tc.chain), qt.Equals, 1, qt.Commentf("%v", err))
+		})
+	}
+}
+
+// TestIncludeOfAFileTwiceIsNotACycle is the control for TestIncludeCycleIsRefused:
+// a file included again after its first include returned, or reached by two
+// paths of a diamond, is not on the load stack the second time.
+func TestIncludeOfAFileTwiceIsNotACycle(t *testing.T) {
+	fsys := fstest.MapFS{
+		"bump.scm":  &fstest.MapFile{Data: []byte(`(set! n (+ n 1))`)},
+		"left.scm":  &fstest.MapFile{Data: []byte(`(include "bump.scm")`)},
+		"right.scm": &fstest.MapFile{Data: []byte(`(include "bump.scm")`)},
+	}
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{name: "sequential", code: `(define n 0) (include "bump.scm" "bump.scm") (include "bump.scm") n`, want: "3"},
+		{name: "diamond", code: `(define n 0) (include "left.scm" "right.scm") n`, want: "2"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := evalIncludeProgram(t, fsys, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got, qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestLoadStackEntryIsNotAnEnclosingInclude pins that the cycle check reads the
+// include chain, not the load stack: a path on the stack is not necessarily an
+// include enclosing this one. An SRFI-18 thread inherits its starter's stack, so
+// two threads each including common.scm saw the other's push, and the first
+// form of the check reported common.scm -> lb.scm -> common.scm for a program
+// with no cycle. ContextWithLoadPath stands in for the other thread's push.
+func TestLoadStackEntryIsNotAnEnclosingInclude(t *testing.T) {
+	fsys := fstest.MapFS{
+		"common.scm": &fstest.MapFile{Data: []byte(`(define c 1)`)},
+	}
+	engine := libraryIncludeEngine(t, fsys)
+	loadCtx, err := engine.ContextWithLoadPath(context.Background(), "common.scm")
+	qt.Assert(t, err, qt.IsNil)
+	result, err := engine.EvalProgram(loadCtx, `(include "common.scm") c`, "includer.scm")
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "1")
+}
+
+// TestLibraryDeclarationIncludeResolvesAgainstTheSldDirectory pins a
+// declaration-level (include ...) in a .sld: it resolves against the .sld's own
+// directory, not the library search path or the includer's directory, both of
+// which hold a decoy.
+func TestLibraryDeclarationIncludeResolvesAgainstTheSldDirectory(t *testing.T) {
+	fsys := fstest.MapFS{
+		"lib/sub/dm.sld":   &fstest.MapFile{Data: []byte(`(define-library (sub dm) (export v) (include "impl.scm"))`)},
+		"lib/sub/impl.scm": &fstest.MapFile{Data: []byte(`(define v 'sub)`)},
+		"lib/impl.scm":     &fstest.MapFile{Data: []byte(`(define v 'lib)`)},
+		"impl.scm":         &fstest.MapFile{Data: []byte(`(define v 'root)`)},
+	}
+	engine := libraryIncludeEngine(t, fsys)
+	result, err := engine.EvalProgram(context.Background(), `(import (sub dm)) v`, "includer.scm")
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result.SchemeString(), qt.Equals, "sub")
+}
+
+// TestMacroProducedIncludeRecursionTerminates pins the other side of
+// TestIncludeCycleIsRefused: a file that reaches itself only through a macro is
+// not refused, because the macro can stop producing the include. Here a phase-1
+// counter stops it after three rounds; racket (racket/include with
+// begin-for-syntax) and petite (a let-over-transformer counter) both give 3.
+// The macro writes the include itself, passes through one written in the file
+// as its argument, or expands that argument with expand; all are the macro's to
+// drop.
+func TestMacroProducedIncludeRecursionTerminates(t *testing.T) {
+	fsys := fstest.MapFS{
+		"self-g.scm": &fstest.MapFile{Data: []byte(`(set! count (+ count 1)) (inc-once)`)},
+		"self-h.scm": &fstest.MapFile{Data: []byte(`(set! count (+ count 1)) (maybe (include "self-h.scm"))`)},
+		"lx.scm":     &fstest.MapFile{Data: []byte(`(set! count (+ count 1)) (gate (include "lx.scm"))`)},
+	}
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{name: "include written by the macro", code: `(define count 0)
+(define-for-syntax n 0)
+(define-syntax inc-once
+  (er-macro-transformer
+    (lambda (f r c)
+      (if (< n 3)
+          (begin (set! n (+ n 1)) (list (r 'include) "self-g.scm"))
+          (list (r 'begin))))))
+(inc-once)
+count`},
+		{name: "include passed through the macro", code: `(define count 0)
+(define-for-syntax n 0)
+(define-syntax maybe
+  (er-macro-transformer
+    (lambda (f r c)
+      (if (< n 3)
+          (begin (set! n (+ n 1)) (car (cdr f)))
+          (list (r 'begin))))))
+(maybe (include "self-h.scm"))
+count`},
+		// The transformer expands its argument itself (racket's local-expand twin
+		// gives 3), so the include is met while the macro runs, not in its output.
+		{name: "include a transformer expands", code: `(define count 0)
+(define-for-syntax n 0)
+(define-syntax gate
+  (lambda (stx)
+    (syntax-case stx ()
+      ((_ x) (if (< n 3) (begin (set! n (+ n 1)) (expand #'x)) #'(begin))))))
+(gate (include "lx.scm"))
+count`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := evalIncludeProgram(t, fsys, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got, qt.Equals, "3")
+		})
+	}
+}
+
+// TestMacroProducedIncludeLoopFailsConcisely pins how a macro-produced include
+// that never stops fails: at the expansion depth guard, as before, but as one
+// error naming the depth of the include chain and a bounded list of its files.
+// Wrapped once per level it was a ~4 MB message at the default depth.
+func TestMacroProducedIncludeLoopFailsConcisely(t *testing.T) {
+	fsys := fstest.MapFS{
+		"self-f.scm": &fstest.MapFile{Data: []byte(`(set! count (+ count 1)) (inc-forever)`)},
+	}
+	ctx := context.Background()
+	engine, err := wile.NewEngine(ctx,
+		wile.WithProfile(wile.KitchenSink),
+		wile.WithAuthorizer(nil), // the test exercises include resolution, not the sandbox
+		wile.WithSourceFS(fsys),
+		wile.WithMaxExpandDepth(2000),
+	)
+	qt.Assert(t, err, qt.IsNil)
+	_, err = engine.EvalProgram(ctx, `(define count 0)
+(define-syntax inc-forever (er-macro-transformer (lambda (f r c) (list (r 'include) "self-f.scm"))))
+(inc-forever)`, "includer.scm")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrExpandDepthExceeded), qt.IsTrue, qt.Commentf("%v", err))
+	qt.Assert(t, errors.Is(err, werr.ErrIncludeCycle), qt.IsFalse)
+	msg := err.Error()
+	qt.Assert(t, len(msg) < 4096, qt.IsTrue, qt.Commentf("%d bytes", len(msg)))
+	qt.Assert(t, msg, qt.Contains, " nested includes (self-f.scm -> self-f.scm -> self-f.scm -> ... ")
+	qt.Assert(t, strings.Count(msg, "failed to expand self-f.scm"), qt.Equals, 0)
+}
+
+// TestIncludeInLibraryBodyMacrosResolveInTheLibrary is the control for the
+// include splice's propagation of the library scope to the file's expander:
+// macros an included file defines in a library body resolve their free
+// identifiers in the library, whether the include is written in the body or
+// introduced by another library's macro. No row has been found that
+// distinguishes the propagation (removing it leaves these green); they stand as
+// controls. The cross-library row is skipped on an ER hygiene bug it exposed.
+func TestIncludeInLibraryBodyMacrosResolveInTheLibrary(t *testing.T) {
+	fsys := fstest.MapFS{
+		"lib/m.sld": &fstest.MapFile{Data: []byte(`(define-library (m)
+  (export get use-it use-er)
+  (begin
+    (define (helper) 42)
+    (include "ls.scm")))`)},
+		"lib/ls.scm": &fstest.MapFile{Data: []byte(`(define (get) (let-syntax ((u (syntax-rules () ((_) (helper))))) (u)))
+(define-syntax use-it (lambda (stx) (syntax-case stx () ((_) #'(helper2)))))
+(define-syntax use-er (er-macro-transformer (lambda (f r c) (list (r 'helper2)))))
+(define (helper2) 43)`)},
+		"lib/a.sld": &fstest.MapFile{Data: []byte(`(define-library (a)
+  (export inc-here)
+  (begin
+    (define-syntax inc-here (syntax-rules () ((_ v) (begin (include "shared.scm") (set! v (from-shared))))))))`)},
+		"lib/b.sld": &fstest.MapFile{Data: []byte(`(define-library (b)
+  (export get-b)
+  (import (a))
+  (begin
+    (define (helper) 'b)
+    (define state #f)
+    (inc-here state)
+    (define (get-b) state)))`)},
+		"lib/shared.scm": &fstest.MapFile{Data: []byte(`(define-syntax sm (er-macro-transformer (lambda (f r c) (list (r 'helper)))))
+(define (helper) 'shared)
+(define (from-shared) (sm))`)},
+	}
+	tcs := []struct {
+		name string
+		code string
+		want string
+		skip string
+	}{
+		{name: "let-syntax, syntax-case and er macros in an included file", code: `(import (m)) (define (helper) 0) (define (helper2) 1) (list (get) (use-it) (use-er))`, want: "(42 43 43)"},
+		{name: "include introduced by another library's macro", code: `(import (b)) (define (helper) 'top) (get-b)`, want: "shared",
+			skip: "ER rename in an included file resolves to the including library's binding: gives b (racket: shared; Wile's syntax-rules, syntax-case and direct-reference versions: shared)"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.skip != "" {
+				t.Skip(tc.skip)
+			}
+			engine := libraryIncludeEngine(t, fsys)
+			result, err := engine.EvalProgram(context.Background(), tc.code, "includer.scm")
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
 }

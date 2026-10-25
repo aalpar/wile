@@ -183,6 +183,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   already did. One macro layer between them, `(m (pass (include ...)))`, still
   captures, as `(m (pass (define ...)))` does.
 
+- **A cyclic `include` is refused with `werr.ErrIncludeCycle` naming the files
+  of the cycle.** A file that includes itself, directly or through other files,
+  was spliced into itself until the expansion depth guard fired (about a
+  minute and a ~5.5 MB error for a two-file cycle), and an
+  `include-library-declarations` file naming itself was a fatal Go stack
+  overflow. Now `include`, `include-ci` and `include-library-declarations`
+  report `include: /p/b.scm -> /p/a.scm -> /p/b.scm: include cycle` at the
+  first revisit. A file that reaches itself through a macro is not refused,
+  because the macro can stop producing the include (as in Racket and Chez); if
+  it never stops, the depth guard's error is now one line naming the include
+  depth and a bounded list of the files. New sentinel: `werr.ErrIncludeCycle`.
+
 - **A resumed `with-timeout` continuation answers as if the thunk had not been
   interrupted.** Resuming after the timer stopped the thunk between two
   instructions cleared or replaced the operand the next instruction consumes

@@ -415,6 +415,19 @@ eng, err := wile.NewEngine(ctx,
 with `SCHEME_LIBRARY_PATH` environment variable paths. These prepend to
 the default search paths.
 
+## Include Cycles
+
+The expander and compiler carry the chain of files being included on the
+context, one chain per synchronous include, so siblings and SRFI-18 threads
+never see each other's entries (the load stack cannot answer this: a thread
+inherits its starter's). An include of a file already on the chain raises
+`werr.ErrIncludeCycle`, naming the cycle outermost first, when every include
+from that file on was written in the file it appears in. A cycle through a
+macro-produced include, or one a macro passed through or expanded with
+`expand`, is not refused: the macro can stop producing it. One that never stops ends at the expansion
+depth guard (`werr.ErrExpandDepthExceeded`), reported once with the include
+depth and a bounded list of the files.
+
 ## Architecture Layers
 
 ```
