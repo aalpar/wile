@@ -92,6 +92,12 @@ type MachineContext struct {
 	// expansion-time root (a transformer body, a library body, the bootstrap),
 	// which the resume rule treats differently from a runtime root (resumePrompt).
 	expansionRoot bool
+	// hostCallRoot is set by RunHostCall: a root RunResumable drives for a
+	// procedure a Go host applies (Engine.Call), whose winding started empty and
+	// which may have the calling program's driver above it on the Go stack. The
+	// resume rule passes up a continuation a live driver elsewhere owns
+	// (resumePrompt).
+	hostCallRoot bool
 	// escapeCont is vestigial: it is propagated into sub-contexts and threads but
 	// never consulted. Nothing resumes from it.
 	escapeCont *MachineContinuation
@@ -2082,9 +2088,21 @@ func (p *MachineContext) RunResumable() (rerr error) {
 			// and the chain above it is discarded.
 			//
 			p.rebasePassedUpResume(resumeErr)
-			// Always this driver's to resolve: it is a root (its promptTag is the
-			// signal's tag), and a root resolves whatever reaches it.
-			prompt, _ := p.resumePrompt(resumeErr)
+			// A root resolves whatever reaches it, except that a host call's root
+			// passes up a continuation a live driver elsewhere owns (resumePrompt);
+			// the host forwards it by returning the error.
+			prompt, ok := p.resumePrompt(resumeErr)
+			if !ok {
+				unwindErr := p.passUpResume(resumeErr)
+				if unwindErr == nil {
+					return err
+				}
+				if isControlSignal(unwindErr) || p.supersedingTimerInterrupt(unwindErr) != nil {
+					pending = unwindErr
+					continue
+				}
+				return unwindErr
+			}
 			done, reErr := p.resolveResume(resumeErr, prompt)
 			if reErr != nil {
 				if isControlSignal(reErr) {
@@ -2177,6 +2195,20 @@ func (p *MachineContext) RunResumable() (rerr error) {
 // DefaultPromptTag prompt. It delegates to RunResumable, the shared abort/resume
 // driver every DefaultPromptTag owner routes through.
 func (p *MachineContext) RunWithEscapeHandling() error {
+	return p.RunResumable()
+}
+
+// RunHostCall drives a context a Go host created to apply a procedure (the
+// sub-context of Engine.Call's throwaway root) under RunResumable, as a root
+// that is not the program's: a continuation whose owner is a live driver
+// elsewhere (the program that called the host, an enclosing host call) is
+// passed up as the returned error, its extents inside the call left first,
+// instead of being resolved here, which ran the rest of the program inside the
+// call and again after it. A host that returns the error forwards the resume to
+// that driver. A continuation captured in this call, or one whose owner's run is
+// over (a host-driven generator), is resolved here.
+func (p *MachineContext) RunHostCall() error {
+	p.hostCallRoot = true
 	return p.RunResumable()
 }
 
@@ -2454,7 +2486,11 @@ func (p *MachineContext) resolveAbort(abortErr *ErrPromptAbort, prompt *MachineC
 // rest of the program on the sub-context and then again on the driver that was
 // mid-escape. A runtime root (promptTag is the signal's tag: RunResumable
 // installed it) resolves whatever reaches it: a continuation captured at a
-// boundary that no longer exists has nowhere else to go. An expansion-time root
+// boundary that no longer exists has nowhere else to go. The exception is a host
+// call's root (hostCallRoot), which passes up a continuation whose root token is
+// neither its own nor closed: that owner is a live driver elsewhere, the calling
+// program or an enclosing host call, and only it can run the rest of its
+// continuation once. An expansion-time root
 // (expansionRoot: a parentless context RunWithinBoundary drives) resolves a
 // continuation captured under itself or under an expansion-time root whose run
 // has ended, and passes up one of a runtime root's, live or stale: it may well
@@ -2478,6 +2514,9 @@ func (p *MachineContext) resumePrompt(resumeErr *ErrResumeContinuation) (prompt 
 	if seg != nil && seg.boundary != nil && seg.boundary == p.boundary {
 		return nil, true
 	}
+	if p.hostCallRoot && seg != nil && seg.root != nil && seg.root != p.boundary && !seg.root.closed.Load() {
+		return nil, false
+	}
 	if found {
 		return nil, true
 	}
@@ -2488,14 +2527,16 @@ func (p *MachineContext) resumePrompt(resumeErr *ErrResumeContinuation) (prompt 
 }
 
 // passUpResume prepares a resume this driver does not own for the enclosing
-// driver. An expansion-time root leaves its own extents first (the
-// dynamic-winds entered around the (k v) site at expansion time; the runtime
-// driver above cannot see them) and marks the winding for rebase: SourceWinding
-// was this root's, and the runtime's own extents, live at the eval site, are not
-// in it. The unwind's failure, if any, is returned for the driver to dispatch.
-// A sub-context has nothing to do: its winding is its root's, inherited.
+// driver. An expansion-time root or a host call's root, whose winding started
+// empty, leaves its own extents first (the dynamic-winds entered around the
+// (k v) site at expansion time or inside the host call; the driver above cannot
+// see them) and marks the winding for rebase: SourceWinding was this root's, and
+// the enclosing driver's own extents, live at the eval or host call site, are
+// not in it. The unwind's failure, if any, is returned for the driver to
+// dispatch. A sub-context has nothing to do: its winding is its root's,
+// inherited.
 func (p *MachineContext) passUpResume(resumeErr *ErrResumeContinuation) error {
-	if !p.expansionRoot {
+	if !p.expansionRoot && !p.hostCallRoot {
 		return nil
 	}
 	unwindErr := p.unwindStackTo(resumeErr.SourceWinding, 0)
@@ -2508,8 +2549,9 @@ func (p *MachineContext) passUpResume(resumeErr *ErrResumeContinuation) error {
 }
 
 // rebasePassedUpResume is passUpResume's other half, run by the first driver
-// above the expansion-time root that passed the resume up: the winding at the
-// (k v) site, for the reconcile, is this driver's, not that root's. The driver
+// above the expansion-time root or host call's root that passed the resume up:
+// the winding at the (k v) site, for the reconcile, is this driver's, not that
+// root's. The driver
 // may itself be an expansion-time root (a transformer that ran eval on its own
 // context): then its winding is right for leaving its own extents, and if it
 // passes the resume on, passUpResume marks it again for the driver above.
@@ -2546,6 +2588,17 @@ func (p *MachineContext) completeOwnRun() error {
 // a prompt frame the values must flow THROUGH it, so the frame is restored and
 // the driver keeps looping.
 func (p *MachineContext) resolveResume(resumeErr *ErrResumeContinuation, prompt *MachineContinuation) (done bool, err error) {
+	// Thread confinement, checked again where the segment would run: the (k v)
+	// site's check (applyCapturedContinuation) compares the invoking context's
+	// thread, and a host call's context, built outside any thread, carries thread
+	// 0 whichever goroutine runs it. Passed up, the main thread's continuation
+	// reached a thread root's driver and ran on that thread.
+	seg := resumeErr.Segment
+	if seg != nil && seg.threadID != p.threadID {
+		return false, werr.WrapForeignErrorf(werr.ErrCrossThreadContinuation,
+			"call/cc: continuation captured in thread %d, resumed by thread %d",
+			seg.threadID, p.threadID)
+	}
 	// isolate=true: this signal is emitted only for call/cc resume, which restores
 	// the captured mark snapshot (composable resume composes marks and bypasses
 	// this signal — it calls reinstallSegment directly).

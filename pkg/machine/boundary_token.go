@@ -41,7 +41,7 @@ type boundaryToken struct {
 	// closed is set when the run of the context the token names is over: an
 	// expansion-time root's when its driver returns, any context's when it is
 	// released to the pool. Read only on a root token, and only by an
-	// expansion-time root (resumePrompt). Atomic because a macro context carries
+	// expansion-time root or a host call's root (resumePrompt). Atomic because a macro context carries
 	// no thread identity, so a continuation captured on one goroutine's
 	// expansion can be invoked, and the token read, on another's; the atomic
 	// keeps that read defined, it does not make the cross-thread resume safe
