@@ -213,7 +213,7 @@
 ;; -- define-record-type (high-level macro) ----------------------------------
 
 (test-group "define-record-type construct and access"
-  (test 7 (begin
+  (test 7 (let ()
             (define-record-type <point>
               (make-point x y)
               point?
@@ -223,21 +223,21 @@
               (+ (point-x p) (point-y p))))))
 
 (test-group "define-record-type predicate"
-  (test #t (begin
+  (test #t (let ()
              (define-record-type <pt>
                (make-pt x y)
                pt?
                (x pt-x)
                (y pt-y))
              (pt? (make-pt 1 2))))
-  (test #f (begin
+  (test #f (let ()
              (define-record-type <pt2>
                (make-pt2 x y)
                pt2?
                (x pt2-x)
                (y pt2-y))
              (pt2? 42)))
-  (test #f (begin
+  (test #f (let ()
              (define-record-type <pt3>
                (make-pt3 x y)
                pt3?
@@ -252,7 +252,7 @@
              (pt3? (make-clr 255 0 0)))))
 
 (test-group "define-record-type mutable fields"
-  (test 10 (begin
+  (test 10 (let ()
              (define-record-type <mpt>
                (make-mpt x y)
                mpt?
@@ -262,7 +262,7 @@
                (mpt-set-x! p 10)
                (mpt-x p))))
   ;; mutation preserves other fields
-  (test 4 (begin
+  (test 4 (let ()
             (define-record-type <mpt2>
               (make-mpt2 x y)
               mpt2?
@@ -273,7 +273,7 @@
               (mpt2-y p)))))
 
 (test-group "define-record-type mixed mutable/immutable"
-  (test "Bob" (begin
+  (test "Bob" (let ()
                 (define-record-type <entry>
                   (make-entry key value)
                   entry?
@@ -284,7 +284,7 @@
                   (entry-value e)))))
 
 (test-group "define-record-type single field"
-  (test 42 (begin
+  (test 42 (let ()
              (define-record-type <wrapper>
                (make-wrapper val)
                wrapper?
@@ -292,7 +292,7 @@
              (wrapper-val (make-wrapper 42)))))
 
 (test-group "define-record-type nested records"
-  (test 3 (begin
+  (test 3 (let ()
             (define-record-type <npt>
               (make-npt x y)
               npt?

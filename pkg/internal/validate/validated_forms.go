@@ -205,6 +205,9 @@ type ValidatedLiteral struct {
 	validatedBase
 	Value syntax.SyntaxValue
 	Env   *environment.EnvironmentFrame
+	// definesSyntax marks a define-syntax, a definition that passes through
+	// as a literal, so checkDefinitionContexts can refuse it in an expression.
+	definesSyntax bool
 }
 
 // newLiteralExpr creates a ValidatedLiteral wrapping a syntax value as a

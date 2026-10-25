@@ -54,7 +54,9 @@ func validateDefineSyntax(_ context.Context, env *environment.EnvironmentFrame, 
 	// compiler/expander handles transformer validation.
 
 	// Return as literal - compiler handles the rest
-	return newLiteralExpr(env, source, pair)
+	q := newLiteralExpr(env, source, pair)
+	q.definesSyntax = true
+	return q
 }
 
 // validateSyntaxRules validates (syntax-rules (literals...) clause...) and the

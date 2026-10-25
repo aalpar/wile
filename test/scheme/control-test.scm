@@ -56,7 +56,7 @@
 
   ;; saved continuation invoked later with begin
   (test 3
-    (begin
+    (let ()
       (define k-saved-ctrl #f)
       (define count-ctrl 0)
       (let ((result (call/cc (lambda (k) (set! k-saved-ctrl k) 'first))))

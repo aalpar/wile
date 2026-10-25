@@ -32,9 +32,71 @@ import (
 func ValidateExpression(ctx context.Context, env *environment.EnvironmentFrame, expr syntax.SyntaxValue) *ValidationResult {
 	result := &ValidationResult{}
 	validated := validateExpr(ctx, env, expr, result)
+	if validated != nil && result.Ok() {
+		checkDefinitionContexts(validated, true, result)
+	}
 	result.Expr = validated
 	result.finalizeStability()
 	return result
+}
+
+// checkDefinitionContexts refuses a definition outside a definition context
+// (R7RS §5.3, §5.4, §5.5): the root of a unit, a body, or a begin that is itself
+// in one. Anywhere else (a call argument, an if arm, a define's right-hand
+// side) the form is an expression, and Racket and Chez refuse it there, so
+// (list (define x 1) x) is an error rather than (#<void> 1).
+//
+// A pass over the finished tree and not a flag threaded through validateExpr:
+// each node names its children's context, so no context can leak from a body
+// into the arguments of a call inside it. Only a *ValidatedDefine and a
+// define-syntax literal are checked, and the validator builds those only for a
+// head that resolved to the form, so a call to a user procedure named define is
+// never refused.
+//
+// The first refusal ends the walk, as it does in Racket: define-values and
+// define-record-type expand to several defines, and one located error reads
+// better than an unlocated list of them. It reports whether the walk may go on.
+func checkDefinitionContexts(expr ValidatedExpr, definitionContext bool, result *ValidationResult) bool {
+	switch e := expr.(type) {
+	case *ValidatedDefine:
+		if !definitionContext {
+			result.addError(e.Source(), "define", "definition not allowed in an expression context")
+			return false
+		}
+	case *ValidatedLiteral:
+		if e.definesSyntax && !definitionContext {
+			result.addError(e.Source(), "define-syntax", "definition not allowed in an expression context")
+			return false
+		}
+		return true
+	case *ValidatedBegin:
+		return checkEachDefinitionContext(e.Body(), definitionContext, result)
+	case *ValidatedLet:
+		for _, b := range e.Bindings {
+			ok := checkDefinitionContexts(b.Init, false, result)
+			if !ok {
+				return false
+			}
+		}
+		return checkEachDefinitionContext(e.Body(), true, result)
+	}
+	ok := true
+	WalkSubExprs(expr, func(child ValidatedExpr, role ChildRole) {
+		if ok {
+			ok = checkDefinitionContexts(child, role == RoleClosureBody, result)
+		}
+	})
+	return ok
+}
+
+func checkEachDefinitionContext(exprs []ValidatedExpr, definitionContext bool, result *ValidationResult) bool {
+	for _, e := range exprs {
+		ok := checkDefinitionContexts(e, definitionContext, result)
+		if !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // validateBodySlice validates a contiguous slice of elements as body expressions.

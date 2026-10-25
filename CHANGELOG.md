@@ -29,6 +29,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **BREAKING (behavior): a definition in an expression context is refused.**
+  `(list (define x 1) x)` answered `(#<void> 1)`, and a `define` in an `if` arm,
+  a `when` body, a `do` command, a call argument inside a body or an
+  expression-position `begin` was accepted the same way. Each is now a located
+  compile error ("definition not allowed in an expression context"), as R7RS
+  §5.3 places definitions only at top level, at the start of a body, or in a
+  `begin` spliced into one; racket and petite refuse each of these. The rule
+  covers `define-values`, `define-record-type` and `define-syntax`. A top-level
+  `(begin (define w 4) w)`, a body-level `begin` or `cond-expand` splice, `eval`,
+  `load` and library bodies are unchanged. `parameterize`'s body is now a body
+  (R7RS §4.2.6): its definitions stay local, where
+  `(parameterize () (define z 3) z)` at top level used to define a global `z`
+  (racket and petite keep it local).
+
 - **BREAKING (behavior): `char-ready?` requires a textual input port.** It
   answered `#t` without looking at its argument, so `(char-ready? 5)`, a binary
   input port and an output port all answered `#t`; each is now an error, as

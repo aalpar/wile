@@ -113,7 +113,7 @@
                      (delay-force (lazy-countdown (- n 1)))))))
       (force (lazy-countdown 100))))
   (test 100
-    (begin
+    (let ()
       (define (stream-count n limit)
         (if (>= n limit)
             (delay n)

@@ -435,8 +435,8 @@ func TestNamespaceUndefine_RemovesAmbientAndSparesMacroBinder(t *testing.T) {
 	eng := newEngine(t)
 
 	result := schemeEval(t, eng, `
-		(define-syntax m (syntax-rules () ((_ v) (begin (define w v) (lambda () w)))))
-		(define get-w (m 7))
+		(define-syntax m (syntax-rules () ((_ g v) (begin (define w v) (define (g) w)))))
+		(m get-w 7)
 		(define w 1)
 		(namespace-undefine! (interaction-environment) 'w)
 		(list (namespace-bound? (interaction-environment) 'w) (get-w))`)

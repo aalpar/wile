@@ -269,8 +269,10 @@ func TestIncludePassedThroughAMacro(t *testing.T) {
 // One macro layer between them defeats it; see the known-gap row. Chez and
 // Racket (racket/include) answer top and macro. The macro-local row used to
 // raise ErrAmbiguousBinding: the pruned define tied with the macro's let binder.
-// The last row splices one include twice, once in the macro's body; Racket, with
-// syntax-case for the ER macro, answers macro user.
+// The last row splices one include twice, once at top level and once in the
+// macro's body; Racket, with syntax-case for the ER macro, answers macro user.
+// (It used to splice the first copy into a list argument, a define in an
+// expression context that Wile now refuses, as Racket does.)
 func TestIncludePassedToAMacroDoesNotCaptureTheMacrosBinder(t *testing.T) {
 	fsys := fstest.MapFS{
 		"u.scm": &fstest.MapFile{Data: []byte(`(define a 'user)`)},
@@ -293,10 +295,12 @@ func TestIncludePassedToAMacroDoesNotCaptureTheMacrosBinder(t *testing.T) {
 (define-syntax twice
   (er-macro-transformer
     (lambda (f r c)
-      (list (r 'begin) (cadr f)
-            (list (r 'let) (list (list (r 'a) ''macro))
-                  (list (r 'let) '() (cadr f) (r 'a)))))))
-(list (pass (twice (include "u.scm"))) a)`, want: "(macro user)", opts: withStdlibResolver()},
+      (list (r 'begin) (cadr (cdr f))
+            (list (r 'define) (cadr f)
+                  (list (r 'let) (list (list (r 'a) ''macro))
+                        (list (r 'let) '() (cadr (cdr f)) (r 'a))))))))
+(pass (twice got (include "u.scm")))
+(list got a)`, want: "(macro user)", opts: withStdlibResolver()},
 		// KNOWN GAP, pinned at today's answer: racket and petite answer top. pass's
 		// output is the include at a splice position, so it is marked, and the
 		// boundary prune strips every use-site scope the run minted, m's included.

@@ -38,11 +38,6 @@ func TestVoidQ(t *testing.T) {
 			out:  values.TrueValue,
 		},
 		{
-			name: "void? on define result",
-			code: "(void? (define x 1))",
-			out:  values.TrueValue,
-		},
-		{
 			name: "void? on set! result",
 			code: "(begin (define y 1) (void? (set! y 2)))",
 			out:  values.TrueValue,
