@@ -323,7 +323,12 @@
                               theory proto)))
     ;; Still discriminating: a nested operand that is not AC-equal.
     (test 0 (length (ac-unify '(+ (* a b) c) '(+ c (* a c)) theory proto)))
-    (test 0 (length (ac-unify '(+ (* a b) c) '(+ c (g b a)) theory proto)))))
+    (test 0 (length (ac-unify '(+ (* a b) c) '(+ c (g b a)) theory proto)))
+    ;; equal? operands cancel first; the remainder still compares modulo AC.
+    (test 1 (length (ac-unify '(+ (* a b) (* a b) c) '(+ c (* b a) (* a b))
+                              theory proto)))
+    (test 0 (length (ac-unify '(+ (* a b) (* a b)) '(+ (* a b) (* b c))
+                              theory proto)))))
 
 (test-group "ac-match: identical substitutions are returned once"
   (let* ((theory (make-ac-theory '(+)))

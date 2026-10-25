@@ -607,14 +607,26 @@ Keywords: AC unification, unify, associative, commutative, Stickel, Robinson"
   #f)
 
 ;; True iff the ground operand lists XS and YS are equal as multisets modulo
-;; AC. A compound pair is equal? or decided by unify-rec, which recurses
-;; AC-aware and, both sides being ground, binds nothing; the comparator
-;; decides the other pairs (term-equal?). A written-form comparator ranks
-;; (* a b) and (* b a) apart, so consulting it on compounds would miss
-;; AC-equality one level down. Greedy first-match is complete because
-;; AC-equality is an equivalence. The shape of X is tested once per scan of
-;; YS, so an atom X costs what the comparator costs.
+;; AC. Compound operands with an equal? partner cancel first, so only the
+;; remainder pays for the AC-aware comparison; atoms are left to term-equal?
+;; so its contract checks still see every atom pair. Cancelling greedily is
+;; complete because AC-equality is an equivalence.
 (define (multiset-equal? xs ys ac-ops proto)
+  (let cancel ((xs xs) (kept '()) (ys ys))
+    (cond
+      ((null? xs) (multiset-equal-modulo-ac? (reverse kept) ys ac-ops proto))
+      ((and (term-compound? proto (car xs)) (member (car xs) ys))
+       (cancel (cdr xs) kept (remove-first (car xs) ys)))
+      (else (cancel (cdr xs) (cons (car xs) kept) ys)))))
+
+;; Greedy multiset equality over what multiset-equal? did not cancel. A
+;; compound pair is decided by unify-rec, which recurses AC-aware and, both
+;; sides being ground, binds nothing; the comparator decides the other pairs
+;; (term-equal?). A written-form comparator ranks (* a b) and (* b a) apart,
+;; so consulting it on compounds would miss AC-equality one level down. The
+;; shape of X is tested once per scan of YS, so an atom X costs what the
+;; comparator costs.
+(define (multiset-equal-modulo-ac? xs ys ac-ops proto)
   (cond
     ((and (null? xs) (null? ys)) #t)
     ((or (null? xs) (null? ys)) #f)
@@ -624,15 +636,13 @@ Keywords: AC unification, unify, associative, commutative, Stickel, Robinson"
              (if (term-compound? proto x)
                  (lambda (y)
                    (if (term-compound? proto y)
-                       (or (equal? x y)
-                           (pair? (unify-rec x y empty-substitution
-                                             ac-ops proto)))
+                       (pair? (unify-rec x y empty-substitution ac-ops proto))
                        (term-equal? proto x y)))
                  (lambda (y) (term-equal? proto x y))))
             (match-idx (find-index same? ys)))
        (and match-idx
-            (multiset-equal? (cdr xs) (remove-at ys match-idx)
-                             ac-ops proto))))))
+            (multiset-equal-modulo-ac? (cdr xs) (remove-at ys match-idx)
+                                       ac-ops proto))))))
 
 ;; Return the index of the first element of XS matching PRED, or #f.
 (define (find-index pred xs)
