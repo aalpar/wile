@@ -365,6 +365,12 @@ func WithMaxParseDepth(n int) EngineOnlyOption {
 // Scope: the bound reaches every expansion site: top-level program text,
 // transformer right-hand sides, library bodies, quasiquote, and (eval ...),
 // (load ...), (compile ...), (expand ...) issued from running Scheme.
+//
+// The bound belongs to the namespace, and every engine on it shares it. The first
+// engine to create or join a namespace fixes it: at this option's value, or at
+// DefaultMaxExpandDepth without it. A later NewEngineWithNamespace without the
+// option inherits it; with a different value it fails construction with
+// ErrEngineInit (wrapping ErrInvalidArgument).
 func WithMaxExpandDepth(n int) EngineOnlyOption {
 	return engineOnlyOption(func(cfg *engineConfig) {
 		if n < 0 {
@@ -389,6 +395,11 @@ func WithMaxStackSize(n uint64) EngineOnlyOption {
 // for procedure inlining. Procedures with bodies longer than this threshold
 // are not inlined. A value of 0 disables inlining entirely. When not called,
 // the engine uses compilation.DefaultInlineThreshold (5).
+//
+// The threshold belongs to the namespace on the same terms as WithMaxExpandDepth:
+// the first engine to create or join the namespace fixes it (at the default
+// without this option); a later engine inherits it, or fails with ErrEngineInit
+// (wrapping ErrInvalidArgument) when it asks for a different value.
 func WithInlineThreshold(n int) EngineOnlyOption {
 	return engineOnlyOption(func(cfg *engineConfig) {
 		if n < 0 {

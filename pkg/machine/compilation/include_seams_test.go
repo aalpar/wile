@@ -103,21 +103,79 @@ func TestReadIncludedForms(t *testing.T) {
 	})
 }
 
-// Pin: the compiler resolves include through the resolver ExpandAndCompile was
-// handed, not through env.FileResolver(). The env here has none and the file
-// exists only in the virtual FS, so reading it proves p.fileResolver is used.
-func TestExpandAndCompile_IncludeUsesTheGivenResolver(t *testing.T) {
-	env := newNamespace(environment.NewNamespace().Runtime())
-	err := RegisterSyntaxCompilers(env)
-	qt.Assert(t, err, qt.IsNil)
-	r := NewFSFileResolver(fstest.MapFS{"only-here.scm": &fstest.MapFile{Data: []byte("(define zz 1)")}}, env)
-	stx := mustDatumToSyntax(syntax.NewZeroValueSourceContext(), values.List(
-		values.NewSymbol("include"),
-		values.NewString("only-here.scm")))
+// Pin: include resolves through the resolver the pass was handed. ExpandAndCompile
+// takes it from env.FileResolver(); the bootstrap pass (expandAndCompileScoped)
+// hands its own to the compiler, with env holding none. The file exists only in
+// the virtual FS, so reading it proves which resolver was used.
+func TestExpandAndCompile_IncludeResolvesThroughTheGivenResolver(t *testing.T) {
+	tcs := []struct {
+		name    string
+		compile func(env *environment.EnvironmentFrame, r FileResolver, stx syntax.SyntaxValue) error
+	}{
+		{
+			name: "ExpandAndCompile reads env.FileResolver()",
+			compile: func(env *environment.EnvironmentFrame, r FileResolver, stx syntax.SyntaxValue) error {
+				env.SetFileResolver(r)
+				_, err := ExpandAndCompile(context.Background(), env, stx)
+				return err
+			},
+		},
+		{
+			name: "the bootstrap pass hands its resolver to the compiler",
+			compile: func(env *environment.EnvironmentFrame, r FileResolver, stx syntax.SyntaxValue) error {
+				_, err := expandAndCompileScoped(context.Background(), env, stx, r, 0, 0, nil)
+				return err
+			},
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newNamespace(environment.NewNamespace().Runtime())
+			err := RegisterSyntaxCompilers(env)
+			qt.Assert(t, err, qt.IsNil)
+			r := NewFSFileResolver(fstest.MapFS{"only-here.scm": &fstest.MapFile{Data: []byte("(define zz 1)")}}, env)
+			stx := mustDatumToSyntax(syntax.NewZeroValueSourceContext(), values.List(
+				values.NewSymbol("include"),
+				values.NewString("only-here.scm")))
 
-	_, err = ExpandAndCompile(context.Background(), env, stx, r, 0, 0)
+			err = tc.compile(env, r, stx)
 
-	qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, err, qt.IsNil)
+		})
+	}
+}
+
+// Regression guard (passes on master too; it pins no change, it keeps one out):
+// LoadBootstrapSources leaves env's resolver as it found it. The resolver
+// lives on the root namespace, which a library env shares with the running
+// engine and bootstraps into at import time, so installing the bootstrap's
+// resolver there would redirect every concurrent include engine-wide.
+func TestLoadBootstrapSources_LeavesTheNamespaceResolver(t *testing.T) {
+	tcs := []struct {
+		name    string
+		initial bool
+	}{
+		{name: "env has no resolver", initial: false},
+		{name: "env has its own resolver", initial: true},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newNamespace(environment.NewNamespace().Runtime())
+			err := RegisterSyntaxCompilers(env)
+			qt.Assert(t, err, qt.IsNil)
+			var want FileResolver
+			if tc.initial {
+				want = NewFSFileResolver(fstest.MapFS{}, env)
+				env.SetFileResolver(want)
+			}
+			bootstrapResolver := NewFSFileResolver(fstest.MapFS{}, env)
+
+			err = LoadBootstrapSources(context.Background(), env, []string{"(define zz 1)"}, bootstrapResolver, "procedure")
+
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, env.FileResolver(), qt.Equals, want)
+		})
+	}
 }
 
 // Pin: every refusal from the lifted resolveCondExpandClause is a *SourcedError.
