@@ -300,14 +300,9 @@ func PrimProcessKill(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	signals := hostSignals()
-	sig, ok := lookupSignal(signals, sigSym.Key)
-	if !ok {
-		return werr.WrapForeignErrorf(
-			werr.ErrInvalidArgument,
-			"process-kill: unknown signal '%s' on %s (expected %s)",
-			sigSym.Key, runtime.GOOS, signalNames(signals),
-		)
+	sig, err := resolveSignal(runtime.GOOS, sigSym.Key)
+	if err != nil {
+		return err
 	}
 	cmd := proc.Cmd()
 	if cmd == nil || cmd.Process == nil {
