@@ -236,7 +236,7 @@ func TestResumePromptOwnership(t *testing.T) {
 		qt.Assert(t, len(exp.windingStack), qt.Equals, 0)
 		qt.Assert(t, fromRuntime.rebaseWinding, qt.IsTrue)
 		runtime.windingStack = WindingStack{f}
-		runtime.rebaseResumeWinding(fromRuntime)
+		runtime.rebasePassedUpResume(fromRuntime)
 		qt.Assert(t, fromRuntime.rebaseWinding, qt.IsFalse)
 		qt.Assert(t, len(fromRuntime.SourceWinding), qt.Equals, 1)
 	})

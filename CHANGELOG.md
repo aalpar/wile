@@ -150,6 +150,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   top level, a lambda body or a macro argument reaching the shadow still reads
   the form; inside a library it reads the shadow, as `if` already did.
 
+- **A non-continuable `raise` raises its secondary exception when the handler
+  invokes a continuation through `eval`.** A continuation captured inside the
+  handler and invoked through `eval` (or a composable one, or from a macro
+  transformer the handler reached through `eval`) read the handler's frame as
+  left, and the handler's return became the value of the `raise`:
+  `(list 'a (error "boom") 'b)` answered `(a 42 b)`. The same jump taken
+  directly raised, as Chez does on both. A `dynamic-wind` after thunk that runs
+  while the handler escapes, and invokes the handler's continuation, now raises
+  too (Chez agrees); the same re-entry after the escape has landed still
+  forwards.
+- **A `with-timeout` that fires while a non-continuable `raise`'s handler runs
+  no longer turns the handler's return into the value of the `raise` when the
+  timeout handler resumes.** The timer's suspension drops the handler's frame
+  without leaving it, and the resume read that as a re-entry from outside:
+  `(list 'a (raise 'boom) 'b)` under a handler returning 42 answered `(a 42 b)`
+  instead of raising, as it does uninterrupted.
 - **A BigFloat result carries its operands' precision, not a fixed 256 bits.**
   `exp`, `log`, the trigonometric family, `atan` (both forms), `angle`,
   `magnitude` and a complex `sqrt` computed at 256 bits whatever their BigFloat

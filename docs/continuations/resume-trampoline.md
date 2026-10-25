@@ -293,7 +293,12 @@ driver reads "absent", i.e. a revival, for a jump that never left the extent, an
 swallows the secondary exactly as the two earlier answers did. So
 `applyCapturedContinuation` computes the set and carries it on
 `ErrResumeContinuation.escalatorRevivals`; `applyComposableContinuation`, which
-resumes in place, computes it directly. `reinstallSegment` only *applies* it, and
+resumes in place, computes it directly. "The live chain" is the invoker's chain
+and every chain up its `parentMC` walk: a handler that invokes its continuation
+through `eval` runs the `(k v)` on a nil-rooted sub-context, while the finalizer
+frame is one hop up. A macro transformer's expansion-time root has no parent, so
+the first driver above it filters the set again (`rebasePassedUpResume`), as it
+rebases `SourceWinding`. `reinstallSegment` only *applies* it, and
 only *after* `RestoreWithWindingFrom` succeeds — a failed reinstatement never
 re-entered the frame, so it contributes no revival.
 
