@@ -95,7 +95,7 @@ func (p *unlinkedRootEscape) raiseIn(mc *MachineContext, err error) error {
 		if loc != "" {
 			returned += " at " + loc
 		}
-		returned += ", which ran at expansion time and cannot be resumed"
+		returned += ", in a transformer or library body that has ended, so it cannot be resumed"
 	}
 	return mc.raiseToHandlers(p.escape.Condition, false, handlers, returned)
 }
