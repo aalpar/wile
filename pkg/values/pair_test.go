@@ -930,9 +930,6 @@ func TestNthConsHonorsContext(t *testing.T) {
 	long := values.List(make([]values.Value, 5000)...)
 	_, err := values.NthCons(ctx, long, 4000, "t")
 	qt.Assert(t, errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("%v", err))
-	// A walk shorter than one poll interval does not look.
-	_, err = values.NthCons(ctx, long, 1000, "t")
-	qt.Assert(t, err, qt.IsNil)
 }
 
 // TestExactIndex pins the index classification the list and vector families

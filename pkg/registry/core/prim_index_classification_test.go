@@ -144,6 +144,13 @@ func TestIndexArgumentsShareOneClassification(t *testing.T) {
 			want:     "list-ref: expected an exact integer index but got x",
 		},
 		{
+			// A syntax pair is a Tuple but not a mutable list (as on master).
+			name:     "list-set! refuses a syntax pair as a list",
+			code:     `(list-set! (syntax (a b)) 0 'x)`,
+			sentinel: werr.ErrNotAList,
+			want:     "list-set!: argument 1: expected a list but got",
+		},
+		{
 			// list-set! keeps its own order: the list is read first.
 			name:     "list-set! reports a bad list before a bad index",
 			code:     `(list-set! 5 'x 0)`,
