@@ -959,7 +959,6 @@ func TestTranscendentalKernelPrecisionBounded(t *testing.T) {
 		{"atan2", "(atan u 3)", true},
 		{"angle", "(angle (- u))", true},
 		{"expt non-integer exponent", "(expt u u)", true},
-		{"expt wide integer exponent", "(expt u (+ 1 (expt 2 100000)))", false},
 		{"expt integer exponent is not a kernel", "(expt u 2)", false},
 	}
 	for _, tc := range tcs {
@@ -984,4 +983,23 @@ func TestTranscendentalKernelPrecisionBounded(t *testing.T) {
 	}
 	c := qt.New(t)
 	c.Assert(eval(t, engine, "(let ((u "+u+")) (eqv? (expt u 2) (* u u)))").Internal(), qt.Equals, values.TrueValue)
+
+	// An exact integer exponent beyond int64 takes the log path, which is not
+	// a kernel for an integer exponent: on a base near 1 (59804 bits, so a
+	// finite result) the answer keeps the base's precision and agrees with k
+	// repeated squarings, 1 + 2^k(w-1). Capped, it came back exactly 1.
+	w := "#m1." + strings.Repeat("0", 18000) + "1"
+	for _, k := range []int{63, 70} {
+		t.Run(fmt.Sprintf("expt beyond int64 exponent 2^%d", k), func(t *testing.T) {
+			c := qt.New(t)
+			bind := fmt.Sprintf("(let* ((w %s) (r (expt w (expt 2 %d))) (sq (let loop ((x w) (i %d)) (if (= i 0) x (loop (* x x) (- i 1)))))) ", w, k, k)
+			start := time.Now()
+			// #f unless r is the squarings' value and above 1
+			result := eval(t, engine, bind+"(and (eqv? r sq) (> r 1) r))").Internal()
+			c.Assert(time.Since(start) < budget, qt.IsTrue)
+			got, ok := result.(*values.BigFloat)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("answered %s", result.SchemeString()))
+			c.Assert(got.BigFloatValue().Prec(), qt.Equals, uint(59804))
+		})
+	}
 }

@@ -771,11 +771,16 @@ func bigPowAbs(base values.Number, a, y *big.Float, prec, wp uint) *big.Float {
 	// carries an absolute error of about 2^-wp that y magnifies: ln a then
 	// needs y's binary exponent in extra bits, from the base reconverted at
 	// that precision (a Rational base is not exact at wp).
-	// The log path is a transcendental kernel, so it rounds at the kernel cap;
-	// the paths above are not and keep the operands' precision, so (expt w 2)
-	// agrees with (* w w) at any width.
-	prec = min(prec, values.MaxBigFloatKernelPrecision)
-	wp = min(wp, prec+64)
+	// A non-integer exponent makes the log path a transcendental kernel, so it
+	// rounds at the kernel cap. An integer exponent, here one beyond int64, is
+	// not one and keeps the operands' precision, as bigPowInt does, so (expt w
+	// (expt 2 70)) agrees with 70 squarings at any width. Its cost is bounded:
+	// a finite result needs |a-1| < 2^-63, and the t >= 2^32 check below
+	// bounds the refinement.
+	if !y.IsInt() {
+		prec = min(prec, values.MaxBigFloatKernelPrecision)
+		wp = min(wp, prec+64)
+	}
 	t := new(big.Float).SetPrec(wp).Mul(y, values.BigLog(a, wp))
 	r, isRational := base.(*values.Rational)
 	if t.Sign() == 0 && isRational {
