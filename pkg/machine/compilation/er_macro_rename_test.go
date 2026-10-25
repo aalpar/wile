@@ -150,6 +150,18 @@ func TestErMacroRename(t *testing.T) {
 			  (my-or 7 42))`,
 			Expected: values.NewInteger(7),
 		},
+		{
+			// It raised ErrNotASymbol until the contract took any datum
+			// (C-er-contract, decided 2026-10-24).
+			Name: "rename of a non-symbol converts it",
+			Code: `(begin
+			  (define-syntax num-macro
+			    (er-macro-transformer
+			      (lambda (form rename compare)
+			        (rename 42))))
+			  (num-macro))`,
+			Expected: values.NewInteger(42),
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.Name, func(t *testing.T) {
@@ -163,27 +175,6 @@ func TestErMacroRename(t *testing.T) {
 			result, err := testhelpers.RunSchemeCodeWithEnv(t, env, tc.Code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
-		})
-	}
-}
-
-// TestErMacroRenameErrors tests error cases for the ER macro rename closure.
-func TestErMacroRenameErrors(t *testing.T) {
-	tcs := []testhelpers.SchemeCodeErrorTestCase{
-		{
-			Name: "rename with non-symbol argument",
-			Code: `(begin
-			  (define-syntax bad-macro
-			    (er-macro-transformer
-			      (lambda (form rename compare)
-			        (rename 42))))
-			  (bad-macro))`,
-		},
-	}
-	for _, tc := range tcs {
-		t.Run(tc.Name, func(t *testing.T) {
-			_, err := testhelpers.RunSchemeCode(t, tc.Code)
-			qt.Assert(t, err, qt.IsNotNil)
 		})
 	}
 }

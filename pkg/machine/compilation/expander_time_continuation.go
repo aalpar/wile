@@ -920,8 +920,8 @@ func (p *ExpanderTimeContinuation) invokeERTransformer(
 	// the use.
 	renameCls := NewERRenameClosure(erTransformer.DefEnv().AtPhase(p.env.PhaseLevel()), erTransformer.DefScopes(), introScope)
 
-	// Create compare closure (captures use-site env)
-	compareCls := NewERCompareClosure(p.env)
+	// Create compare closure (captures use-site env and the keyword's scopes)
+	compareCls := NewERCompareClosure(p.env, sym.Scopes())
 
 	// Set up expander context for auxiliary syntax hygiene
 	expanderCtx := NewExpanderContext(p.env, p)

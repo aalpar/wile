@@ -23,21 +23,23 @@ import (
 )
 
 // NewERCompareClosure creates the `compare` closure for an ER macro invocation.
-// useEnv is the use-site environment for resolving identifiers.
-// The closure accepts two identifier arguments and returns #t if both resolve
-// to the same binding (the same binding object, or two bindings sharing one
+// useEnv is the use-site environment for resolving identifiers, and useScopes
+// the scope set of the macro keyword at the use: a bare symbol argument means
+// what that name means there, (datum->syntax keyword sym) as the Scheme layer
+// spells it. The closure returns #t if both arguments resolve to the same
+// binding (the same binding object, or two bindings sharing one
 // import-provenance root, see erBindingsEqual) or both are unbound with the
 // same name.
-func NewERCompareClosure(useEnv *environment.EnvironmentFrame) *machine.ForeignClosure {
+func NewERCompareClosure(useEnv *environment.EnvironmentFrame, useScopes syntax.Scopes) *machine.ForeignClosure {
 	fn := func(mc machine.CallContext) error {
 		id1 := mc.Arg(0)
 		id2 := mc.Arg(1)
 
-		bnd1, name1, err := resolveERIdentifier(useEnv, id1)
+		bnd1, name1, err := resolveERIdentifier(useEnv, useScopes, id1)
 		if err != nil {
 			return err
 		}
-		bnd2, name2, err := resolveERIdentifier(useEnv, id2)
+		bnd2, name2, err := resolveERIdentifier(useEnv, useScopes, id2)
 		if err != nil {
 			return err
 		}
@@ -79,10 +81,15 @@ func erBindingsEqual(bnd1 *environment.Binding, name1 string, bnd2 *environment.
 // is looked up in the definition-site global environment carried by the GlobalIndex.
 // This handles cross-library compare correctly: renamed symbols resolve in the
 // library where the macro was defined, not the use site.
-func resolveERIdentifier(env *environment.EnvironmentFrame, id values.Value) (*environment.Binding, string, error) {
+//
+// A bare symbol resolves under useScopes, the use-site keyword's. It used to
+// resolve with the wildcard, which reaches a binder no identifier written at the
+// use can see: under a macro that wraps the use in (let ((else 1)) …), the
+// user's else and 'else compared different.
+func resolveERIdentifier(env *environment.EnvironmentFrame, useScopes syntax.Scopes, id values.Value) (*environment.Binding, string, error) {
 	switch v := id.(type) {
 	case *values.Symbol:
-		bnd := env.GetBinding(v, syntax.AllScopes())
+		bnd := env.GetBinding(v, syntax.ScopesOf(useScopes))
 		return bnd, v.Key, nil
 	case *syntax.SyntaxSymbol:
 		sym := v.Sym
