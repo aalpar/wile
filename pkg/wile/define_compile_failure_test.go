@@ -17,6 +17,7 @@ package wile_test
 import (
 	"context"
 	"testing"
+	"testing/fstest"
 
 	qt "github.com/frankban/quicktest"
 
@@ -51,6 +52,7 @@ func TestFailedUnitLeavesNoSlotBehind(t *testing.T) {
 		{"define compiled, sibling fails to compile", `(begin (define x 1) zzz-unbound)`, `x`},
 		// The right-hand side commits a phase-1 unit while this one is still
 		// expanding; a commit at another phase must not block the retraction.
+		{"eval-when body define, sibling fails to compile", `(begin (eval-when (eval) (define evf 1)) zzz-unbound)`, `evf`},
 		{"define-syntax in the failing unit", `(begin (define-syntax m (syntax-rules () ((_) 1))) (define (f p) zzz-unbound))`, `(f 1)`},
 	}
 	for _, row := range rows {
@@ -186,4 +188,28 @@ func TestSelfReferenceSurvivesUnitRollbackWiring(t *testing.T) {
 	got, err := eng.EvalMultiple(ctx, `(define (f n) (if (= n 0) 'done (f (- n 1)))) (f 3)`)
 	c.Assert(err, qt.IsNil)
 	c.Assert(got.SchemeString(), qt.Equals, "done")
+}
+
+// TestFailedUnitRetractsAnIncludedDefine pins that an included file's defines
+// belong to the including unit: a sibling's failure retracts them too.
+func TestFailedUnitRetractsAnIncludedDefine(t *testing.T) {
+	t.Parallel()
+	c := qt.New(t)
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx, wile.WithSourceFS(fstest.MapFS{
+		"a.scm": &fstest.MapFile{Data: []byte(`(define (incf p) p)`)},
+	}))
+	c.Assert(err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = eng.Close()
+	})
+	for _, fail := range []string{`(begin (include "a.scm") zzz-unbound)`, `(begin (include "a.scm") (if))`} {
+		_, err = eng.EvalMultiple(ctx, fail)
+		c.Assert(err, qt.IsNotNil)
+		_, err = eng.EvalMultiple(ctx, `incf`)
+		c.Assert(err, qt.ErrorIs, werr.ErrNoSuchBinding)
+	}
+	got, err := eng.EvalMultiple(ctx, `(begin (include "a.scm") (incf 1))`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.SchemeString(), qt.Equals, "1")
 }

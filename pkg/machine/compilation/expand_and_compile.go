@@ -164,10 +164,13 @@ func expandAndCompileScoped(ctx context.Context, env *environment.EnvironmentFra
 // it and does not block. A by-index load cannot be orphaned: it misses, or
 // heals onto a later slot (RetractGlobalBinding).
 //
-// Not covered: a unit running concurrently on another SRFI-18 thread that
+// Not covered: a unit compiling concurrently on another SRFI-18 thread that
 // resolves the slot during the window and commits after this unit has
-// retracted it. That needs the check and the delete to be one step against
-// every resolver, which the store does not offer.
+// retracted it. A cached load there reads the orphan's #<void>; a define of the
+// same name there reuses the slot without logging it (created == false), and
+// its pinned store then finds nothing at those coordinates and fails at run
+// time with ErrBindingNotFound. Closing it needs the check and the delete to be
+// one step against every resolver, which the store does not offer.
 //
 // nil is a valid log that records nothing: every compiler and expander outside
 // a unit (library bodies, compile-time halves) carries one.
