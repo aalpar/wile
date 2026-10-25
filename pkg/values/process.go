@@ -96,7 +96,8 @@ func (p *Process) Wait() error {
 // "Wait was already called".
 //
 // When ctx ends first, WaitContext returns (false, nil), and that is all this
-// layer says, as with Mutex.LockContext: process-wait reads the ctx and raises.
+// layer says: it follows Mutex.LockContext's (bool, error) cancel shape, not
+// Thread.Join's raise, and process-wait reads the ctx and raises.
 // The child is not signalled: cancelling a wait is not cancelling the process,
 // which stays the caller's to wait for again or kill. The reaper keeps waiting,
 // so its cmd.Wait still closes the stdout and stderr pipes when the child exits,

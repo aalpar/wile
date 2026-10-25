@@ -269,8 +269,8 @@ var PrimProcessStdin = helpers.MakeUnaryAccessor(werr.ErrNotAProcess, "process-s
 // resuming re-issues the wait. The wait does not kill the child. The ctx the
 // child was SPAWNED under does: process-spawn uses exec.CommandContext, so a
 // child spawned inside a timed thunk, or under an embedder ctx that is then
-// cancelled, is killed when that ctx ends, and a wait on it answers the killed
-// status. The spawning ctx bounds the child's life; the waiting ctx bounds only
+// cancelled, is killed when that ctx ends, and a later wait under a live ctx
+// answers the killed status (a wait under the same ended ctx usually raises first). The spawning ctx bounds the child's life; the waiting ctx bounds only
 // the wait.
 func PrimProcessWait(mc machine.CallContext) error {
 	proc, err := helpers.RequireArg[*values.Process](mc, 0, werr.ErrNotAProcess, "process-wait")
@@ -286,8 +286,7 @@ func PrimProcessWait(mc machine.CallContext) error {
 	}
 	exited, waitErr := proc.WaitContext(mc.Context())
 	if !exited {
-		return werr.WrapForeignErrorWithCause(werr.ErrOperationCancelled, werr.ContextEnding(mc.Context(), nil),
-			"process-wait: cancelled before the wait completed")
+		return werr.WaitCancelled(mc.Context(), "process-wait")
 	}
 	if waitErr != nil {
 		var exitErr *exec.ExitError

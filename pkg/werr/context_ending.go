@@ -51,6 +51,16 @@ func ContextEnding(ctx context.Context, via error) error {
 	return q
 }
 
+// WaitCancelled is the failure a blocking wait reports when ctx ended before the
+// wait completed: ErrOperationCancelled carrying ctx's ending, with site, the
+// waiting primitive, leading the message. The SRFI-18 waits (extensions/threads)
+// and process-wait (extensions/process) raise it, so one cancelled wait reads
+// the same whichever primitive it was.
+func WaitCancelled(ctx context.Context, site string) error {
+	return WrapForeignErrorWithCause(ErrOperationCancelled, ContextEnding(ctx, nil),
+		"%s: cancelled before the wait completed", site)
+}
+
 // contextEnding matches the cause, ctx.Err() when it differs from the cause, and
 // via. It renders as the cause, which says more than "context canceled", led by
 // via's text when via says something of its own (viaShown): a host primitive's

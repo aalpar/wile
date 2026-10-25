@@ -195,6 +195,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   50 ms `with-timeout` for `T` = 2, and a `thread-terminate!`d thread in it could
   not be joined in time); it now wakes on the cancellation as the untimed form
   does.
+- **A `mutex-lock!` that gives up no longer strands the waiter behind it.**
+  An unlock wakes one waiter; when that waiter's acquire was cancelled, or its
+  timeout passed, just after the wake, it returned without passing the wakeup on,
+  and the next waiter stayed parked on a free mutex (measured in about 1 of 3000
+  stress trials). A waiter that abandons its acquire with the mutex free now
+  wakes the next one.
 - **A resumed `with-timeout` continuation answers as if the thunk had not been
   interrupted.** Resuming after the timer stopped the thunk between two
   instructions cleared or replaced the operand the next instruction consumes

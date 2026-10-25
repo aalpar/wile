@@ -234,8 +234,7 @@ func PrimThreadSleep(mc machine.CallContext) error {
 // and a lock wait that ended a program handed the embedder #f and a nil error
 // after its own cancellation.
 func waitCancelled(mc machine.CallContext, site string) error {
-	return werr.WrapForeignErrorWithCause(werr.ErrOperationCancelled, werr.ContextEnding(mc.Context(), nil),
-		"%s: cancelled before the wait completed", site)
+	return werr.WaitCancelled(mc.Context(), site)
 }
 
 // PrimThreadTerminate forcefully terminates a thread

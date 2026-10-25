@@ -81,7 +81,11 @@ grantable, then flips the state; on cancellation it returns `false` with the sta
 untouched. The timed slow path's side goroutine selects on `ctx.Done()` beside its
 timer, under the same `cond.L` rule, and the waiter reads `ctx.Err()` before the
 deadline, so a cancelled timed acquire returns `false` at once rather than at its
-timeout.
+timeout. A waiter that gives up (cancelled or past its deadline) with the mutex
+grantable re-`Signal`s before it returns (`passWakeup`): the unlock's single
+`Signal` may have woken it, and the waiter behind it would otherwise stay parked on
+a free mutex. That is an interim fix on a race the SRFI-18 sequencer design would
+remove by owning the wait queue.
 
 ## The primitive-layer policy: wait side vs held side
 
@@ -265,8 +269,9 @@ be reported as a terminated thread's result. Pinned channel-free by
   after any completed wait. Separately, `process-spawn` uses
   `exec.CommandContext`, so the ctx a child was spawned under bounds its life: a
   child spawned inside a timed thunk, or under an embedder ctx, is killed when
-  that ctx ends, and a wait on it answers the killed status (`-1`). The spawning
-  ctx bounds the child; the waiting ctx bounds only the wait.
+  that ctx ends, and a later wait under a live ctx answers the killed status
+  (`-1`); a wait under the same ended ctx usually raises first. The spawning ctx
+  bounds the child; the waiting ctx bounds only the wait.
 - **A cancelled run never reports success to the embedder, but Scheme can still
   carry on past a cancellation.** `ErrOperationCancelled` is an ordinary condition,
   so a `guard` around a wait can catch it and the program continues until its next
@@ -315,7 +320,8 @@ Scheme (they live above `pkg/values` and cannot be reached from a Go-level test)
 `TestProcessWaitCancelledRaisesAndLeavesTheChild` (an embedder cancel raises, and
 the child is still alive afterwards) and `TestProcessWaitUnderWithTimeout` (the
 handler runs at the expiry and the resume re-issues the wait), and
-`TestProcessSpawnCtxBoundsTheChild` (the ctx a child was spawned under kills it). `TestMutexLockContextNoLostWakeup`'s
+`TestProcessSpawnCtxBoundsTheChild` (the ctx a child was spawned under kills it;
+this pins unchanged behaviour and passes on the code before the fix). `TestMutexLockContextNoLostWakeup`'s
 `cancelled-timed` arm (`pkg/values`) drives the timed path's ctx wakeup.
 
 `extensions/threads/prim_threads_test.go` covers the rest of the rule:

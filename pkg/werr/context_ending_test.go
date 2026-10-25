@@ -73,3 +73,17 @@ func TestContextEnding(t *testing.T) {
 		})
 	}
 }
+
+// TestWaitCancelled pins the shared cancelled-wait failure: the class, the ctx's
+// cause and ctx.Err() all match, and the site leads the message.
+func TestWaitCancelled(t *testing.T) {
+	c := qt.New(t)
+	hostCause := werr.NewStaticError("werr test: cancelled by the host")
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(hostCause)
+	got := werr.WaitCancelled(ctx, "process-wait")
+	c.Assert(errors.Is(got, werr.ErrOperationCancelled), qt.IsTrue)
+	c.Assert(errors.Is(got, hostCause), qt.IsTrue)
+	c.Assert(errors.Is(got, context.Canceled), qt.IsTrue)
+	c.Assert(got.Error(), qt.Contains, "process-wait: cancelled before the wait completed")
+}
