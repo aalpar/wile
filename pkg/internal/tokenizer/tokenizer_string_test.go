@@ -667,13 +667,105 @@ func TestReplacementCharacterIsNotADecodeError(t *testing.T) {
 	}
 }
 
-// TestInvalidUTF8IsADecodeError is the other half of the U+FFFD distinction:
-// a byte sequence that does not decode must still be a read error.
-func TestInvalidUTF8IsADecodeError(t *testing.T) {
-	c := qt.New(t)
+// TestInvalidUTF8ReadsAsReplacementCharacter pins that a byte which does not
+// decode reads as U+FFFD, as read-char reads it and as Racket and Chez read
+// it, so it behaves exactly like a written U+FFFD in every lexical context:
+// the same tokens and the same outcome. It used to raise a rune error, so
+// read rejected a port read-char accepts. Each row is checked against the
+// written character rather than a fixed answer, because U+FFFD is not a Wile
+// identifier character and the lexical rules, not the decoder, decide where
+// it may appear.
+func TestInvalidUTF8ReadsAsReplacementCharacter(t *testing.T) {
+	tcs := []struct {
+		name string
+		// src holds X where the character goes.
+		src string
+		// want is the text of the tokens read before the outcome, X standing
+		// for U+FFFD.
+		want []string
+		// wantErr is the message of the fault that ends the scan; "" is a
+		// clean end of input.
+		wantErr string
+		// wantEOF says the fault happened at end of input, not on the
+		// character: the substitute must not be reported as either.
+		wantEOF bool
+	}{
+		{name: "string", src: `"aXb"`, want: []string{`"aXb"`}},
+		{name: "line comment", src: "; aX\n42", want: []string{"; aX", "42"}},
+		{name: "block comment", src: "#| aX |# 42", want: []string{"#| aX |#", "42"}},
+		{name: "vertical-line symbol", src: "|aXb|", want: []string{"|aXb|"}},
+		{name: "character", src: `#\X`, want: []string{`#\X`}},
+		{name: "character after x", src: `#\xX`, want: []string{`#\x`}, wantErr: MessageExpectingToken},
+		{name: "datum comment", src: "#;aX 42", want: []string{"#;", "a"}, wantErr: MessageExpectingToken},
+		{name: "symbol", src: "aXb", want: []string{"a"}, wantErr: MessageExpectingToken},
+		{name: "last byte of input", src: "aX", want: []string{"a"}, wantErr: MessageExpectingToken},
+		{name: "after open paren", src: "(X)", want: []string{"("}, wantErr: MessageExpectingToken},
+		{name: "after a numeral", src: "12X", want: []string{"12"}, wantErr: MessageExpectingToken},
+		{name: "unterminated string", src: `"aX`, wantErr: MessageUnterminatedString, wantEOF: true},
+	}
+	for _, tc := range tcs {
+		for _, form := range []struct {
+			name string
+			char string
+		}{
+			{name: "invalid byte", char: "\xff"},
+			{name: "written U+FFFD", char: "\uFFFD"},
+		} {
+			t.Run(tc.name+"/"+form.name, func(t *testing.T) {
+				c := qt.New(t)
+				toks, err := Tokenize(strings.ReplaceAll(tc.src, "X", form.char), false)
+				got := make([]string, 0, len(toks))
+				for _, tok := range toks {
+					if tok.Type() == TokenizerStateFailed {
+						break
+					}
+					got = append(got, tok.String())
+				}
+				want := make([]string, 0, len(tc.want))
+				for _, w := range tc.want {
+					want = append(want, strings.ReplaceAll(w, "X", "\uFFFD"))
+				}
+				c.Check(got, qt.DeepEquals, want)
+				if tc.wantErr == "" {
+					c.Check(err, qt.ErrorIs, io.EOF)
+					return
+				}
+				c.Check(err, qt.ErrorIs, NewTokenizerError(tc.wantErr))
+				var terr *TokenizerError
+				c.Assert(errors.As(err, &terr), qt.IsTrue)
+				r, isChar := terr.Rune()
+				c.Check(isChar, qt.Equals, !tc.wantEOF, qt.Commentf("got: %v", err))
+				if isChar {
+					c.Check(r, qt.Equals, '\uFFFD')
+				}
+			})
+		}
+	}
+}
 
-	_, err := Tokenize("\"a\xffb\"", false)
-	c.Check(errors.Is(err, NewTokenizerError(MessageRuneError)), qt.IsTrue)
+// TestInvalidUTF8AdvancesByTheByteConsumed pins positions after the
+// substitute: an invalid byte is one byte of input, so the index moves by one,
+// not by the three bytes of the U+FFFD it reads as. Columns count characters,
+// so both forms agree there.
+func TestInvalidUTF8AdvancesByTheByteConsumed(t *testing.T) {
+	tcs := []struct {
+		name      string
+		src       string
+		wantIndex int
+	}{
+		{name: "invalid byte", src: "\"\xff\" 1", wantIndex: 4},
+		{name: "written U+FFFD", src: "\"\uFFFD\" 1", wantIndex: 6},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			toks, err := Tokenize(tc.src, false)
+			c.Assert(err, qt.ErrorIs, io.EOF)
+			c.Assert(len(toks), qt.Equals, 2)
+			c.Check(toks[1].Start().Index(), qt.Equals, tc.wantIndex)
+			c.Check(toks[1].Start().Column(), qt.Equals, 4)
+		})
+	}
 }
 
 // TestReplacementCharacterInDatumPositionIsNotEOF is the third face of the same
@@ -683,7 +775,7 @@ func TestInvalidUTF8IsADecodeError(t *testing.T) {
 // discarded without a diagnostic. U+FFFD is not a Wile identifier character
 // (isInitial admits letters and the special initials only), so it is a lexical
 // error exactly like any other unusable character — but an error, not a silent
-// truncation. Invalid UTF-8 must still surface as a decode error.
+// truncation. An invalid byte reads as U+FFFD, so it is the same error.
 func TestReplacementCharacterInDatumPositionIsNotEOF(t *testing.T) {
 	tcs := []struct {
 		name    string
@@ -696,8 +788,8 @@ func TestReplacementCharacterInDatumPositionIsNotEOF(t *testing.T) {
 		{name: "after_datum", input: "(a b)� 42", wantErr: MessageExpectingToken, wantTokens: []string{"(", "a", "b", ")"}},
 		{name: "splitting_symbol", input: "ab�cd", wantErr: MessageExpectingToken, wantTokens: []string{"ab"}},
 		{name: "non_identifier_control", input: "§ (a b) 42", wantErr: MessageExpectingToken, wantTokens: []string{}},
-		{name: "invalid_utf8_leading", input: "\xff (a b) 42", wantErr: MessageRuneError, wantTokens: []string{}},
-		{name: "invalid_utf8_after_datum", input: "(a b)\xff 42", wantErr: MessageRuneError, wantTokens: []string{"(", "a", "b", ")"}},
+		{name: "invalid_utf8_leading", input: "\xff (a b) 42", wantErr: MessageExpectingToken, wantTokens: []string{}},
+		{name: "invalid_utf8_after_datum", input: "(a b)\xff 42", wantErr: MessageExpectingToken, wantTokens: []string{"(", "a", "b", ")"}},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

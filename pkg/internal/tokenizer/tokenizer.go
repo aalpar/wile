@@ -27,7 +27,6 @@ import (
 
 // Error messages returned by the tokenizer.
 const (
-	MessageRuneError                             = "rune error"
 	MessageReaderFailed                          = "reader failed"
 	MessageExpectingNumber                       = "expecting number"
 	MessageExpectingDelimiterAfterNumber         = "expecting delimiter after radix-prefixed number"
@@ -640,8 +639,8 @@ func (p *Tokenizer) term() {
 }
 
 // readNextRune reads the next rune from the reader and updates position tracking.
-// Sets p.cur to utf8.RuneError and p.err appropriately on EOF, encoding error
-// or reader fault.
+// Sets p.cur to utf8.RuneError and p.err on EOF or a reader fault; a byte that
+// does not decode reads as U+FFFD with no error.
 func (p *Tokenizer) readNextRune() {
 	n := 0
 	// The rune being replaced, kept to recognise the '\n' of a CRLF pair, which
@@ -661,18 +660,19 @@ func (p *Tokenizer) readNextRune() {
 		p.failWrap(p.err, MessageReaderFailed)
 		return
 	}
-	// A decoding failure is reported as (RuneError, 1); a genuine U+FFFD in the
-	// source decodes to (RuneError, 3). Only the one-byte form is an error —
-	// conflating them makes a written U+FFFD unreadable.
+	// A byte that does not decode arrives as (RuneError, 1) and is read as the
+	// character U+FFFD, exactly as read-char reads it and as Racket and Chez
+	// read it; raising here made read reject a port read-char accepts. The
+	// substitute is a character like a written U+FFFD (RuneError, 3), so the
+	// lexical rules decide where it may appear. It is never end of input: that
+	// is n == 0 above, carried by p.err, not by the rune.
 	//
 	// Line and tab-stop adjustments belong in the advance, not in next(): the
 	// constructor reads the first rune through this path, and a source starting
-	// with a tab or newline must be tracked like any other. The position is
-	// stepped before the fault is raised so the fault is stamped one rune in.
+	// with a tab or newline must be tracked like any other. n is the bytes
+	// consumed, so an invalid byte advances the index by one, not by the
+	// substitute's three.
 	p.runeEnd = values.AdvanceIndexes(p.runeEnd, p.prev, p.cur, n)
-	if p.cur == utf8.RuneError && n == 1 {
-		p.fail(MessageRuneError)
-	}
 }
 
 // next advances to the next rune, appending the current rune to scratch.

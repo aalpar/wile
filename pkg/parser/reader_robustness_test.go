@@ -29,33 +29,52 @@ import (
 )
 
 // TestReader_InvalidUTF8IsLocatedError pins the boundary contract for lexical
-// errors: invalid UTF-8 must surface as a located *ParserError, not leak the
+// errors: a lexical fault must surface as a located *ParserError, not leak the
 // lower-layer *tokenizer.TokenizerError. The original cause stays matchable
-// through the wrap chain, and rendering the error must not panic even though
-// the failure has no located token. Found by FuzzReadSyntax.
+// through the wrap chain, and rendering the error must not panic, including
+// when the failure has no located token. Found by FuzzReadSyntax on "\x8b",
+// which then raised a rune error before any token; an invalid byte now reads
+// as U+FFFD, which starts no token, so the tokenless path is driven by a
+// reader that fails before its first rune.
 func TestReader_InvalidUTF8IsLocatedError(t *testing.T) {
-	recovered, err := readCatching("\x8b")
-	if recovered != nil {
-		t.Fatalf("reader panicked on invalid UTF-8: %v", recovered)
+	closed := werr.WrapForeignErrorf(werr.ErrPortClosed, "string-input-port is closed")
+	tcs := []struct {
+		name string
+		rdr  io.RuneReader
+		// tokenless says the fault precedes every token.
+		tokenless bool
+	}{
+		{name: "invalid byte", rdr: strings.NewReader("\x8b")},
+		{name: "reader fault before the first rune", rdr: &faultAfterReader{rdr: strings.NewReader("abc"), fault: closed}, tokenless: true},
 	}
-	var perr *ParserError
-	if !errors.As(err, &perr) {
-		t.Fatalf("invalid UTF-8 gave %T, want *ParserError: %v", err, err)
-	}
-	var terr *tokenizer.TokenizerError
-	if !errors.As(err, &terr) {
-		t.Errorf("invalid UTF-8 error lost its *tokenizer.TokenizerError cause: %v", err)
-	}
-	// Tokenless render path: must not nil-deref, and must still carry a
-	// position. There is no token to take one from — the tokenizer failed
-	// before completing one — so the position comes from the TokenizerError
-	// asserted above, which stamps it at the throw site.
-	s := perr.SchemeString()
-	if !strings.HasPrefix(s, "ParserError at 1:0:") {
-		t.Errorf("tokenless render = %q, want a position recovered from the tokenizer error", s)
-	}
-	if perr.Location() != "1:0" {
-		t.Errorf("tokenless Location() = %q, want 1:0 from the tokenizer error", perr.Location())
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			recovered, err := readCatchingFrom(tc.rdr)
+			if recovered != nil {
+				t.Fatalf("reader panicked: %v", recovered)
+			}
+			var perr *ParserError
+			if !errors.As(err, &perr) {
+				t.Fatalf("got %T, want *ParserError: %v", err, err)
+			}
+			var terr *tokenizer.TokenizerError
+			if !errors.As(err, &terr) {
+				t.Errorf("error lost its *tokenizer.TokenizerError cause: %v", err)
+			}
+			if tc.tokenless && perr.tok != nil {
+				t.Errorf("fault carries token %q, want none: the tokenless path is not exercised", perr.tok.String())
+			}
+			// Must not nil-deref, and must still carry a position. Without a
+			// token the position comes from the TokenizerError asserted above,
+			// which stamps it at the throw site.
+			s := perr.SchemeString()
+			if !strings.HasPrefix(s, "ParserError at 1:0:") {
+				t.Errorf("render = %q, want a position recovered from the tokenizer error", s)
+			}
+			if perr.Location() != "1:0" {
+				t.Errorf("Location() = %q, want 1:0 from the tokenizer error", perr.Location())
+			}
+		})
 	}
 }
 
@@ -95,11 +114,16 @@ func TestReader_EmptyGraphicCharIsLocatedError(t *testing.T) {
 // (read ...), which accepts untrusted input (R7RS §6.13.2), so a malformed
 // datum must surface as a located error — never a Go panic.
 func readCatching(src string) (recovered any, err error) {
+	return readCatchingFrom(strings.NewReader(src))
+}
+
+// readCatchingFrom is readCatching for any reader.
+func readCatchingFrom(rdr io.RuneReader) (recovered any, err error) {
 	defer func() {
 		recovered = recover()
 	}()
 	env := environment.NewNamespace().Runtime()
-	p := NewParser(env, true, strings.NewReader(src))
+	p := NewParser(env, true, rdr)
 	_, err = p.ReadSyntax(context.TODO())
 	return recovered, err
 }

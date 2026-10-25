@@ -196,7 +196,7 @@ func (p *Tokenizer) fail(mess string) {
 }
 
 // failWrap is fail for a fault that has a cause worth keeping — typically the
-// io.EOF or rune error that interrupted a longer construct. Call it with the
+// io.EOF or reader fault that interrupted a longer construct. Call it with the
 // incoming p.err as cause; the stamp is read before p.err is overwritten.
 func (p *Tokenizer) failWrap(err error, mess string) {
 	if p.readerFailed() {

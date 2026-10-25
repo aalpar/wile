@@ -243,6 +243,56 @@ func TestReadOnClosedFilePortNamesTheFile(t *testing.T) {
 	}
 }
 
+// TestReadAgreesWithReadCharOnInvalidUTF8 pins that read and read-char take
+// the same view of a byte that does not decode: both read it as U+FFFD, as
+// racket and petite do. read used to raise a rune error on a port read-char
+// read cleanly. Where U+FFFD may not appear (it is not an identifier
+// character) the read fails as it does for a written U+FFFD, with a lexical
+// error that names the character.
+func TestReadAgreesWithReadCharOnInvalidUTF8(t *testing.T) {
+	tcs := []struct {
+		name    string
+		content string
+		code    string
+		want    string
+		wantErr string
+	}{
+		{name: "read-char", content: "a\xffb", code: "(let* ((a (read-char p)) (b (read-char p)) (c (read-char p))) (list a (char->integer b) c (read-char p)))", want: `(#\a 65533 #\b #<eof>)`},
+		{name: "string", content: "\"a\xffb\"", code: "(let ((s (read p))) (list (string-length s) (char->integer (string-ref s 1)) (read p)))", want: "(3 65533 #<eof>)"},
+		{name: "comment", content: "; a\xffb\n42", code: "(list (read p) (read p))", want: "(42 #<eof>)"},
+		{name: "character", content: "#\\\xff", code: "(char->integer (read p))", want: "65533"},
+		{name: "symbol", content: "a\xffb", code: "(list (read p) (read p))", wantErr: "expecting token"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			path := filepath.Join(t.TempDir(), "bad.txt")
+			err := os.WriteFile(path, []byte(tc.content), 0o600)
+			c.Assert(err, qt.IsNil)
+			engine, err := wile.NewEngine(context.Background(),
+				wile.WithExtension(extio.Extension),
+				wile.WithExtension(files.Extension),
+			)
+			c.Assert(err, qt.IsNil)
+			t.Cleanup(func() {
+				_ = engine.Close()
+			})
+			err = engine.Define("path", wile.WrapValue(values.NewString(path)))
+			c.Assert(err, qt.IsNil)
+			got, err := engine.EvalMultiple(context.Background(), "(define p (open-input-file path)) "+tc.code)
+			if tc.wantErr != "" {
+				c.Assert(err, qt.IsNotNil, qt.Commentf("got %v", got))
+				c.Check(err.Error(), qt.Contains, tc.wantErr)
+				c.Check(err.Error(), qt.Contains, "U+FFFD")
+				c.Check(err.Error(), qt.Not(qt.Contains), "rune error")
+				return
+			}
+			c.Assert(err, qt.IsNil)
+			c.Check(got.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
 // transientReader yields its chunks in order; a nil chunk is one read failing
 // with a deadline timeout, after which the stream continues.
 type transientReader struct {

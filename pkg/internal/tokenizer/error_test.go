@@ -163,6 +163,16 @@ func TestTokenizerErrorDistinguishesEOFFromLiteralReplacementChar(t *testing.T) 
 	c.Check(strings.Contains(terr.Error(), "<end of input>"), qt.IsFalse,
 		qt.Commentf("literal U+FFFD misreported as EOF: %v", terr))
 
+	// An invalid byte reads as U+FFFD, so it is that same character, not end
+	// of input, even as the last byte of the source.
+	_, err = Tokenize("\xff", false)
+	c.Assert(errors.As(err, &terr), qt.IsTrue)
+	r, isChar = terr.Rune()
+	c.Check(isChar, qt.IsTrue)
+	c.Check(r, qt.Equals, '\uFFFD')
+	c.Check(strings.Contains(terr.Error(), "<end of input>"), qt.IsFalse,
+		qt.Commentf("invalid byte misreported as EOF: %v", terr))
+
 	// Genuine end of input inside a string.
 	_, err = Tokenize(`"abc`, false)
 	c.Assert(errors.As(err, &terr), qt.IsTrue)
