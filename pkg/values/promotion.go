@@ -439,8 +439,9 @@ func Promote(n Number, target NumericKind) Number {
 
 // isSpecialFloat reports whether a Float holds IEEE 754 Inf or NaN.
 // Used by the arithmetic dispatches (makeArithmeticDispatch, makeDivideDispatch)
-// to fall back to float64/complex128 arithmetic when the LUB is
-// BigFloat/BigComplex. The comparison dispatch deliberately has no such guard.
+// to compute in clamped float64 for the kind pairs specialFloatNeedsGuard names,
+// part-wise for a BigComplex. The comparison dispatch deliberately has no such
+// guard.
 func isSpecialFloat(f *Float) bool {
 	return math.IsInf(f.Value, 0) || math.IsNaN(f.Value)
 }
@@ -476,6 +477,27 @@ func NumberToComplex128Lossy(n Number) complex128 {
 	return LookupNumericSpec(n.Kind()).ToComplex128WithAccuracy(n).Value
 }
 
+// specialFloatNeedsGuard reports whether a Float operand's Inf/NaN must decide the
+// answer before the pair is promoted. Two cases. The LUB goes beyond
+// float64/complex128 (BigFloat, BigComplex): precision is moot. Or the LUB is Float
+// but the partner is a BigInteger or Rational: promoting it to float64 can overflow
+// to +-Inf or underflow to 0, and the special value then meets Inf - Inf or Inf * 0
+// instead of a finite non-zero number. Integer is left out: every int64 is in
+// float64 range, and Float x Integer is a hot path.
+func specialFloatNeedsGuard(srcKind, dstKind, lubKind NumericKind) bool {
+	if lubKind == KindComplex {
+		return false
+	}
+	if lubKind != KindFloat {
+		return true
+	}
+	partner := dstKind
+	if dstKind == KindFloat {
+		partner = srcKind
+	}
+	return partner == KindBigInteger || partner == KindRational
+}
+
 // makeArithmeticDispatch generates a dispatch table for an arithmetic
 // operation (Add, Subtract, Multiply, Divide). The same-type entry uses
 // the hand-written sameTypeOp (preserving hot-path performance — e.g.,
@@ -483,28 +505,22 @@ func NumberToComplex128Lossy(n Number) complex128 {
 // operands to the LUB type via the promotion table and delegate to the
 // LUB type's operation via applyOp.
 //
-// IEEE 754 special-value guard: when the LUB goes beyond float64/complex128
-// (Float×BigFloat → BigFloat, Float×BigComplex → BigComplex) and the Float
-// operand holds Inf or NaN, precision is irrelevant: the result is determined by
-// the special value. The guard short-circuits to float64 arithmetic in that
-// case, preserving the *Float return type.
+// IEEE 754 special-value guard: for the kind pairs specialFloatNeedsGuard names
+// (Float×BigFloat, Float×BigComplex, Float×BigInteger, Float×Rational), when the
+// Float operand holds Inf or NaN the result is determined by the special value.
+// The guard short-circuits to float64 arithmetic on finiteClampedFloat64
+// operands, preserving the *Float return type.
 //
-// For the Float×BigComplex → BigComplex case, the guard uses complex128
-// arithmetic but wraps the result in BigComplex (not Complex) so the result is
-// still a BigComplex (issue #362). complex128 rounds BOTH components, though,
-// including the BigComplex operand's imaginary part, which a real Inf/NaN has no
-// way to change. bigComplexSpecialOp, when non-nil, replaces that route: it owns
-// the whole result and keeps a BigFloat imaginary part exact (I175). Add and
-// subtract supply one. Multiply passes nil and keeps the complex128 route;
-// makeDivideDispatch has its own copy of that route. The route is right for
-// them only while the BigComplex's parts fit in float64 (0*Inf makes the real
-// part NaN, which an additive rule cannot reproduce).
+// For the Float×BigComplex → BigComplex case the result stays a BigComplex
+// (issue #362), and bigComplexSpecialOp owns it: a real Inf/NaN has no imaginary
+// part, so each operation works on the BigComplex's parts directly rather than
+// through complex128, which would round them and invent a +0.0 imaginary part
+// for the real (I175). makeDivideDispatch has its own divide counterpart.
 func makeArithmeticDispatch[T Number](
 	srcKind NumericKind,
 	sameTypeOp func(T, Number) Number,
 	applyOp func(Number, Number) Number,
 	float64Op func(float64, float64) float64,
-	complex128Op func(complex128, complex128) complex128,
 	realComplexOp func(float64, complex128) complex128,
 	bigComplexSpecialOp func(p, o Number) Number,
 ) [numKinds]func(T, Number) Number {
@@ -519,22 +535,7 @@ func makeArithmeticDispatch[T Number](
 		promSrc := promoter[srcKind][lubKind]
 		promDst := promoter[dstKind][lubKind]
 
-		// IEEE 754 special-value guard: when Float is the receiver and the LUB
-		// goes beyond float64/complex128, short-circuit for Inf/NaN values.
-		lubNeedsGuard := lubKind != KindFloat && lubKind != KindComplex
-
-		// The special Float meets a BigComplex: the result stays a BigComplex so
-		// the imaginary part is not demoted to a Complex (#362).
-		specialBigComplex := func(p T, o Number) Number {
-			if bigComplexSpecialOp != nil {
-				return bigComplexSpecialOp(p, o)
-			}
-			z := complex128Op(NumberToComplex128Lossy(p), NumberToComplex128Lossy(o))
-			return NewBigComplexFromBigFloats(
-				NewBigFloatFromFloat64(real(z)),
-				NewBigFloatFromFloat64(imag(z)),
-			)
-		}
+		guarded := specialFloatNeedsGuard(srcKind, dstKind, lubKind)
 
 		switch {
 		case dstKind == KindComplex && lubKind == KindComplex:
@@ -550,25 +551,25 @@ func makeArithmeticDispatch[T Number](
 			table[dstKind] = func(p T, o Number) Number {
 				return NewComplex(realComplexOp(NumberToFloat64(p), o.(*Complex).Value))
 			}
-		case srcKind == KindFloat && lubNeedsGuard:
+		case srcKind == KindFloat && guarded:
 			// Receiver is Float, might have Inf/NaN.
 			lubIsComplex := lubKind == KindBigComplex
 			table[dstKind] = func(p T, o Number) Number {
 				if isSpecialFloat(any(p).(*Float)) {
 					if lubIsComplex {
-						return specialBigComplex(p, o)
+						return bigComplexSpecialOp(p, o)
 					}
 					return NewFloat(float64Op(finiteClampedFloat64(p), finiteClampedFloat64(o)))
 				}
 				return applyOp(promSrc(p), promDst(o))
 			}
-		case dstKind == KindFloat && lubNeedsGuard:
+		case dstKind == KindFloat && guarded:
 			// Operand is Float, might have Inf/NaN.
 			lubIsComplex := lubKind == KindBigComplex
 			table[dstKind] = func(p T, o Number) Number {
 				if isSpecialFloat(o.(*Float)) {
 					if lubIsComplex {
-						return specialBigComplex(p, o)
+						return bigComplexSpecialOp(p, o)
 					}
 					return NewFloat(float64Op(finiteClampedFloat64(p), finiteClampedFloat64(o)))
 				}
@@ -590,7 +591,7 @@ func makeArithmeticDispatch[T Number](
 // and routing it through complex128 would round it to 53 bits.
 func bigComplexSpecialAdd(p, o Number) Number {
 	re := finiteClampedFloat64(p) + finiteClampedFloat64(o)
-	z := bigComplexOperand(p, o)
+	_, z := specialOperands(p, o)
 	return NewBigComplexFromBigFloats(NewBigFloatFromFloat64(re), specialImaginaryPart(z))
 }
 
@@ -631,37 +632,84 @@ func negatedBigFloat(x *BigFloat) *BigFloat {
 	return q
 }
 
-// finiteClampedFloat64 is the float64 an Inf/NaN guard computes with for one
-// operand: the operand itself when it is a Float, else its value (a BigComplex
-// contributes its real part). A FINITE value beyond float64 range converts to
-// +-Inf, which would turn (+ +inf.0 #m-1e400) into Inf + -Inf = NaN instead of
-// +inf.0; it is clamped to +-MaxFloat64 instead, still finite, so the Inf/NaN on
-// the other side decides the answer exactly as it would at any magnitude.
-func finiteClampedFloat64(n Number) float64 {
-	z, ok := n.(*BigComplex)
-	if !ok {
-		return clampIfFinite(NumberToFloat64(n), n.IsFinite())
-	}
-	return clampIfFinite(real(NumberToComplex128Lossy(z)), z.Real().IsFinite())
+// bigComplexSpecialMultiply is makeMultiplyDispatch's bigComplexSpecialOp, x * z.
+// A real multiplier SCALES both parts (realMultiplyComplex); see specialScaledPart.
+func bigComplexSpecialMultiply(p, o Number) Number {
+	x, z := specialOperands(p, o)
+	return newSpecialBigComplex(specialScaledPart(x.Value, z.Real()), specialScaledPart(x.Value, z.Imag()))
 }
 
-// clampIfFinite maps +-Inf to +-MaxFloat64 when the value it came from was finite.
-func clampIfFinite(f float64, wasFinite bool) float64 {
-	if math.IsInf(f, 0) && wasFinite {
+// bigComplexSpecialDivide is x / z for an Inf/NaN dividend x.
+//
+// For a finite z, x/z = x*conj(z) / |z|^2, and dividing an Inf/NaN by the positive
+// finite |z|^2 changes nothing, so the quotient is the scaled conjugate: x*re(z)
+// and -x*im(z). Computing the denominator instead (|z|^2, or Smith's in
+// realDivideComplex) overflows when both parts clamp to MaxFloat64, which made
+// (/ +inf.0 10^400+10^400i) NaN. An infinite or NaN part is the one case the
+// identity does not cover (Inf/Inf); realDivideComplex computes it as IEEE does.
+func bigComplexSpecialDivide(x float64, z *BigComplex) Number {
+	if z.IsFinite() {
+		return newSpecialBigComplex(specialScaledPart(x, z.Real()), specialScaledPart(-x, z.Imag()))
+	}
+	q := realDivideComplex(x, complex(clampedFloat64(z.Real()), clampedFloat64(z.Imag())))
+	return newSpecialBigComplex(real(q), imag(q))
+}
+
+// specialScaledPart is x * part for an Inf/NaN x and one part of a BigComplex.
+// An EXACT zero part annihilates: the product is an exact 0, which the inexact
+// result spells 0.0 (Chez: (* +inf.0 +2i) => 0.0+inf.0i). Any other part goes
+// through the range clamp, so 10^400 and 10^-400 multiply as the finite non-zero
+// numbers they are, and an INEXACT 0.0 still gives NaN ((* +inf.0 0+9.87i) =>
+// +nan.0+inf.0i in Chez too).
+func specialScaledPart(x float64, part Number) float64 {
+	if isExactZero(part) {
+		return 0
+	}
+	return x * clampedFloat64(part)
+}
+
+// newSpecialBigComplex builds a special-float result from float64 parts.
+func newSpecialBigComplex(re, im float64) *BigComplex {
+	return NewBigComplexFromBigFloats(NewBigFloatFromFloat64(re), NewBigFloatFromFloat64(im))
+}
+
+// finiteClampedFloat64 is the float64 an Inf/NaN guard computes with for one
+// operand: the operand itself when it is a Float, else its clamped value (a
+// BigComplex contributes its real part). See clampedFloat64.
+func finiteClampedFloat64(n Number) float64 {
+	z, ok := n.(*BigComplex)
+	if ok {
+		return clampedFloat64(z.Real())
+	}
+	return clampedFloat64(n)
+}
+
+// clampedFloat64 converts a real n to float64 without changing what an Inf/NaN on
+// the other side of an operation makes of it. A FINITE value beyond float64 range
+// converts to +-Inf, which would turn (+ +inf.0 #m-1e400) into Inf + -Inf = NaN
+// instead of +inf.0; it is clamped to +-MaxFloat64, still finite. A NON-ZERO value
+// below float64 range converts to 0, which would turn (* +inf.0 #m1e-400) into
+// Inf * 0 = NaN; it is clamped to +-SmallestNonzeroFloat64, still non-zero. The
+// conversion rounds toward zero keeping the sign, so the zero carries it.
+func clampedFloat64(n Number) float64 {
+	f := NumberToFloat64(n)
+	if math.IsInf(f, 0) && n.IsFinite() {
 		return math.Copysign(math.MaxFloat64, f)
+	}
+	if f == 0 && !n.IsZero() {
+		return math.Copysign(math.SmallestNonzeroFloat64, f)
 	}
 	return f
 }
 
-// bigComplexOperand returns whichever of p, o is the BigComplex. The dispatch
-// guard only calls its special op for a (special Float, BigComplex) pair, in
-// either order.
-func bigComplexOperand(p, o Number) *BigComplex {
+// specialOperands splits the (special Float, BigComplex) pair the dispatch guard
+// hands its special op, in either order.
+func specialOperands(p, o Number) (*Float, *BigComplex) {
 	z, ok := p.(*BigComplex)
 	if ok {
-		return z
+		return o.(*Float), z
 	}
-	return o.(*BigComplex)
+	return p.(*Float), o.(*BigComplex)
 }
 
 // makeAddDispatch generates a dispatch table for the Add operation.
@@ -671,9 +719,6 @@ func makeAddDispatch[T Number](srcKind NumericKind, sameTypeAdd func(T, Number) 
 			return a.Add(b)
 		},
 		func(a, b float64) float64 {
-			return a + b
-		},
-		func(a, b complex128) complex128 {
 			return a + b
 		},
 		realAddComplex,
@@ -690,9 +735,6 @@ func makeSubtractDispatch[T Number](srcKind NumericKind, sameTypeSub func(T, Num
 		func(a, b float64) float64 {
 			return a - b
 		},
-		func(a, b complex128) complex128 {
-			return a - b
-		},
 		realSubtractComplex,
 		bigComplexSpecialSubtract,
 	)
@@ -707,11 +749,8 @@ func makeMultiplyDispatch[T Number](srcKind NumericKind, sameTypeMul func(T, Num
 		func(a, b float64) float64 {
 			return a * b
 		},
-		func(a, b complex128) complex128 {
-			return a * b
-		},
 		realMultiplyComplex,
-		nil,
+		bigComplexSpecialMultiply,
 	)
 }
 
@@ -733,9 +772,7 @@ func makeDivideDispatch[T Number](
 		promSrc := promoter[srcKind][lubKind]
 		promDst := promoter[dstKind][lubKind]
 
-		// IEEE 754 special-value guard: when Float is the receiver and the LUB
-		// goes beyond float64/complex128, short-circuit for Inf/NaN values.
-		lubNeedsGuard := lubKind != KindFloat && lubKind != KindComplex
+		guarded := specialFloatNeedsGuard(srcKind, dstKind, lubKind)
 
 		switch {
 		case dstKind == KindComplex && lubKind == KindComplex:
@@ -746,33 +783,29 @@ func makeDivideDispatch[T Number](
 			table[dstKind] = func(p T, o Number) (Number, error) {
 				return NewComplex(realDivideComplex(NumberToFloat64(p), o.(*Complex).Value)), nil
 			}
-		case srcKind == KindFloat && lubNeedsGuard:
+		case srcKind == KindFloat && guarded:
 			// Receiver is Float, might have Inf/NaN.
 			lubIsComplex := lubKind == KindBigComplex
 			table[dstKind] = func(p T, o Number) (Number, error) {
-				if isSpecialFloat(any(p).(*Float)) {
+				x := any(p).(*Float)
+				if isSpecialFloat(x) {
 					if lubIsComplex {
-						z := NumberToComplex128Lossy(p) / NumberToComplex128Lossy(o)
-						return NewBigComplexFromBigFloats(
-							NewBigFloatFromFloat64(real(z)),
-							NewBigFloatFromFloat64(imag(z)),
-						), nil
+						return bigComplexSpecialDivide(x.Value, o.(*BigComplex)), nil
 					}
 					return NewFloat(finiteClampedFloat64(p) / finiteClampedFloat64(o)), nil
 				}
 				return promSrc(p).Divide(promDst(o))
 			}
-		case dstKind == KindFloat && lubNeedsGuard:
+		case dstKind == KindFloat && guarded:
 			// Operand is Float, might have Inf/NaN.
 			lubIsComplex := lubKind == KindBigComplex
 			table[dstKind] = func(p T, o Number) (Number, error) {
 				if isSpecialFloat(o.(*Float)) {
 					if lubIsComplex {
-						z := NumberToComplex128Lossy(p) / NumberToComplex128Lossy(o)
-						return NewBigComplexFromBigFloats(
-							NewBigFloatFromFloat64(real(z)),
-							NewBigFloatFromFloat64(imag(z)),
-						), nil
+						// BigComplex / Float. Unreached through BigComplex.Divide,
+						// which divides by a real part-wise before consulting this
+						// table; delegate to that route so a direct table call agrees.
+						return any(p).(*BigComplex).Divide(o)
 					}
 					return NewFloat(finiteClampedFloat64(p) / finiteClampedFloat64(o)), nil
 				}
