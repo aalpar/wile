@@ -899,6 +899,19 @@ func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, q syntax.ScopeSet) 
 	return li
 }
 
+// HasLocalBinding reports whether sym has a local binding of any type
+// satisfying the scope-set query q. A local the query reaches is what the
+// compiler resolves a reference to before it reads a definition-site pin, so a
+// pin minted for such a reference would contradict it (the ER rename asks).
+func (p *EnvironmentFrame) HasLocalBinding(sym *values.Symbol, q syntax.ScopeSet) bool {
+	if p == nil {
+		return false
+	}
+	return walkLocal(p, sym, q, func(*Binding, int, int) bool {
+		return true
+	})
+}
+
 // HasLocalVariableBinding reports whether sym has a local variable binding
 // satisfying the scope-set query q. Its consumer is the macro expander, deciding
 // whether a local variable shadows a macro.

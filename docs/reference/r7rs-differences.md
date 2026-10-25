@@ -884,11 +884,14 @@ an enclosing macro introduced. Both syntax-forms implementations hand over this 
 until the I031 fix the default Go forms unwrapped the whole form, so identifiers arrived
 as symbols.
 
-`compare` still differs by layer. Under `WithSchemeSyntaxForms` (or
-`WILE_SYNTAX_FORMS=scheme`) it is `free-identifier=?` and raises on a bare symbol. The
-default Go `compare` also accepts a bare symbol, resolved without regard to scopes, so
-`(compare (cadr form) 'else)` answers where the Scheme layer raises; compare against
-`(rename 'else)` to be correct on both.
+`rename` takes any datum and gives it the macro definition's context: a compound datum
+renames symbol by symbol, and within one expansion a symbol renames to one identifier
+(`eq?`). Every rename also takes the expansion's own scope, so `(rename 'tmp)` used as a
+binder binds only the macro's references and never captures a `tmp` the form passed
+through, even when `tmp` is a global where the macro was defined. `compare` also takes a bare symbol, which means what that name means at the
+macro use, so `(compare (cadr form) 'else)` is true under a use-site `(let ((else 1)) …)`;
+compare against `(rename 'else)` to ask about the definition's `else` instead. Both
+syntax-forms implementations agree on all of this.
 
 Hygiene is Flatt's sets-of-scopes model (2016), as Racket's is, rather than R6RS's
 mark-and-substitution. That is invisible through `syntax-rules` and observable through

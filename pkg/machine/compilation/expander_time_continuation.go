@@ -918,10 +918,10 @@ func (p *ExpanderTimeContinuation) invokeERTransformer(
 	// p.env.PhaseLevel() rather than a constant: a macro defined at phase 0 and
 	// used inside a transformer body emits phase-1 code, and the rename follows
 	// the use.
-	renameCls := NewERRenameClosure(erTransformer.DefEnv().AtPhase(p.env.PhaseLevel()), erTransformer.DefScopes(), introScope)
+	renameCls := NewERRenameClosure(erTransformer.DefEnv().AtPhase(p.env.PhaseLevel()), p.env, erTransformer.DefScopes(), introScope)
 
-	// Create compare closure (captures use-site env)
-	compareCls := NewERCompareClosure(p.env)
+	// Create compare closure (captures use-site env and the keyword's scopes)
+	compareCls := NewERCompareClosure(p.env, sym.Scopes())
 
 	// Set up expander context for auxiliary syntax hygiene
 	expanderCtx := NewExpanderContext(p.env, p)

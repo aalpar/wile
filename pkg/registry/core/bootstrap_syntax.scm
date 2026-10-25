@@ -134,11 +134,15 @@ Examples:
 (define-syntax er-macro-transformer
   "Explicit-renaming macro transformer (Clinger 1991). PROC receives the macro
 use as a form whose pairs and vectors are plain and whose identifiers stay
-syntax objects (identifier? is the test), a RENAME procedure giving a symbol
-the macro definition's context, and a COMPARE procedure (free-identifier=?)
-testing two identifiers for the same binding; both COMPARE arguments must be
-identifiers, a bare symbol is an error. A symbol PROC introduces without
-renaming takes the use site's context. Wile extension.
+syntax objects (identifier? is the test), a RENAME procedure giving a datum
+the macro definition's context (within one expansion, renaming a symbol twice
+gives the same identifier), and a COMPARE procedure (free-identifier=?)
+testing two identifiers for the same binding. A bare symbol given to COMPARE
+takes the use site's context: (compare (cadr form) 'else) asks whether the
+form's element means what else means at the use, so a local else there makes
+it true; compare against (rename 'else) to ask about the definition's else.
+A symbol PROC introduces without renaming takes the use site's context.
+Wile extension.
 Syntax: (er-macro-transformer PROC)
 Category: macros
 
@@ -153,9 +157,19 @@ Examples:
       ((k proc)
        #'(let ((p (%er-proc proc #'k)))
            (lambda (stx)
-             (call-with-values (lambda () (%syntax-spine stx))
-               (lambda (form origins)
-                 (%er-syntax (syntax-car stx) origins
-                   (p form
-                      (lambda (sym) (datum->syntax #'k sym))
-                      free-identifier=?))))))))))
+             (let ((renamed '()))
+               (define (use-site id)
+                 (if (symbol? id) (datum->syntax (syntax-car stx) id) id))
+               (call-with-values (lambda () (%syntax-spine stx))
+                 (lambda (form origins)
+                   (%er-syntax (syntax-car stx) origins
+                     (p form
+                        (lambda (sym)
+                          (let ((hit (and (symbol? sym) (assq sym renamed))))
+                            (if hit
+                                (cdr hit)
+                                (let ((id (datum->syntax #'k sym)))
+                                  (if (symbol? sym) (set! renamed (cons (cons sym id) renamed)))
+                                  id))))
+                        (lambda (a b)
+                          (free-identifier=? (use-site a) (use-site b))))))))))))))

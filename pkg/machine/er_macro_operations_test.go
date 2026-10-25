@@ -30,7 +30,7 @@ func TestERRename_Basic(t *testing.T) {
 	c := qt.New(t)
 
 	env := createHygieneTestEnv()
-	rename := compilation.NewERRenameClosure(env.Expand(), syntax.Scopes{}, syntax.NewScope())
+	rename := compilation.NewERRenameClosure(env.Expand(), env, syntax.Scopes{}, syntax.NewScope())
 
 	mc := machine.NewMachineContext(
 		context.Background(),
@@ -52,7 +52,7 @@ func TestERRename_CachesResults(t *testing.T) {
 	c := qt.New(t)
 
 	env := createHygieneTestEnv()
-	rename := compilation.NewERRenameClosure(env.Expand(), syntax.Scopes{}, syntax.NewScope())
+	rename := compilation.NewERRenameClosure(env.Expand(), env, syntax.Scopes{}, syntax.NewScope())
 
 	// First call.
 	mc1 := machine.NewMachineContext(
@@ -80,7 +80,7 @@ func TestERRename_SyntaxSymbolInput(t *testing.T) {
 	c := qt.New(t)
 
 	env := createHygieneTestEnv()
-	rename := compilation.NewERRenameClosure(env.Expand(), syntax.Scopes{}, syntax.NewScope())
+	rename := compilation.NewERRenameClosure(env.Expand(), env, syntax.Scopes{}, syntax.NewScope())
 
 	// Pass a SyntaxSymbol instead of a plain Symbol.
 	sctx := syntax.NewSourceContext("", "", syntax.NewSourceIndexes(0, 0, 0), syntax.NewSourceIndexes(0, 0, 0))
@@ -97,26 +97,46 @@ func TestERRename_SyntaxSymbolInput(t *testing.T) {
 	c.Assert(mc.GetValue() == values.Value(input), qt.IsTrue)
 }
 
-func TestERRename_RejectsNonSymbol(t *testing.T) {
+// TestERRename_ConvertsADatum: a datum that is neither a symbol nor an
+// identifier is converted to syntax (it used to raise ErrNotASymbol), each
+// symbol in it renamed through the per-name cache, and an identifier inside it
+// left as it is.
+func TestERRename_ConvertsADatum(t *testing.T) {
 	c := qt.New(t)
 
 	env := createHygieneTestEnv()
-	rename := compilation.NewERRenameClosure(env.Expand(), syntax.Scopes{}, syntax.NewScope())
+	rename := compilation.NewERRenameClosure(env.Expand(), env, syntax.Scopes{}, syntax.NewScope())
+	apply := func(arg values.Value) values.Value {
+		mc := machine.NewMachineContext(
+			context.Background(),
+			machine.NewMachineContinuation(nil, machine.NewNativeTemplate(0, 0, false), env),
+		)
+		_, err := mc.ApplyCallable(rename, arg)
+		c.Assert(err, qt.IsNil)
+		return mc.GetValue()
+	}
 
-	mc := machine.NewMachineContext(
-		context.Background(),
-		machine.NewMachineContinuation(nil, machine.NewNativeTemplate(0, 0, false), env),
-	)
-	_, err := mc.ApplyCallable(rename, values.NewInteger(42))
-	c.Assert(err, qt.IsNotNil)
-	c.Assert(err.Error(), qt.Contains, "symbol")
+	atom, ok := apply(values.NewInteger(42)).(syntax.SyntaxValue)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(atom.UnwrapAll(), qt.DeepEquals, values.NewInteger(42))
+
+	sctx := syntax.NewSourceContext("", "", syntax.NewSourceIndexes(0, 0, 0), syntax.NewSourceIndexes(0, 0, 0))
+	id := syntax.NewSyntaxSymbol("tmp", sctx)
+	pair, ok := apply(values.List(values.NewSymbol("tmp"), id)).(*syntax.SyntaxPair)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(pair.SyntaxCar() == apply(values.NewSymbol("tmp")), qt.IsTrue,
+		qt.Commentf("a symbol in a datum must rename through the cache"))
+	second, ok := pair.SyntaxCdr().(*syntax.SyntaxPair)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(second.SyntaxCar() == syntax.SyntaxValue(id), qt.IsTrue,
+		qt.Commentf("an identifier in a datum must come back unchanged"))
 }
 
 func TestERCompare_SameUnboundSymbol(t *testing.T) {
 	c := qt.New(t)
 
 	env := createHygieneTestEnv()
-	compare := compilation.NewERCompareClosure(env)
+	compare := compilation.NewERCompareClosure(env, syntax.Scopes{})
 
 	mc := machine.NewMachineContext(
 		context.Background(),
@@ -131,7 +151,7 @@ func TestERCompare_DifferentUnboundSymbols(t *testing.T) {
 	c := qt.New(t)
 
 	env := createHygieneTestEnv()
-	compare := compilation.NewERCompareClosure(env)
+	compare := compilation.NewERCompareClosure(env, syntax.Scopes{})
 
 	mc := machine.NewMachineContext(
 		context.Background(),
@@ -146,7 +166,7 @@ func TestERCompare_BoundVsUnbound(t *testing.T) {
 	c := qt.New(t)
 
 	env := createHygieneTestEnv()
-	compare := compilation.NewERCompareClosure(env)
+	compare := compilation.NewERCompareClosure(env, syntax.Scopes{})
 
 	// "if" is bound (registered as primitive expander), "nonexistent" is not.
 	mc := machine.NewMachineContext(
@@ -162,7 +182,7 @@ func TestERCompare_RejectsNonSymbol(t *testing.T) {
 	c := qt.New(t)
 
 	env := createHygieneTestEnv()
-	compare := compilation.NewERCompareClosure(env)
+	compare := compilation.NewERCompareClosure(env, syntax.Scopes{})
 
 	mc := machine.NewMachineContext(
 		context.Background(),
