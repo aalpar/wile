@@ -125,6 +125,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A macro template no longer reaches a variable bound only at a higher
+  phase.** A free template identifier was pinned to the first phase binding
+  its name, so `(begin-for-syntax (define helper 7))` then a `syntax-rules`
+  macro expanding to `helper` returned `7` at runtime, and read LIVE phase-1
+  state (a later phase-1 `set!` showed through). The pin is now made at the
+  phase the expansion lands in; a mutable variable above it refuses at the use
+  as a direct reference does (`(bound at phase 1)`), as Racket and Chez refuse.
+  Keywords, primitives and sealed bindings still pin across phases, so
+  recursive macros and the jabberwocky case are unchanged. The same holds for
+  `quote-syntax` and a `syntax-case` template with an ellipsis, which share the
+  pin; a REPL-style `(define fwd 1)` after such a macro now wins over a
+  same-named phase-1 define (`1`, was `9`).
 - **A use-site identifier inside a box loses a macro's intro scope.**
   `AddScope` descended into a syntax box but `FlipScope` and the expander's
   stamp walk did not, and `AddScopeToSyntax` skipped a top-level box, so an

@@ -719,7 +719,48 @@ func TestPresentPhasesIncludesStoreOnlyPhases(t *testing.T) {
 	c.Assert(report.phases.Get(Phase(2)), qt.IsNil)
 	// ...and the search basis reports the phase anyway.
 	c.Assert(report.Runtime().PresentPhases(), qt.Contains, Phase(2))
-	c.Assert(report.Runtime().GetGlobalIndexAcrossPhases(sym, AmbientScopes()), qt.IsNotNil)
+	// Probed from phase 3, whose templates land at phase 2: a phase-0 probe
+	// refuses a mutable phase-2 variable by design (templateUsePhase).
+	c.Assert(report.AtPhase(Phase(3)).GetGlobalIndexAcrossPhases(sym, AmbientScopes()), qt.IsNotNil)
+}
+
+// GetGlobalIndexAcrossPhases pins at the phase the receiver's templates land in
+// (one below the receiver, clamped at the runtime). Above that phase only a
+// keyword, a primitive or a sealed binding pins; a mutable variable there is
+// another phase's state, and the walk answers nil rather than climbing past it.
+func TestAcrossPhasesPinsAtTheTemplateUsePhase(t *testing.T) {
+	ns := NewNamespace()
+	define := func(env *EnvironmentFrame, name string, bt BindingType) {
+		_, err := env.DefineOwnGlobal(values.NewSymbol(name), bt, AmbientScopes(), values.NewInteger(1))
+		qt.Assert(t, err, qt.IsNil)
+	}
+	define(ns.Runtime(), "var0", BindingTypeVariable)
+	define(ns.AtPhase(PhaseExpand), "var1", BindingTypeVariable)
+	define(ns.AtPhase(PhaseExpand), "syn1", BindingTypeSyntax)
+	define(ns.AtPhase(PhaseExpand), "prim1", BindingTypePrimitive)
+	define(ns.Runtime().SealedWriteViewAt(PhaseExpand), "sealed1", BindingTypeVariable)
+	define(ns.AtPhase(Phase(2)), "var2", BindingTypeVariable)
+
+	tcs := []struct {
+		receiver Phase
+		name     string
+		pins     bool
+	}{
+		{PhaseExpand, "var0", true},
+		{PhaseExpand, "var1", false},
+		{PhaseExpand, "syn1", true},
+		{PhaseExpand, "prim1", true},
+		{PhaseExpand, "sealed1", true},
+		{PhaseExpand, "var2", false},
+		{PhaseRuntime, "var0", true},
+		{PhaseRuntime, "var1", false},
+		{Phase(2), "var1", true},
+		{Phase(2), "var2", false},
+	}
+	for _, tc := range tcs {
+		gi := ns.AtPhase(tc.receiver).GetGlobalIndexAcrossPhases(values.NewSymbol(tc.name), AmbientScopes())
+		qt.Check(t, gi != nil, qt.Equals, tc.pins, qt.Commentf("receiver phase %d, %s", tc.receiver, tc.name))
+	}
 }
 
 // The stale-pin heals, at the store level. A pin records the coordinates it
