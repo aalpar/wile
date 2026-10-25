@@ -15,6 +15,7 @@
 package validate
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
@@ -41,8 +42,8 @@ func binderTestEnv() *environment.EnvironmentFrame {
 // symbol whose scope set differs from its neighbours'.
 func stxList(elems ...syntax.SyntaxValue) syntax.SyntaxValue {
 	var q syntax.SyntaxValue = syntax.SyntaxEmptyList
-	for i := len(elems) - 1; i >= 0; i-- {
-		q = syntax.NewSyntaxCons(elems[i], q, syntax.NewZeroValueSourceContext())
+	for _, e := range slices.Backward(elems) {
+		q = syntax.NewSyntaxCons(e, q, syntax.NewZeroValueSourceContext())
 	}
 	return q
 }
