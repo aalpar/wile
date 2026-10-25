@@ -1338,4 +1338,3 @@ func TestJoinMisses_NoMissesIsNotFound(t *testing.T) {
 	err := JoinMisses(nil)
 	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsTrue, qt.Commentf("err = %v", err))
 }
-
