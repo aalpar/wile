@@ -323,7 +323,7 @@ Introduces shift/reset as composable delimited control operators, the theoretica
 
 ### Optimistic Bisimilarity for Structural Equality
 
-Used in `pkg/values/equal.go` for `Equal()` (spelled `EqualTo()` in `pkg/values/values.go`) on compound types (Pair, Vector). When a pointer pair is re-encountered during recursive comparison, it returns true (optimistic assumption). This is the same technique used by Chez Scheme and Racket for `equal?` on circular structures per R7RS §6.1. The formal basis is bisimulation equivalence — see "Bisimulation Equivalence for equal?" entry below.
+Used in `pkg/values/equal.go` for `Equal()` on compound types (Pair, Vector). When a pointer pair is re-encountered during recursive comparison, it returns true (optimistic assumption). This is the same technique used by Chez Scheme and Racket for `equal?` on circular structures per R7RS §6.1. The formal basis is bisimulation equivalence — see "Bisimulation Equivalence for equal?" entry below.
 
 ### Split Value Register
 

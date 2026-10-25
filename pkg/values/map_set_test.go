@@ -28,7 +28,7 @@ func intSet(vs ...int) values.IntSet {
 	return q
 }
 
-func Test_MapSet_Membership(t *testing.T) {
+func TestMapSet_Membership(t *testing.T) {
 	s := values.NewStringSet(0)
 	qt.Assert(t, s.Len(), qt.Equals, 0)
 	qt.Assert(t, s.ContainsOne("a"), qt.IsFalse)
@@ -47,7 +47,7 @@ func Test_MapSet_Membership(t *testing.T) {
 
 // A nil MapSet is a valid empty set for every read and every removal; only
 // insertion needs an allocated map.
-func Test_MapSet_NilReads(t *testing.T) {
+func TestMapSet_NilReads(t *testing.T) {
 	var s values.StringSet
 	qt.Assert(t, s.Len(), qt.Equals, 0)
 	qt.Assert(t, s.ContainsOne("a"), qt.IsFalse)
@@ -58,7 +58,7 @@ func Test_MapSet_NilReads(t *testing.T) {
 	qt.Assert(t, s, qt.IsNil)
 }
 
-func Test_MapSet_Algebra(t *testing.T) {
+func TestMapSet_Algebra(t *testing.T) {
 	tests := []struct {
 		name   string
 		op     func(values.IntSet, ...values.IntSet) values.IntSet
@@ -97,7 +97,7 @@ func Test_MapSet_Algebra(t *testing.T) {
 
 // The algebra returns a fresh set: neither the receiver nor any operand is
 // aliased, so mutating the result leaves the inputs untouched.
-func Test_MapSet_AlgebraDoesNotAliasInputs(t *testing.T) {
+func TestMapSet_AlgebraDoesNotAliasInputs(t *testing.T) {
 	a := intSet(1)
 	b := intSet(2)
 	results := []struct {

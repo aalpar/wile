@@ -62,7 +62,7 @@ func TestSymbol_IsVoid(t *testing.T) {
 	qt.Assert(t, nilSym.IsVoid(), qt.IsTrue)
 }
 
-func Test_NewTemporaryVariableName(t *testing.T) {
+func TestNewTemporaryVariableName(t *testing.T) {
 	sym1 := values.NewTemporaryVariableName()
 	sym2 := values.NewTemporaryVariableName()
 
@@ -71,7 +71,7 @@ func Test_NewTemporaryVariableName(t *testing.T) {
 	qt.Assert(t, sym1.Key, qt.Not(qt.Equals), sym2.Key)
 }
 
-func Test_NewTemporaryVariableName_Uniqueness(t *testing.T) {
+func TestNewTemporaryVariableName_Uniqueness(t *testing.T) {
 	c := qt.New(t)
 	seen := make(map[string]bool)
 

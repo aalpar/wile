@@ -57,8 +57,8 @@ TOTAL  3/7 sexprs covered
 ## Stdlib exclusion
 
 By default, entries from the files of the embedded stdlib (every file
-under `scheme/`, `srfi/`, `wile/`, `chibi/` and `rnrs/` that the embed
-carries, whether named `srfi/1.sld` or `lib/srfi/1.sld`) are excluded.
+`pkg/stdlib` embeds, under whichever top-level directories it has,
+whether named `srfi/1.sld` or `lib/srfi/1.sld`) are excluded.
 Pass `--cover-stdlib` to include them in the output, useful when
 debugging stdlib interactions, noisy otherwise.
 

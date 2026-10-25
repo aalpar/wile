@@ -782,7 +782,7 @@ func TestNumericTower_CoverageMatrix(t *testing.T) {
 	}
 }
 
-func Test_ExactInteger(t *testing.T) {
+func TestExactInteger(t *testing.T) {
 	tests := []struct {
 		name   string
 		in     values.Value

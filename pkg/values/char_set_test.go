@@ -81,7 +81,7 @@ func TestCharSet_EqualTo(t *testing.T) {
 	cs2 := values.NewCharSetFromRanges([]values.CharSetRange{{Lo: 5, Hi: 10}})
 	// Same canonical form, different construction paths.
 	c.Assert(cs1.EqualTo(cs2), qt.Equals, true)
-	c.Assert(values.EqualTo(cs1, cs2), qt.Equals, true)
+	c.Assert(values.Equal(cs1, cs2), qt.Equals, true)
 }
 
 func TestCharSet_Value_NilHandling(t *testing.T) {

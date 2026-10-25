@@ -99,7 +99,15 @@ func TestHostCrash_LambdaExceedingLocalSlots(t *testing.T) {
 // defines allocate their slots later, during compileBody, so the parameter check
 // cannot see them. Verified to still panic at slot 32768 with only the let and
 // parameter guards in place.
+//
+// Skipped under -race: compiling 40,000 defines is single-threaded and shares
+// nothing, so the detector has nothing to see, and instrumented it took 142 s,
+// the whole critical path of `go test -race ./pkg/wile/`'s parallel phase
+// (8m33s wall with it on 2026-10-25, against Go's 10m default timeout).
 func TestHostCrash_InternalDefinesExceedingLocalSlots(t *testing.T) {
+	if raceDetectorEnabled {
+		t.Skip("single-threaded compile of 40,000 defines; no race content, 142 s instrumented")
+	}
 	t.Parallel()
 
 	eng := newTestEngine(t)

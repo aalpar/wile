@@ -357,6 +357,6 @@ func TestPair_EqualTo_CircularList(t *testing.T) {
 			values.NewCons(values.NewInteger(2), values.EmptyList))
 		b[1].(*values.Pair)[1] = b
 
-		qt.Assert(t, values.EqualTo(a, b), qt.IsTrue)
+		qt.Assert(t, values.Equal(a, b), qt.IsTrue)
 	})
 }

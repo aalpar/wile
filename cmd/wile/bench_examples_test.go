@@ -24,24 +24,47 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-// benchmarksExample matches a benchmark list in the three forms the script and
-// its docs use: a quoted example (`BENCHMARKS="a b"`, also with the quotes
-// backslash-escaped, as in the script's own echoed help), an unquoted single
-// name (`BENCHMARKS=tak`), and the script's default (`${BENCHMARKS:-a b}`). The
-// leading class keeps LARCENY_BENCHMARKS (a different namespace, where `ack`
-// is valid) and the CANONICAL_/EXTRA_/ALL_ arrays out; the value classes
-// exclude `$` and `(`, so a variable expansion or a bash array is not a list.
+// benchmarksExample matches a benchmark list in the forms the script and its
+// docs use: a double-quoted example (`BENCHMARKS="a b"`, also with the quotes
+// backslash-escaped, as in the script's own echoed help), a single-quoted one,
+// an unquoted single name (`BENCHMARKS=tak`), and the script's default
+// (`${BENCHMARKS:-a b}`). A quoted or default list may continue across lines
+// with a trailing backslash. The leading class keeps LARCENY_BENCHMARKS (a
+// different namespace, where `ack` is valid) and the CANONICAL_/EXTRA_/ALL_
+// arrays out; the value classes exclude `$` and `(`, so a variable expansion
+// or a bash array is not a list. Upper case is admitted so that a misspelled
+// name is reported rather than skipped.
 var benchmarksExample = regexp.MustCompile(
-	`(?:^|[^A-Z_])BENCHMARKS(?:=\\?"([a-z0-9 ._-]+)\\?"|=([a-z0-9._-]+)|:-([a-z0-9 ._-]+)\})`)
+	`(?:^|[^A-Z_])BENCHMARKS(?:=\\?"(` + benchmarkListBody + `)\\?"|='(` + benchmarkListBody + `)'|=([A-Za-z0-9._-]+)|:-(` + benchmarkListBody + `)\})`)
+
+// benchmarkListBody is a list's names: separated by blanks, and by a
+// backslash-newline continuation.
+const benchmarkListBody = `(?:[A-Za-z0-9 \t._-]|\\\n)+`
+
+// benchmarksMention matches anything shaped like a list assignment: the
+// variable, then `=` (optionally opening a quote) or `:-`, then a character that
+// starts a value. Prose (`BENCHMARKS= are ignored`, also with the name in a
+// Markdown code span) and variable expansions do not match. Every mention must also be a benchmarksExample match, so a list
+// the grammar cannot read is a finding in the file that holds it rather than a
+// silent skip.
+var benchmarksMention = regexp.MustCompile(
+	`(?:^|[^A-Z_])BENCHMARKS(?:=\\?["']?|:-)[^\s$(\\"'` + "`" + `]`)
 
 // benchmarkExampleFindings returns how many names src lists and one finding for
-// each name that resolve rejects. compare-schemes.sh appends ".scm" to each
-// name, so a listed "tak.scm" resolves to tak.scm.scm and is a finding.
+// each name that resolve rejects and for each list-shaped mention the grammar
+// cannot read. compare-schemes.sh appends ".scm" to each name, so a listed
+// "tak.scm" resolves to tak.scm.scm and is a finding.
 func benchmarkExampleFindings(file, src string, resolve func(name string) bool) (int, []string) {
 	var checked int
 	var findings []string
-	for _, m := range benchmarksExample.FindAllStringSubmatch(src, -1) {
-		for _, list := range m[1:] {
+	read := map[int]bool{}
+	for _, m := range benchmarksExample.FindAllStringSubmatchIndex(src, -1) {
+		read[m[0]] = true
+		for i := 2; i < len(m); i += 2 {
+			if m[i] < 0 {
+				continue
+			}
+			list := strings.ReplaceAll(src[m[i]:m[i+1]], "\\\n", " ")
 			for bench := range strings.FieldsSeq(list) {
 				checked++
 				if !resolve(bench) {
@@ -49,6 +72,13 @@ func benchmarkExampleFindings(file, src string, resolve func(name string) bool) 
 				}
 			}
 		}
+	}
+	for _, m := range benchmarksMention.FindAllStringIndex(src, -1) {
+		if read[m[0]] {
+			continue
+		}
+		line, _, _ := strings.Cut(src[m[0]:], "\n")
+		findings = append(findings, file+": a BENCHMARKS list the scanner cannot read: "+strings.TrimSpace(line))
 	}
 	return checked, findings
 }
@@ -60,9 +90,16 @@ func benchmarkExampleFindings(file, src string, resolve func(name string) bool) 
 func TestBenchmarkExampleNamesResolve(t *testing.T) {
 	c := qt.New(t)
 	root := gitOutput(t, ".", "rev-parse", "--show-toplevel")
+	// A listing, not os.Stat: on a case-insensitive filesystem Stat finds
+	// TAK.scm for tak.scm, and compare-schemes.sh on Linux does not.
+	entries, err := os.ReadDir(filepath.Join(root, "examples", "benchmarks"))
+	c.Assert(err, qt.IsNil)
+	present := map[string]bool{}
+	for _, e := range entries {
+		present[e.Name()] = true
+	}
 	resolve := func(name string) bool {
-		_, err := os.Stat(filepath.Join(root, "examples", "benchmarks", name+".scm"))
-		return err == nil
+		return present[name+".scm"]
 	}
 	files := gitOutput(t, root, "ls-files", "-z", "--", "Makefile", "examples/benchmarks/*.sh", "examples/benchmarks/*.md")
 	checked := map[string]int{}
@@ -110,7 +147,13 @@ func TestBenchmarkExampleGrammar(t *testing.T) {
 		{"other tool's list", `LARCENY_BENCHMARKS="fib tak ack"`, 0, nil},
 		{"array assignment", `CANONICAL_BENCHMARKS=(`, 0, nil},
 		{"prose mention", "BENCHMARKS= are silently ignored", 0, nil},
+		{"prose mention in a code span", "`BENCHMARKS=` are silently ignored", 0, nil},
 		{"variable expansion", `for bench in $BENCHMARKS; do`, 0, nil},
+		{"single-quoted", `BENCHMARKS='tak nosuch'`, 2, []string{"f: BENCHMARKS lists nosuch, which has no examples/benchmarks/nosuch.scm"}},
+		{"upper-case name is read", `BENCHMARKS="tak Fib"`, 2, []string{"f: BENCHMARKS lists Fib, which has no examples/benchmarks/Fib.scm"}},
+		{"backslash continuation", "BENCHMARKS=\"tak \\\n  nosuch\"", 2, []string{"f: BENCHMARKS lists nosuch, which has no examples/benchmarks/nosuch.scm"}},
+		{"default with continuation", "${BENCHMARKS:-tak \\\n nosuch}", 2, []string{"f: BENCHMARKS lists nosuch, which has no examples/benchmarks/nosuch.scm"}},
+		{"unreadable list is a finding", `BENCHMARKS="tak,fib"`, 0, []string{`f: a BENCHMARKS list the scanner cannot read: BENCHMARKS="tak,fib"`}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
