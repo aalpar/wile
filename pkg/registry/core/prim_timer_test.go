@@ -185,10 +185,12 @@ func TestTimerHandlerRunsOutsideTheAbandonedThunk(t *testing.T) {
 			Expected: values.NewSymbol("outer"),
 		},
 		{
+			// The thunk spins until the handler has run, so neither the timer's
+			// firing nor the 5s budget depends on how fast a loaded machine counts.
 			Name: "resumed thunk sees its own parameterization",
-			Code: `(let ((p (make-parameter 'outer)))
-  (with-timeout 1 (lambda (k) (list (p) (k)))
-    (lambda () (parameterize ((p 'inner)) (let loop ((n 0)) (if (< n 2000000) (loop (+ n 1)) (p)))))))`,
+			Code: `(let ((p (make-parameter 'outer)) (fired #f))
+  (with-timeout 1 (lambda (k) (set! fired #t) (list (p) (k)))
+    (lambda () (parameterize ((p 'inner)) (let loop () (if fired (p) (loop)))))))`,
 			Expected: values.List(values.NewSymbol("outer"), values.NewSymbol("inner")),
 		},
 	}
