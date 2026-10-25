@@ -16,6 +16,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A reader fault just past a complete datum fails the next read, not the
+  one that read the datum.** A port whose reader failed right after `(x)` made
+  `(read p)` raise with `(x)` in hand; racket returns `(x)`. The datum is now
+  returned and the port's next input operation (`read`, `read-syntax`,
+  `read-char`, `peek-char`, `read-line`, `read-string`, `char-ready?`) reports
+  the fault, at its position, before any character past it. A datum the fault
+  cut short (`ab`, `12`, `+i`) still fails its own read, and
+  `ReadExpressions`, `load` and a file read on and report it.
+
+### Changed
+
+- **BREAKING (behavior): `char-ready?` requires a textual input port.** It
+  answered `#t` without looking at its argument, so `(char-ready? 5)`, a binary
+  input port and an output port all answered `#t`; each is now an error, as
+  R7RS §6.13.2's textual-input-port argument implies. petite refuses all three;
+  racket, whose ports are not split into textual and binary, refuses all but
+  the byte port. It still answers `#t` for every textual input port.
+
+- **U+FFFD is an identifier character.** `a<U+FFFD>b`, `(<U+FFFD>)` and
+  `#;a<U+FFFD> 42` (written, or with an invalid byte) read as racket and petite
+  read them: the symbol `a<U+FFFD>b`, a one-symbol list, and 42. Wile read `a`
+  and then failed with "expecting token". An unprefixed numeral still ends
+  before it, as `12a` reads 12 then `a` (racket and petite read `12<U+FFFD>` as
+  one symbol). `write` still bars such a symbol (`|a<U+FFFD>b|`), which reads
+  back as the same symbol. A bare `a<FF>b` (an invalid byte, which `read` reads
+  as U+FFFD since 1.21.0) is therefore the symbol `a<U+FFFD>b`, no longer a
+  lexical error.
+
 ## [1.21.0] - 2026-10-25
 
 The release the control-transfer runtime is made to agree with itself in. A
@@ -169,15 +199,6 @@ entries below are marked BREAKING; read Changed and Removed before upgrading.
   4,207 symbols with 385 dead.
 
 ### Fixed
-
-- **A reader fault just past a complete datum fails the next read, not the
-  one that read the datum.** A port whose reader failed right after `(x)` made
-  `(read p)` raise with `(x)` in hand; racket returns `(x)`. The datum is now
-  returned and the port's next input operation (`read`, `read-syntax`,
-  `read-char`, `peek-char`, `read-line`, `read-string`, `char-ready?`) reports
-  the fault, at its position, before any character past it. A datum the fault
-  cut short (`ab`, `12`, `+i`) still fails its own read, and
-  `ReadExpressions`, `load` and a file read on and report it.
 
 - **A thread joined after it was killed by its ctx is an `uncaught-exception`
   wherever it died.** One busy at the VM poll used to reach the joiner's guard as
@@ -1050,23 +1071,8 @@ entries below are marked BREAKING; read Changed and Removed before upgrading.
   does.** It raised a rune error, so `read`, `load`, `include` and `wile -f`
   rejected input `read-char` read cleanly; racket and petite both substitute.
   `"a<FF>b"` reads as a three-character string and a comment holding the byte is
-  skipped. A bare `a<FF>b` reads as the symbol `a<U+FFFD>b`, as a written
-  U+FFFD does (next entry).
-
-- **BREAKING (behavior): `char-ready?` requires a textual input port.** It
-  answered `#t` without looking at its argument, so `(char-ready? 5)`, a binary
-  input port and an output port all answered `#t`; each is now an error, as
-  R7RS §6.13.2's textual-input-port argument implies. petite refuses all three;
-  racket, whose ports are not split into textual and binary, refuses all but
-  the byte port. It still answers `#t` for every textual input port.
-
-- **U+FFFD is an identifier character.** `a<U+FFFD>b`, `(<U+FFFD>)` and
-  `#;a<U+FFFD> 42` (written, or with an invalid byte) read as racket and petite
-  read them: the symbol `a<U+FFFD>b`, a one-symbol list, and 42. Wile read `a`
-  and then failed with "expecting token". An unprefixed numeral still ends
-  before it, as `12a` reads 12 then `a` (racket and petite read `12<U+FFFD>` as
-  one symbol). `write` still bars such a symbol (`|a<U+FFFD>b|`), which reads
-  back as the same symbol.
+  skipped. U+FFFD is not a Wile identifier character, so a bare `a<FF>b` is a
+  lexical error naming the character, as a written U+FFFD is.
 
 - **BREAKING (Go API): `compilation.ExpandAndCompile` and
   `ExpandAndCompileOptimized` take `(ctx, env, stx)`.** The `resolver`,
