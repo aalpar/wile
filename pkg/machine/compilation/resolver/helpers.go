@@ -124,6 +124,12 @@ func IsNotFound(err error) bool {
 // FailureMessage. Callers pass only IsNotFound errors, which is what keeps a
 // denial from riding into the join.
 func JoinMisses(misses []error) error {
+	if len(misses) == 0 {
+		// No probe ran (a zero-value ChainFileResolver, an empty extension list).
+		// errors.Join() of nothing is nil, which callers read as success and then
+		// close a nil file.
+		return werr.WrapForeignErrorf(werr.ErrFileNotFound, "resolve: no source was searched")
+	}
 	if len(misses) == 1 {
 		return misses[0]
 	}

@@ -1318,3 +1318,23 @@ func TestFileResolverInterfaceCompliance(t *testing.T) {
 	_, ok := embed.(FileEnumerator)
 	qt.Assert(t, !ok, qt.IsTrue)
 }
+
+// TestChainFileResolver_ZeroValueReportsNotFound pins the no-probe exit. The
+// zero value is constructible (NewChainFileResolver panics on an empty slice;
+// a struct literal does not), its loop runs zero times, and errors.Join() of no
+// misses is nil, so ResolveAndOpen answered (nil, "", nil) and callers deferred
+// Close on a nil file.
+func TestChainFileResolver_ZeroValueReportsNotFound(t *testing.T) {
+	f, resolved, err := (&ChainFileResolver{}).ResolveAndOpen(context.Background(), "missing.scm")
+	qt.Assert(t, f, qt.IsNil)
+	qt.Assert(t, resolved, qt.Equals, "")
+	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsTrue, qt.Commentf("err = %v", err))
+}
+
+// TestJoinMisses_NoMissesIsNotFound pins the guard both no-probe callers rely
+// on: ChainFileResolver over no arms and ResolveLibraryFile over an empty
+// extension list each pass JoinMisses an empty slice.
+func TestJoinMisses_NoMissesIsNotFound(t *testing.T) {
+	err := JoinMisses(nil)
+	qt.Assert(t, errors.Is(err, werr.ErrFileNotFound), qt.IsTrue, qt.Commentf("err = %v", err))
+}
