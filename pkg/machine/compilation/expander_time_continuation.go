@@ -211,16 +211,14 @@ func (p *ExpanderTimeContinuation) ExpandExpression(expr syntax.SyntaxValue) (sy
 	// canceled run reports its cancellation, not ErrExpandDepthExceeded, even when
 	// both conditions are live at this entry. Checked before touching the depth
 	// counter so the increment/decrement stays symmetric on the cancel path. The
-	// shape is the VM poll's (ErrOperationCancelled with the ctx's ending, which
-	// still matches ctx.Err()), located at the form being expanded.
+	// class is the VM poll's (ErrOperationCancelled with the ctx's ending, which
+	// still matches ctx.Err()). Unlocated: the expansion's entry stamps its form
+	// (expandAndCompileScoped), so the location leads the rendered error once,
+	// after which "expansion: cancelled" reads as one phrase.
 	select {
 	case <-p.ctx.Done():
-		cancelled := werr.WrapForeignErrorWithCause(werr.ErrOperationCancelled, werr.ContextEnding(p.ctx, nil),
-			"expand: cancelled")
-		if expr == nil {
-			return nil, cancelled
-		}
-		return nil, wrapSourcedError(expr.SourceContext(), cancelled)
+		return nil, werr.WrapForeignErrorWithCause(werr.ErrOperationCancelled, werr.ContextEnding(p.ctx, nil),
+			"cancelled")
 	default:
 	}
 	g := p.depthGuard

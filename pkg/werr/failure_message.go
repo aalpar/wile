@@ -98,9 +98,9 @@ func messageParts(err error, acc []string) []string {
 	}
 	ending, isEnding := err.(*contextEnding)
 	if isEnding {
-		// Rendered as its cause alone (contextEnding.Error); the other members are
-		// there for errors.Is, like a category sentinel.
-		return messageParts(ending.cause, acc)
+		// Projected as it renders (contextEnding.Error); the members it does not
+		// render are there for errors.Is, like a category sentinel.
+		return ending.messageParts(acc)
 	}
 	fw, ok := err.(foreignWrap)
 	if !ok {

@@ -27,24 +27,37 @@ import (
 // TestContextEnding pins what an ended ctx's ending matches and how it renders:
 // nil while live; the cause alone when it already matches ctx.Err(); otherwise
 // the cause and ctx.Err() both, rendered as the cause; and via, when given, kept
-// matchable. FailureMessage projects it as its cause, so a condition's message
-// does not grow a ctx.Err() or a via the error text never showed.
+// matchable and rendered when its text says more than the cause's (a host
+// primitive's own wrap), so the failure's story is not reduced to its class.
+// FailureMessage projects it as it renders; a sentinel cause (hostCause) is a
+// category there and drops out, as it would wrapped directly.
 func TestContextEnding(t *testing.T) {
 	c := qt.New(t)
 	c.Assert(werr.ContextEnding(t.Context(), nil), qt.IsNil)
 
 	hostCause := werr.NewStaticError("werr test: host cause")
-	via := werr.WrapForeignErrorf(context.Canceled, "walker")
+	hostWrap := werr.WrapForeignErrorf(context.Canceled, "host: fetch http://x failed")
 	cases := []struct {
-		name   string
-		cause  error
-		via    error
-		render string
-		match  []error
+		name    string
+		cause   error
+		via     error
+		render  string
+		message string // FailureMessage of the ending wrapped under "site"
+		match   []error
 	}{
-		{"plain cancel", nil, nil, "context canceled", []error{context.Canceled}},
-		{"host cause", hostCause, nil, "werr test: host cause", []error{hostCause, context.Canceled}},
-		{"host cause via a walker", hostCause, via, "werr test: host cause", []error{hostCause, context.Canceled, via}},
+		{"plain cancel", nil, nil,
+			"context canceled", "site: context canceled", []error{context.Canceled}},
+		{"host cause", hostCause, nil,
+			"werr test: host cause", "site", []error{hostCause, context.Canceled}},
+		{"bare walker via", nil, context.Canceled,
+			"context canceled", "site: context canceled", []error{context.Canceled}},
+		{"host primitive via", nil, hostWrap,
+			"host: fetch http://x failed: context canceled", "site: host: fetch http://x failed: context canceled",
+			[]error{context.Canceled, hostWrap}},
+		{"host primitive via, host cause", hostCause, hostWrap,
+			"host: fetch http://x failed: context canceled: werr test: host cause",
+			"site: host: fetch http://x failed: context canceled",
+			[]error{hostCause, context.Canceled, hostWrap}},
 	}
 	for _, tc := range cases {
 		c.Run(tc.name, func(c *qt.C) {
@@ -55,15 +68,8 @@ func TestContextEnding(t *testing.T) {
 			for _, m := range tc.match {
 				c.Assert(errors.Is(got, m), qt.IsTrue, qt.Commentf("must match %v", m))
 			}
-			// The projection is the cause's own: a sentinel cause (hostCause) is a
-			// category and drops out, as it would wrapped directly.
-			want := "site"
-			fm := werr.FailureMessage(context.Cause(ctx))
-			if fm != "" {
-				want += ": " + fm
-			}
 			wrapped := werr.WrapForeignErrorWithCause(werr.ErrOperationCancelled, got, "site")
-			c.Assert(werr.FailureMessage(wrapped), qt.Equals, want)
+			c.Assert(werr.FailureMessage(wrapped), qt.Equals, tc.message)
 		})
 	}
 }

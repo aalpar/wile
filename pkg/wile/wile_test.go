@@ -1233,32 +1233,40 @@ func TestVMPollCarriesCauseAndLocation(t *testing.T) {
 // steps that notice a ctx ending outside a wait, each of which used to return the
 // bare ctx.Err(): apply's argument spread (it walks the list and returns straight
 // to the driver), a list walker reached through the foreign-call bridge (length),
-// and the expander (eval of a form after the cancel). site is the text naming the
-// step, so a row cannot pass on the VM poll's report instead. located: the step
-// knows where it stopped.
+// a host primitive returning its own wrap of the ctx error (its text must
+// survive the conversion), and the expander (eval of a form after the cancel).
+// site is the text naming the step, so a row cannot pass on the VM poll's report
+// instead. source is where the error is located. eval converts its datum under
+// a zero source context (extensions/eval PrimEval), so its expansion has no
+// position of its own and the bridge's raise locates it at the eval call;
+// TestCompileUnderCancelledCtxLeadsWithTheLocation pins a located expansion.
 func TestEveryRunPathReportsTheCancellation(t *testing.T) {
 	t.Parallel()
 	paths := []struct {
-		name    string
-		code    string
-		site    string
-		located bool
+		name   string
+		code   string
+		site   string
+		source string
 	}{
 		{"apply's argument spread",
 			`(begin (define l (make-list 5000 0)) (cancel!) (apply + l))`,
-			"apply: cancelled while spreading the argument list", true},
+			"apply: cancelled while spreading the argument list", ":1:48"},
 		{"a walker through the bridge",
 			`(begin (define l (make-list 5000 0)) (cancel!) (length l))`,
-			"cancelled before the primitive returned", true},
+			"cancelled before the primitive returned", ":1:48"},
+		{"a host primitive's own wrap",
+			`(begin (cancel!) (fetch!))`,
+			"cancelled before the primitive returned: host: fetch http://x failed: context canceled", ":1:18"},
 		{"the expander",
 			`(begin (cancel!) (eval '(+ 1 2) (interaction-environment)))`,
-			"expand: cancelled", true},
+			"expansion: cancelled", ":1:18"},
 	}
 	for _, tc := range paths {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			c := qt.New(t)
 			engine, ctx := engineWithCancel(t, errTestCancelCause, WithProfile(KitchenSink))
+			registerHostFetch(t, engine)
 			_, err := engine.Eval(ctx, engine.MustParse(ctx, tc.code))
 			c.Assert(err, qt.IsNotNil)
 			c.Assert(err.Error(), qt.Contains, tc.site)
@@ -1267,9 +1275,62 @@ func TestEveryRunPathReportsTheCancellation(t *testing.T) {
 			c.Assert(errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("ctx.Err() must survive, got %v", err))
 			var re *RuntimeError
 			c.Assert(errors.As(err, &re), qt.IsTrue)
-			c.Assert(re.Source != "", qt.Equals, tc.located, qt.Commentf("got %v", err))
+			c.Assert(re.Source, qt.Equals, tc.source, qt.Commentf("got %v", err))
 		})
 	}
+}
+
+// registerHostFetch binds fetch!, a host primitive that fails the way an
+// embedder's I/O does once its ctx has ended: its own text around ctx.Err().
+func registerHostFetch(t *testing.T, engine *Engine) {
+	t.Helper()
+	err := engine.RegisterPrimitive(PrimitiveSpec{
+		Name:       "fetch!",
+		ParamCount: 0,
+		Impl: func(mc CallContext) error {
+			return werr.WrapForeignErrorf(mc.Context().Err(), "host: fetch http://x failed")
+		},
+	})
+	qt.Assert(t, err, qt.IsNil)
+}
+
+// TestCaughtHostFailureKeepsItsText pins that a guard catching a host
+// primitive's cancelled failure sees the primitive's own text in the condition
+// message, not only the cancellation class.
+func TestCaughtHostFailureKeepsItsText(t *testing.T) {
+	t.Parallel()
+	c := qt.New(t)
+	engine, ctx := engineWithCancel(t, nil)
+	registerHostFetch(t, engine)
+	_, err := engine.Eval(ctx, engine.MustParse(ctx,
+		`(begin (define seen #f) (cancel!) (guard (e (#t (set! seen (error-object-message e)))) (fetch!)))`))
+	c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue, qt.Commentf("got %v", err))
+	v, ok := engine.Get("seen")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(v.SchemeString(), qt.Equals,
+		`"cancelled before the primitive returned: host: fetch http://x failed: context canceled"`)
+}
+
+// TestCompileUnderCancelledCtxLeadsWithTheLocation pins the expander's
+// cancellation as a compile error: ErrOperationCancelled with the ctx's ending,
+// the form's location leading the text once and the phase named once.
+func TestCompileUnderCancelledCtxLeadsWithTheLocation(t *testing.T) {
+	t.Parallel()
+	c := qt.New(t)
+	engine, err := NewEngine(context.Background())
+	c.Assert(err, qt.IsNil)
+	expr := engine.MustParse(context.Background(), "(+ 1 2)")
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(errTestCancelCause)
+	_, err = engine.Compile(ctx, expr)
+	c.Assert(err, qt.ErrorMatches,
+		`expand/compile error: :1:0: expansion: cancelled: synchronization operation cancelled: wile test: cancelled by the host`)
+	var ce *CompilationError
+	c.Assert(errors.As(err, &ce), qt.IsTrue)
+	c.Assert(ce.Source, qt.Equals, ":1:0")
+	c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue)
+	c.Assert(errors.Is(err, errTestCancelCause), qt.IsTrue)
+	c.Assert(errors.Is(err, context.Canceled), qt.IsTrue)
 }
 
 // TestCancelledProgramNeverFinishesNil pins the Engine's end-of-run ctx check: a
