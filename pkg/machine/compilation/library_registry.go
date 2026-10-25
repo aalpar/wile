@@ -215,14 +215,15 @@ func (p *CompiledLibrary) EnsureInstantiated(ctx context.Context, evaluator mach
 //
 // Both conversions cut the Unwrap edge to cause on purpose, since a reachable
 // signal or ctx error is what a later importer must not see: an exception to the
-// lossless-chain rule. Nor is cause's text pasted in, which repeated a location
-// and a stack trace inside the message; the conversion names how the body
-// stopped, and the location is the library's form, as for first.
+// lossless-chain rule. Nor is cause's whole text pasted in, which repeated a
+// stack trace inside the message; the conversion names how the body stopped,
+// and for a cancellation where and in what (cancelledAt), and the error's own
+// location is the library's form, as for first.
 func (p *CompiledLibrary) memoizableInstantiateError(first, cause error, cancelled bool) error {
 	if cancelled {
 		return wrapSourcedError(p.formSource, werr.WrapForeignErrorf(werr.ErrLibraryInstantiationCancelled,
-			"library %s: its body was cancelled when it was first instantiated",
-			p.Name.SchemeString()))
+			"library %s: its body was cancelled when it was first instantiated%s",
+			p.Name.SchemeString(), cancelledAt(cause)))
 	}
 	var how string
 	var resumeErr *machine.ErrResumeContinuation
@@ -238,6 +239,21 @@ func (p *CompiledLibrary) memoizableInstantiateError(first, cause error, cancell
 	return wrapSourcedError(p.formSource, werr.WrapForeignErrorf(werr.ErrContinuationBarrier,
 		"library %s: its body exited through %s when it was first instantiated",
 		p.Name.SchemeString(), how))
+}
+
+// cancelledAt renders where a cancelled body stopped and the failure there,
+// without its stack trace: a SRFI-18 wait's raise, or the VM poll's error. It is
+// "" for a cause that carries neither.
+func cancelledAt(cause error) string {
+	var escape *machine.ErrExceptionEscape
+	if errors.As(cause, &escape) {
+		return fmt.Sprintf(", at %s (%s)", escape.Location(), escape.ConditionText())
+	}
+	var se *machine.SchemeError
+	if errors.As(cause, &se) {
+		return fmt.Sprintf(", at %s (%s)", se.Source.Location(), se.Message)
+	}
+	return ""
 }
 
 // NewCompiledLibrary creates a new compiled library.

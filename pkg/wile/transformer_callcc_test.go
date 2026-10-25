@@ -815,10 +815,11 @@ func assertRememberedAsCancelled(t *testing.T, eng *wile.Engine, src string) {
 	var se *compilation.SourcedError
 	qt.Assert(t, errors.As(err, &se), qt.IsTrue, qt.Commentf("%s: %v", src, err))
 	qt.Assert(t, se.Source.Location(), qt.Equals, "probe/user.sld:1:0")
-	// The conversion names how the body stopped; the first run's own failure,
-	// with its location and trace, is not pasted into the message.
-	qt.Assert(t, se.Cause.Error(), qt.Equals,
-		"library (probe user): its body was cancelled when it was first instantiated: library instantiation was cancelled")
+	// The conversion names where the body stopped and what failed there; the
+	// first run's stack trace is not pasted into the message.
+	qt.Assert(t, se.Cause.Error(), qt.Matches,
+		`library \(probe user\): its body was cancelled when it was first instantiated, at probe/user\.sld:\d+:\d+ \([^\n]*\): library instantiation was cancelled`,
+		qt.Commentf("%s", src))
 	cell, ok := eng.Get("cell")
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, cell.SchemeString(), qt.Matches, `#\(1 .*`, qt.Commentf("%s: the body ran again", src))
