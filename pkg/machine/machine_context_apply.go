@@ -152,25 +152,18 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	savedCont := p.cont
 	p.reconfigured = false
 
+	subContexts := p.counters.SubContextsCreated
 	err = fcls.fn(p)
 	if err != nil {
+		if !p.reconfigured && p.template == savedTemplate && p.cont == savedCont {
+			interrupt := p.interruptFailedCall(fcls, vs, err, subContexts)
+			if interrupt != nil {
+				return nil, interrupt
+			}
+		}
 		// applyCallableError propagates prompt aborts, exception escapes, and
 		// timer interrupts as-is; everything else becomes a Scheme exception.
 		return bridgeForeignError(p, err)
-	}
-
-	// Immediate timeout check after foreign call returns successfully.
-	// Closes the latency gap: a foreign function that blocks for seconds
-	// triggers the handler immediately, not after 1024 more bytecode ops.
-	if p.timer != nil {
-		select {
-		case <-p.ctx.Done():
-			fired := p.firedTimer()
-			if fired != nil {
-				return nil, &ErrTimerInterrupt{Handler: fired.handler, Tag: fired.tag}
-			}
-		default:
-		}
 	}
 
 	// If the foreign function reconfigured the VM for continued execution
@@ -180,39 +173,44 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 	// comparison additionally covers continuation-restore paths that repoint
 	// the template without going through Apply (applyComposableContinuation).
 	if p.reconfigured || p.template != savedTemplate {
-		return p, nil
+		return p.afterForeignCall()
 	}
 
 	// Restore continuation, but only if the foreign function didn't already
 	// consume it (e.g., PrimCallCC calling ApplyCallable with a
 	// ForeignClosure, where the nested applyForeign does its own restore).
-	if p.cont == savedCont {
-		if p.cont != nil {
-			p.RestoreAndRelease(p.cont)
-		} else {
-			// Rootless (sub-context) return. There is no continuation to return
-			// through, so RestoreAndRelease never runs and the frame acquired
-			// above must be released here instead. The rooted arm already
-			// recycles it under the same precondition — a foreign call that
-			// neither reconfigured the VM nor repointed the template (both
-			// return early above) does not retain its argument frame — so
-			// releasing here makes the two arms agree rather than introducing a
-			// new assumption. Without it the frame is left for GC, the env-frame
-			// freelist drains, and every subsequent acquire allocates.
-			//
-			// env is repointed at the parent (live, never pool-owned; guaranteed
-			// non-nil by InitApplyFrame) so no field references the recycled
-			// frame, mirroring OpPopEnv. Clearing envPooled prevents
-			// ReleaseSubContext from releasing the same frame a second time.
-			if p.envPooled {
-				dead := p.env
-				p.env = dead.Parent()
-				p.envPooled = false
-				p.releaseEnvFrame(dead)
-			}
-			p.template = immediateReturnTemplate
-			p.pc = 0
+	if p.cont != savedCont {
+		return p.afterForeignCall()
+	}
+	err = p.interruptPendingReturn()
+	if err != nil {
+		return nil, err
+	}
+	if p.cont != nil {
+		p.RestoreAndRelease(p.cont)
+	} else {
+		// Rootless (sub-context) return. There is no continuation to return
+		// through, so RestoreAndRelease never runs and the frame acquired
+		// above must be released here instead. The rooted arm already
+		// recycles it under the same precondition — a foreign call that
+		// neither reconfigured the VM nor repointed the template (both
+		// return early above) does not retain its argument frame — so
+		// releasing here makes the two arms agree rather than introducing a
+		// new assumption. Without it the frame is left for GC, the env-frame
+		// freelist drains, and every subsequent acquire allocates.
+		//
+		// env is repointed at the parent (live, never pool-owned; guaranteed
+		// non-nil by InitApplyFrame) so no field references the recycled
+		// frame, mirroring OpPopEnv. Clearing envPooled prevents
+		// ReleaseSubContext from releasing the same frame a second time.
+		if p.envPooled {
+			dead := p.env
+			p.env = dead.Parent()
+			p.envPooled = false
+			p.releaseEnvFrame(dead)
 		}
+		p.template = immediateReturnTemplate
+		p.pc = 0
 	}
 	return p, nil
 }
@@ -562,6 +560,12 @@ func (p *MachineContext) reinstallSegment(
 	// chain, the abortive case; p.cont = extend it, the composable case).
 	GraftContinuation(segment, prompt)
 	p.Restore(segment)
+	if comp.interrupted {
+		// Restore carries no register. Cloned, because the continuation may be
+		// reinstated again from the same frame.
+		p.cloneValueRegisterFrom(&segment.vmState)
+		return false, nil
+	}
 	p.SetValues(vals...)
 	return false, nil
 }

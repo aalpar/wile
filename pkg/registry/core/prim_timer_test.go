@@ -185,10 +185,12 @@ func TestTimerHandlerRunsOutsideTheAbandonedThunk(t *testing.T) {
 			Expected: values.NewSymbol("outer"),
 		},
 		{
+			// The thunk spins until the handler has run, so neither the timer's
+			// firing nor the 5s budget depends on how fast a loaded machine counts.
 			Name: "resumed thunk sees its own parameterization",
-			Code: `(let ((p (make-parameter 'outer)))
-  (with-timeout 1 (lambda (k) (list (p) (k)))
-    (lambda () (parameterize ((p 'inner)) (let loop ((n 0)) (if (< n 2000000) (loop (+ n 1)) (p)))))))`,
+			Code: `(let ((p (make-parameter 'outer)) (fired #f))
+  (with-timeout 1 (lambda (k) (set! fired #t) (list (p) (k)))
+    (lambda () (parameterize ((p 'inner)) (let loop () (if fired (p) (loop)))))))`,
 			Expected: values.List(values.NewSymbol("outer"), values.NewSymbol("inner")),
 		},
 	}
@@ -342,10 +344,8 @@ func TestWithTimeoutDynamicWind(t *testing.T) {
 // that frame. Carried, the frame was re-entered by a resume and left on the stack,
 // where an enclosing dynamic-wind's PopWind took it in place of its own, and the end
 // of the run (a thread's exit, here) ran that after thunk a second time. The spin
-// outlasts the 20 ms timer. k is resumed with a number: resumed after a poll
-// interrupt, its value overwrites the operand the next instruction consumes (filed
-// in TODO.md), and every operand the spin consumes is a number or a test value,
-// for which a number is harmless.
+// outlasts the 20 ms timer. The 0 k is resumed with is discarded: the resume
+// restores the value register the interrupt froze.
 func TestTimerHandlerContinuationCarriesNoTimerFrame(t *testing.T) {
 	t.Parallel()
 

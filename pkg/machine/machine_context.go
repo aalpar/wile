@@ -2511,6 +2511,7 @@ func (p *MachineContext) resolveTimerInterrupt(timerErr *ErrTimerInterrupt, boun
 		base++
 	}
 	resumable := NewComposableContinuation(segment, windingCopy, base, p.threadID, p.barrierValid)
+	resumable.interrupted = true
 
 	// Hard-suspension: discard the timed-out thunk's frames un-run (no after-thunks) and
 	// land on the finalizer frame. boundary.windingStack is the winding captured at
