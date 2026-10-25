@@ -16,6 +16,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.21.0] - 2026-10-25
+
+The release the control-transfer runtime is made to agree with itself in. A
+continuation resumes at the prompt that delimited it, never at a sub-context's
+edge; `with-timeout`, `dynamic-wind`, `call/cc`, `eval` and `load` agree on
+whose extents run and which timer fired; a handler's return from a
+non-continuable `raise` raises the secondary on every route; and a cancelled
+blocking wait raises instead of answering a value. Hygiene scope sets are an
+immutable persistent chain (`values.Scopes`), which cuts compile-time allocation
+on deeply nested code by 83 to 86% and its growth from cubic to quadratic in
+nesting depth.
+
+Scheme-side: importing a name already bound to a different binding is refused
+instead of shadowing it, an `(import …)` form binds everything or nothing,
+`er-macro-transformer` receives identifiers as syntax objects,
+`set-current-directory!` changes an engine-scoped directory rather than the
+process's, BigFloat results carry their operands' precision, `run-analysis`
+propagates out of a block's first visit and widens every cycle, and `read-token`
+is gone. Go-side, `ExpandAndCompile` reads its resolver and limits from the
+namespace and `values.UncaughtException` is an `error`. Twenty-three of the 132
+entries below are marked BREAKING; read Changed and Removed before upgrading.
+
 ### Added
 
 - **`machine.IsControlTransfer`, `werr.ErrThreadEndedByControlTransfer` and
@@ -513,9 +535,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   returns different, correct results whenever a later block generates a fact;
   measured in wile-goast, reaching-definitions on `LoopSum` went from all-empty
   to the correct sets. Backward runs on a CFG with a block the reverse
-  postorder never reaches no longer fail with "index not in rank map"; an
-  unreachable CYCLE run backward under `(widen ...)` is not widened and hits
-  the revisit cap instead (filed).
+  postorder never reaches no longer fail with "index not in rank map".
+
+- **A backward `run-analysis` seeds the exits plus the blocks that reach none,
+  and every cycle gets a widening point (X36).** A block with no path to an exit
+  was never transferred and reported bottom: dead, to a liveness analysis. A
+  cycle the entry cannot reach had no widening point, so run backward over
+  intervals it hit the revisit cap although `(widen OP)` was supplied; it now
+  converges. Forward seeding is unchanged. The revisit-cap message names its
+  three causes: no widen on an infinite-height lattice, a non-monotone transfer
+  (rerun with `'check-monotone`), or a widen OP that does not bound the chain.
 
 - **`#,` under a quote form inside a `quasisyntax` template is seen by the
   inliner (I027).** `(let ((f (lambda () 7)) (n 0)) (quasisyntax (a (quote
@@ -941,6 +970,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `let` — are affected and all five now report the structural error.
 
 ### Changed
+
+- **BREAKING (behavior): importing a name already bound to a different binding
+  is refused, not shadowed (R7RS §5.2).** In v1.20.0 the later import won, at
+  top level and inside `define-library`, within one import form or across two:
+  with libraries `(a)` and `(b)` each defining `f`, `(import (a) (b))` bound
+  `(b)`'s `f`. It now fails with `identifier "f" from (b) conflicts with the one
+  from (a) in the same import form`, or `... conflicts with a different existing
+  import` across forms. The same binding imported twice, directly or through a
+  library that re-exports it, is still accepted. Narrow one side with `except`,
+  `only` or `rename`.
 
 - **BREAKING (Go API): `registry.PrimitiveSpec.Validate` refuses a spec whose
   `Identity.Name()` differs from its `Name`** (`werr.ErrInvalidArgument`), so
@@ -4080,7 +4119,8 @@ analysis. No language-visible semantic change.
 - CI builds all four OS/architecture combinations
 - R7RS conformance test suite running in CI
 
-[Unreleased]: https://github.com/aalpar/wile/compare/v1.20.0...HEAD
+[Unreleased]: https://github.com/aalpar/wile/compare/v1.21.0...HEAD
+[1.21.0]: https://github.com/aalpar/wile/compare/v1.20.0...v1.21.0
 [1.20.0]: https://github.com/aalpar/wile/compare/v1.19.1...v1.20.0
 [1.19.1]: https://github.com/aalpar/wile/compare/v1.19.0...v1.19.1
 [1.19.0]: https://github.com/aalpar/wile/compare/v1.18.0...v1.19.0
