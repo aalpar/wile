@@ -249,6 +249,20 @@ func TestStampedFaultWinsOverTheTokenItCut(t *testing.T) {
 		wantMess: tokenizer.MessageExpectingDelimiterAfterBigNumber,
 		wantText: []string{"index 7", `'x'`},
 	}, {
+		// The token fails to parse here whether cut or not (a BigInteger is not
+		// a byte); the lexical fault still precedes it, as in racket and petite.
+		name: "bytevector_bigint_then_hash", src: "#u8(#z1#t)",
+		wantLoc:  "in.scm:1:7",
+		wantMess: tokenizer.MessageExpectingDelimiterAfterBigNumber,
+		wantText: []string{"index 7", `'#'`, "big-integer"},
+	}, {
+		// A fault in the token after a dotted tail: the improper-list error
+		// does not shadow it either.
+		name: "dotted_tail_then_cut_token", src: "(a . b #z1#t)",
+		wantLoc:  "in.scm:1:10",
+		wantMess: tokenizer.MessageExpectingDelimiterAfterBigNumber,
+		wantText: []string{"index 10", `'#'`, "big-integer"},
+	}, {
 		// The radix complex token does not parse yet (strconv on "1+2i"); the
 		// '#' that cut it is the reported fault, as racket ("misplaced") and
 		// petite ("invalid number syntax") reject the input.

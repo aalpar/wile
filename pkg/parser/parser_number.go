@@ -324,24 +324,7 @@ func (p *Parser) parseBaseWithExactness(base int) (syntax.SyntaxValue, tokenizer
 		return nil, p.cur, err
 	}
 
-	// Parse the number in the given base.
-	var q syntax.SyntaxValue
-	var tok tokenizer.Token
-	switch {
-	case base == 10:
-		// #d is the default radix, so its numeral reads as an unprefixed one,
-		// including the shapes (exponent, infinity, complex) the arms below do
-		// not handle.
-		q, tok, err = p.readSyntax()
-	case p.cur.Type() == tokenizer.TokenizerStateUnsignedRationalFraction,
-		p.cur.Type() == tokenizer.TokenizerStateSignedRationalFraction:
-		q, tok, err = p.parseRationalWithBase(base)
-	case p.cur.Type() == tokenizer.TokenizerStateUnsignedDecimalFraction,
-		p.cur.Type() == tokenizer.TokenizerStateSignedDecimalFraction:
-		q, tok, err = p.parseDecimalFractionWithBase(base)
-	default:
-		q, tok, err = p.parseIntegerWithBase(base)
-	}
+	q, tok, err := p.parseRadixNumeral(base)
 	if err != nil {
 		return nil, tok, err
 	}
@@ -370,6 +353,25 @@ func (p *Parser) parseBaseWithExactness(base int) (syntax.SyntaxValue, tokenizer
 		return inexact, tok, nil
 	}
 	return q, tok, nil
+}
+
+// parseRadixNumeral parses p.cur, a numeral token, in the given base.
+func (p *Parser) parseRadixNumeral(base int) (syntax.SyntaxValue, tokenizer.Token, error) {
+	if base == 10 {
+		// #d is the default radix, so its numeral reads as an unprefixed one,
+		// including the shapes (exponent, infinity, complex) the arms below do
+		// not handle.
+		return p.readSyntax()
+	}
+	switch p.cur.Type() {
+	case tokenizer.TokenizerStateUnsignedRationalFraction,
+		tokenizer.TokenizerStateSignedRationalFraction:
+		return p.parseRationalWithBase(base)
+	case tokenizer.TokenizerStateUnsignedDecimalFraction,
+		tokenizer.TokenizerStateSignedDecimalFraction:
+		return p.parseDecimalFractionWithBase(base)
+	}
+	return p.parseIntegerWithBase(base)
 }
 
 // requireRadixNumeral faults unless p.cur, the operand of a radix prefix, is a

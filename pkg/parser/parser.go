@@ -283,12 +283,13 @@ func (p *Parser) ReleaseLookahead(urr values.RuneUnreader) error {
 // failed with err while the tokenizer holds a pending fault.
 //
 // A numeral that must end at a delimiter and does not is cut short at the
-// offending rune, and the shortened token can then fail to parse on its own
-// ("#m1ex" leaves "#m1e", "#z--5" leaves "#z-"). That parse failure is only
-// the cut's consequence, so the stamped delimiter fault wins: it comes first in
-// the join, the error carries no token (Location falls back to the stamped
-// rune), and causeText renders it. err stays in the chain, so its sentinels
-// still match.
+// offending rune, and the shortened token can then fail to parse ("#m1ex"
+// leaves "#m1e", "#z--5" leaves "#z-"), or fail where it stands whether cut or
+// not (a BigInteger in "#u8(#z1#t)"). Either way a lexical fault in the token
+// precedes its parse, as racket and petite also report it, so the stamped
+// delimiter fault wins: it comes first in the join, the error carries no token
+// (Location falls back to the stamped rune), and causeText renders it. err
+// stays in the chain, so its sentinels still match.
 //
 // Only the delimiter faults qualify. Another pending fault diagnoses a token
 // that is complete and wrong ("#\qqq"), which the parser names at least as
