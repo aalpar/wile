@@ -850,7 +850,10 @@ func finiteFloatBesideOutOfRange(p, o Number) (*Float, bool) {
 // outOfFloat64Range reports whether an exact BigInteger or Rational may round
 // outside float64's normal range: overflow to +-Inf, or underflow into the
 // subnormals, where it keeps fewer than 53 bits. The bound is by bit length, so
-// a value at the edge can take the exact route needlessly, never the reverse.
+// a value at the edge can take the exact route needlessly. It is not tight the
+// other way for a Rational: one with e = 1023, such as (2^1025-1)/2, is in range
+// here and still rounds to +Inf before the operation, which is what petite and
+// racket answer too.
 func outOfFloat64Range(n Number) bool {
 	switch v := n.(type) {
 	case *BigInteger:
