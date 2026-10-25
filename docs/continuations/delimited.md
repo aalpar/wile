@@ -200,7 +200,7 @@ When a `ComposableContinuation` is called as a procedure (dispatched by `ApplyCa
 
 `reinstallSegment` is the *single* resume primitive: the abortive `call/cc` resume goes through it too, differing only in `boundary` (from `FindPrompt`, `nil` = replace the whole chain), the extents kept (those outside the boundary: the prompt frame's recorded stack, or the context's inherited extents at its own boundary, so the live extents inside the boundary are unwound), and `isolate` (true, restoring the captured mark snapshot).
 
-The share-then-copy discipline in step 4b is essential in both directions. Without the first-invocation shared marking, a normal return through a reinstalled frame could pool an environment the captured segment still needs. Without the re-invocation copy, a second resume would corrupt frames the first one mutated.
+The share-then-copy discipline in step 3b is essential in both directions. Without the first-invocation shared marking, a normal return through a reinstalled frame could pool an environment the captured segment still needs. Without the re-invocation copy, a second resume would corrupt frames the first one mutated.
 
 ## Interaction with dynamic-wind
 
