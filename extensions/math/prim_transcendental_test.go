@@ -20,7 +20,6 @@ import (
 	"math/big"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
@@ -722,12 +721,11 @@ func TestSqrtExptBigTierAgreement(t *testing.T) {
 
 // TestExptUnitMagnitudeBounded pins that expt answers a base of magnitude 1, or
 // a Rational base that rounds to 1 at the working precision, without a log
-// refinement whose precision grows with the exponent's size. The budget is
-// generous: a row is about boundedness (the unbounded form took over 40s), not
-// speed.
+// refinement whose precision grows with the exponent's size. A row is about
+// boundedness (the unbounded form took over 40s): an unbounded refinement hangs
+// the test until go test's timeout, so there is no wall-clock budget to flake.
 func TestExptUnitMagnitudeBounded(t *testing.T) {
 	engine := newEngine(t)
-	const budget = 10 * time.Second
 	tcs := []struct {
 		name string
 		code string
@@ -745,11 +743,8 @@ func TestExptUnitMagnitudeBounded(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			start := time.Now()
 			result := eval(t, engine, tc.code).Internal()
-			elapsed := time.Since(start)
 			c.Assert(result.SchemeString(), qt.Equals, tc.want)
-			c.Assert(elapsed < budget, qt.IsTrue, qt.Commentf("%s took %v", tc.code, elapsed))
 		})
 	}
 }
@@ -941,11 +936,10 @@ func TestBigComplexKernelOperandPrecision(t *testing.T) {
 // 19,700-digit operand (about 65450 bits) a transcendental computes at
 // MaxBigFloatKernelPrecision, so it finishes in a bounded time, while expt with
 // an exact integer exponent, not a kernel, keeps the operand's precision. The
-// budget is generous (about 0.3 s each measured, 1-5 s uncapped): a row is
-// about boundedness, not speed.
+// result's precision is the deterministic witness of the cap; a wall-clock
+// budget flaked under coverage and load (a 2-3 s row took 10.3 s).
 func TestTranscendentalKernelPrecisionBounded(t *testing.T) {
 	engine := newEngine(t)
-	const budget = 10 * time.Second
 	u := "#m1." + strings.Repeat("31415926535897932384", 985) + "7"
 	tcs := []struct {
 		name   string
@@ -964,10 +958,7 @@ func TestTranscendentalKernelPrecisionBounded(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			start := time.Now()
 			result := eval(t, engine, "(let ((u "+u+")) "+tc.code+")").Internal()
-			elapsed := time.Since(start)
-			c.Assert(elapsed < budget, qt.IsTrue, qt.Commentf("%s took %v", tc.code, elapsed))
 			got, ok := result.(*values.BigFloat)
 			c.Assert(ok, qt.IsTrue, qt.Commentf("%s answered %T", tc.code, result))
 			if !got.IsFinite() {
@@ -993,10 +984,8 @@ func TestTranscendentalKernelPrecisionBounded(t *testing.T) {
 		t.Run(fmt.Sprintf("expt beyond int64 exponent 2^%d", k), func(t *testing.T) {
 			c := qt.New(t)
 			bind := fmt.Sprintf("(let* ((w %s) (r (expt w (expt 2 %d))) (sq (let loop ((x w) (i %d)) (if (= i 0) x (loop (* x x) (- i 1)))))) ", w, k, k)
-			start := time.Now()
 			// #f unless r is the squarings' value and above 1
 			result := eval(t, engine, bind+"(and (eqv? r sq) (> r 1) r))").Internal()
-			c.Assert(time.Since(start) < budget, qt.IsTrue)
 			got, ok := result.(*values.BigFloat)
 			c.Assert(ok, qt.IsTrue, qt.Commentf("answered %s", result.SchemeString()))
 			c.Assert(got.BigFloatValue().Prec(), qt.Equals, uint(59804))
