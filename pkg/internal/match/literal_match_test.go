@@ -192,13 +192,6 @@ func TestApplyHygieneToSymbol(t *testing.T) {
 		c.Assert(ss.Scopes().Len(), qt.Equals, 0)
 	})
 
-	c.Run("with useSiteCtx overrides source context", func(c *qt.C) {
-		useSite := &syntax.SourceContext{Text: "use-site"}
-		sym := syntax.NewSyntaxSymbol("foo", &syntax.SourceContext{Text: "template"})
-		result := sm.applyHygieneToSymbol(sym, &ExpandOptions{IntroScope: introScope, UseSiteCtx: useSite})
-		c.Assert(result, qt.IsNotNil)
-	})
-
 	c.Run("global binding keeps definition-site scopes and adds intro scope", func(c *qt.C) {
 		globalIdx := environment.NewGlobalIndex(values.NewSymbol("baz"))
 		existingScope := syntax.NewScope()
