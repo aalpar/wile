@@ -154,8 +154,7 @@ func Disassemble(tpl *NativeTemplate) DisassembledTemplate {
 		// Source location.
 		src := tpl.SourceAt(pc)
 		if src != nil && src.File != "" {
-			di.Source = fmt.Sprintf("%s:%d:%d",
-				src.File, src.Start.Line(), src.Start.Column())
+			di.Source = src.Location()
 		}
 
 		q.Instructions[pc] = di

@@ -208,3 +208,16 @@ func TestDisassemble_SourceLocation(t *testing.T) {
 	qt.Assert(t, dt.Instructions, qt.HasLen, 1)
 	qt.Assert(t, dt.Instructions[0].Source, qt.Equals, "test.scm:5:0")
 }
+
+// TestDisassemble_SourceLocationEscapesFileName: the Source column renders
+// through SourceContext.Location, so a newline in the file name is quoted
+// rather than splitting the listing line.
+func TestDisassemble_SourceLocationEscapesFileName(t *testing.T) {
+	tpl := NewNativeTemplate(0, 0, false)
+	src := syntax.NewSourceContext("(+ 1 2)", "a\nb.scm",
+		syntax.NewSourceIndexes(0, 0, 5),
+		syntax.NewSourceIndexes(7, 7, 5))
+	tpl.AppendInstructionWithSource(src, Instruction{Op: OpPush})
+	dt := Disassemble(tpl)
+	qt.Assert(t, dt.Instructions[0].Source, qt.Equals, `"a\nb.scm":5:0`)
+}

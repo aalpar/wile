@@ -205,7 +205,7 @@ func (p *ParserError) Location() string {
 	if p.file == "" {
 		return fmt.Sprintf("%d:%d", start.Line(), start.Column())
 	}
-	return fmt.Sprintf("%s:%d:%d", p.file, start.Line(), start.Column())
+	return fmt.Sprintf("%s:%d:%d", values.DisplayFileName(p.file), start.Line(), start.Column())
 }
 
 // startIndexes resolves the error's position, preferring the offending token

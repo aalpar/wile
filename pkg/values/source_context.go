@@ -16,7 +16,10 @@ package values
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 var _ Value = (*SourceContext)(nil)
@@ -79,6 +82,32 @@ func (p *SourceContext) Clone() *SourceContext {
 	return &c
 }
 
+// DisplayFileName renders a file name for a "file:line:col" diagnostic. A name
+// that is not valid UTF-8, holds a non-printable character other than a space
+// (a newline, a tab, an escape, U+2028, a bidi override), or begins with a
+// double quote is Go-quoted, so the file name cannot break the diagnostic line,
+// forge a second one, or pass for another name; any other name, colons,
+// Unicode spaces (macOS's U+202F in screenshot names) and non-ASCII letters
+// included, prints as is. The escape is applied at render time only: the stored
+// name stays the real path, which include resolution reads. Nothing in the
+// tree parses a rendered location; a caller that does (error-object-source,
+// the Source fields of wile.CompilationError and wile.RuntimeError) must
+// unquote a name that starts with a double quote.
+func DisplayFileName(name string) string {
+	plain := utf8.ValidString(name) && !strings.HasPrefix(name, `"`) &&
+		strings.IndexFunc(name, isNonPrintable) < 0
+	if plain {
+		return name
+	}
+	return strconv.Quote(name)
+}
+
+// isNonPrintable reports whether r is outside strconv.IsPrint's set and is
+// not a Unicode space separator (IsPrint admits only U+0020 of those).
+func isNonPrintable(r rune) bool {
+	return !strconv.IsPrint(r) && !unicode.Is(unicode.Zs, r)
+}
+
 // Location returns the source location formatted as "file:line:col".
 // Returns empty string if the receiver is nil or carries no location at all.
 //
@@ -92,7 +121,7 @@ func (p *SourceContext) Location() string {
 		return ""
 	}
 	if p.File != "" {
-		return fmt.Sprintf("%s:%d:%d", p.File, p.Start.Line(), p.Start.Column())
+		return fmt.Sprintf("%s:%d:%d", DisplayFileName(p.File), p.Start.Line(), p.Start.Column())
 	}
 	if p.Start.Line() > 0 {
 		return fmt.Sprintf(":%d:%d", p.Start.Line(), p.Start.Column())
@@ -102,7 +131,7 @@ func (p *SourceContext) Location() string {
 
 // SchemeString returns the Scheme representation of the source context.
 func (p *SourceContext) SchemeString() string {
-	return fmt.Sprintf("<source-context %s:%s-%s>", p.File, p.Start, p.End)
+	return fmt.Sprintf("<source-context %s:%s-%s>", DisplayFileName(p.File), p.Start, p.End)
 }
 
 // IsVoid returns true if the source context is nil.
