@@ -218,6 +218,71 @@ func TestControlInACompileTimeBody(t *testing.T) {
 			want: "((handled from-macro) (in out) (p-in p-out))",
 		},
 		{
+			// Two transformer roots nested through eval, the prompt at runtime: each
+			// root leaves its own extents as the abort passes up, and each driver above
+			// rebases the winding, so the runtime extents around both evals are left
+			// once (out2, out). Before, only the innermost driver's winding was used.
+			name: "an abort passed up through two nested transformer roots leaves every extent once",
+			src: `(import (for-syntax (scheme base) (scheme cxr) (scheme eval) (scheme repl)))
+			      (begin-for-syntax (define plog '()) (define (pnote x) (set! plog (cons x plog))))
+			      (define-syntax m2 (lambda (stx)
+			        (let ((d (syntax->datum stx)))
+			          (dynamic-wind (lambda () (pnote 'q-in))
+			                        (lambda () ((caddr d) (cadr d) 'from-m2))
+			                        (lambda () (pnote 'q-out))))))
+			      (define-syntax m1 (lambda (stx)
+			        (let ((d (syntax->datum stx)))
+			          (dynamic-wind (lambda () (pnote 'p-in))
+			                        (lambda () (eval (list 'dynamic-wind '(lambda () (note 'in2)) (list 'lambda '() (list 'eval (list 'quote (list 'm2 (cadr d) (caddr d))) '(interaction-environment))) '(lambda () (note 'out2)))
+			                                         (interaction-environment)))
+			                        (lambda () (pnote 'p-out))))))
+			      (define-syntax get-plog (er-macro-transformer (lambda (f r c) (list 'quote (reverse plog)))))
+			      (define tag (make-continuation-prompt-tag 'p))
+			      (define st (vector '()))
+			      (define (note x) (vector-set! st 0 (cons x (vector-ref st 0))))
+			      (define r
+			        (call-with-continuation-prompt
+			          (lambda ()
+			            (dynamic-wind (lambda () (note 'in))
+			                          (lambda () (eval (list 'm1 tag abort-current-continuation) (interaction-environment)))
+			                          (lambda () (note 'out))))
+			          tag
+			          (lambda (v) (list 'handled v))))
+			      (list r (reverse (vector-ref st 0)) (eval '(get-plog) (interaction-environment)))`,
+			want: "((handled from-m2) (in in2 out2 out) (p-in q-in q-out p-out))",
+		},
+		{
+			// The inner root aborts to a prompt inside the outer transformer: the
+			// outer root's driver resolves it from its own rebased winding, so the
+			// extent between the prompt and the eval is left (w-out) and the one
+			// outside the prompt is not re-entered (p-in once).
+			name: "an abort passed up from a transformer to a prompt in the enclosing transformer",
+			src: `(import (for-syntax (scheme base) (scheme cxr) (scheme eval) (scheme repl)))
+			      (begin-for-syntax (define plog '()) (define (pnote x) (set! plog (cons x plog))))
+			      (define-syntax m2 (lambda (stx)
+			        (let ((d (syntax->datum stx)))
+			          (dynamic-wind (lambda () (pnote 'q-in))
+			                        (lambda () ((caddr d) (cadr d) 'from-m2))
+			                        (lambda () (pnote 'q-out))))))
+			      (define-syntax m1 (lambda (stx)
+			        (let* ((d (syntax->datum stx)) (tag ((cadr d) 'q)) (prompt (caddr d)) (abort (cadddr d)))
+			          (dynamic-wind (lambda () (pnote 'p-in))
+			                        (lambda ()
+			                          (prompt
+			                            (lambda ()
+			                              (dynamic-wind (lambda () (pnote 'w-in))
+			                                            (lambda () (eval (list 'm2 tag abort) (interaction-environment)))
+			                                            (lambda () (pnote 'w-out))))
+			                            tag
+			                            (lambda (v) (pnote (list 'h v)))))
+			                        (lambda () (pnote 'p-out)))
+			          #''ok)))
+			      (define-syntax get-plog (er-macro-transformer (lambda (f r c) (list 'quote (reverse plog)))))
+			      (list (eval (list 'm1 make-continuation-prompt-tag call-with-continuation-prompt abort-current-continuation) (interaction-environment))
+			                   (eval '(get-plog) (interaction-environment)))`,
+			want: "(ok (p-in w-in q-in q-out w-out (h from-m2) p-out))",
+		},
+		{
 			name: "a stale runtime continuation passed up from a transformer leaves the extent the eval sat in",
 			src: `(import (for-syntax (scheme base)))
 			      (define-syntax m (lambda (stx) (let ((k (cadr (syntax->datum stx)))) (k 'from-macro)) #''ok))

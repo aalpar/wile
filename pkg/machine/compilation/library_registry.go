@@ -242,18 +242,25 @@ func (p *CompiledLibrary) memoizableInstantiateError(first, cause error, cancell
 }
 
 // cancelledAt renders where a cancelled body stopped and the failure there,
-// without its stack trace: a SRFI-18 wait's raise, or the VM poll's error. It is
-// "" for a cause that carries neither.
+// without its stack trace: a SRFI-18 wait's raise, or the VM poll's error. The
+// location is left out when there is none, and the whole is "" for a cause that
+// carries neither.
 func cancelledAt(cause error) string {
+	var loc, what string
 	var escape *machine.ErrExceptionEscape
-	if errors.As(cause, &escape) {
-		return fmt.Sprintf(", at %s (%s)", escape.Location(), escape.ConditionText())
-	}
 	var se *machine.SchemeError
-	if errors.As(cause, &se) {
-		return fmt.Sprintf(", at %s (%s)", se.Source.Location(), se.Message)
+	switch {
+	case errors.As(cause, &escape):
+		loc, what = escape.Location(), escape.ConditionText()
+	case errors.As(cause, &se):
+		loc, what = se.Source.Location(), se.Message
+	default:
+		return ""
 	}
-	return ""
+	if loc == "" {
+		return fmt.Sprintf(" (%s)", what)
+	}
+	return fmt.Sprintf(", at %s (%s)", loc, what)
 }
 
 // NewCompiledLibrary creates a new compiled library.

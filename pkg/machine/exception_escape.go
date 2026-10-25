@@ -33,7 +33,8 @@ type ErrExceptionEscape struct {
 	Condition  values.Value          // The raised condition/object
 	Source     *syntax.SourceContext // Source location where exception was raised
 	StackTrace StackTrace            // VM stack trace at raise point
-	// Continuable records that the raise was a raise-continuable. Uncaught where
+	// Continuable records that the raise was a raise-continuable, and not a
+	// guard's re-raise of a non-continuable raise (reRaisesNonContinuable). Uncaught where
 	// it was raised, it never resumes; an unlinked root's escape is raised again
 	// in the caller's handlers after that root has ended, and a handler that
 	// returns there gets an error naming the raise-continuable (raiseIn).
@@ -83,11 +84,13 @@ func (p *ErrExceptionEscape) Error() string {
 }
 
 // Location is where the condition was raised: a *NativeError's own location,
-// stamped at its first raise, else Source. They differ for a condition raised
-// again elsewhere, which a guard whose clauses all miss does (its re-raise sits
-// at the guard), and so does the foreign-call bridge for a raise out of an
-// expansion-time root. A condition of another type carries no location of its
-// own and reports the latest raise. StackTrace is always the latest raise's.
+// else Source. For an error object raised more than once (a guard whose clauses
+// all miss re-raises at the guard, and the foreign-call bridge re-raises an
+// expansion-time root's escape at the eval or import) both are its first raise,
+// and so is StackTrace (raiseToHandlers). They differ only for an error object
+// whose location the compiler stamped, which has no raise to take a trace from.
+// A condition of another type carries no location of its own and reports the
+// latest raise.
 func (p *ErrExceptionEscape) Location() string {
 	ne, ok := p.Condition.(*values.NativeError)
 	if ok && ne.SourceLocation() != "" {
