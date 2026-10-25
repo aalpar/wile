@@ -1577,7 +1577,7 @@ func wrapCompilationError(msg string, cause error) *CompilationError {
 		var pe *parser.ParserError
 		if errors.As(cause, &pe) {
 			ce.Source = pe.Location()
-			ce.structured = ce.Source != "" && strings.Contains(pe.Error(), ce.Source)
+			ce.structured = ce.Source != "" && strings.Contains(pe.Error(), "(at "+ce.Source+", ")
 		}
 	}
 	if cause == nil {

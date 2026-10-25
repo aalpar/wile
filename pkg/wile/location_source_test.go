@@ -274,6 +274,11 @@ func TestTopLevelParseErrorRendersItsLocationOnce(t *testing.T) {
 			wantSource: "top.scm:2:5", wantOnce: []string{"top.scm:2:5", "top.scm"}},
 		{name: "lexical fault", src: "(+ 1 2)\n#b19", file: "top.scm",
 			wantSource: "top.scm:2:3", wantOnce: []string{"top.scm:2:3", "top.scm"}},
+		// The token starts at 2:1 but the text renders the tokenizer's 2:13:
+		// a Source that is only a prefix of the rendered position is not in
+		// the text, so the prefix stays.
+		{name: "token start that prefixes the rendered position", src: "(define a 1)\n \"abcdefghijk", file: "sub.scm",
+			wantSource: "sub.scm:2:1", wantPrefix: "sub.scm:2:1: "},
 		{name: "unnamed input keeps the prefix", src: "(+ 1 2)\n(foo ]", file: "",
 			wantSource: "2:5", wantPrefix: "2:5: "},
 	}
