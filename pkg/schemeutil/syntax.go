@@ -60,13 +60,15 @@ func DatumToSyntaxValue(ctx context.Context, sctx *syntax.SourceContext, o value
 
 // Kept describes the part of a datum that is the user's own form coming back.
 type Kept struct {
-	// Spine is the pairs and vectors of the form the transformer was handed
-	// (syntax.InputSpineOf what syntax.UnwrapSpine returned).
+	// Spine is the pairs, vectors and boxes of the form the transformer was
+	// handed, with the syntax nodes they were unwrapped from (what
+	// syntax.UnwrapSpine returned).
 	Spine *syntax.InputSpine
 
-	// Ctx is the context a rebuilt Spine pair or vector takes in place of the
-	// converter's sctx. Callers pass the context the converter would have used
-	// had it not been stamped.
+	// Ctx is the context a rebuilt Spine member took before members kept their
+	// own position: callers pass the one the converter would have used had it
+	// not been stamped. A member takes its SCOPES from Ctx, and its whole
+	// context when its origin has no location.
 	Ctx *syntax.SourceContext
 
 	// Rebuilt, when non-nil, receives each node built from a Spine member.
@@ -74,27 +76,48 @@ type Kept struct {
 }
 
 // DatumToSyntaxValueKeeping is DatumToSyntaxValue for a transformer's result,
-// where some of the pairs and vectors in o are the input form handed back.
-// Those are rebuilt, not returned (the transformer may have mutated them), but
-// with keep.Ctx instead of sctx, so a stamp carried by sctx lands only on the
-// nodes the transformer constructed. Atoms keep sctx: an atom has no identity
-// to tell its source by.
+// where some of the pairs, vectors and boxes in o are the input form handed
+// back. Those are rebuilt, not returned (the transformer may have mutated
+// them), each with the position and origin of the syntax node it was unwrapped
+// from, so a stamp carried by sctx lands only on the nodes the transformer
+// constructed and a diagnostic on a returned subform points at the subform.
+// Atoms keep sctx: an atom has no identity to tell its source by.
 func DatumToSyntaxValueKeeping(ctx context.Context, sctx *syntax.SourceContext, o values.Value, keep *Kept) (syntax.SyntaxValue, error) {
 	return datumToSyntaxValueVisited(ctx, sctx, o, values.NewMapSet[values.Value](0), 0, keep)
 }
 
-// ctxFor returns the context for the SyntaxPair or SyntaxVector built from o, and whether o is a Spine member
-// A member takes keep.Ctx and is reported to keep.Rebuilt through note; anything
+// ctxFor returns the context for the container built from o, and whether o is
+// a Spine member. A member is reported to keep.Rebuilt through note; anything
 // else takes sctx.
+//
+// A member's position comes from its origin node, but its scopes come from
+// keep.Ctx. A compound node's own scopes are not maintained: adding or
+// flipping a scope rewrites the identifiers beneath it and leaves the
+// container's context as read, and datum->syntax with a pair as its template
+// resolves by exactly those scopes. Taking them from the origin would rebind a
+// name the transformer builds against such a pair.
 func (p *Kept) ctxFor(sctx *syntax.SourceContext, o values.Value) (*syntax.SourceContext, bool) {
 	if p == nil {
 		return sctx, false
 	}
-	member := p.Spine.HasPair(o) || p.Spine.HasVector(o)
-	if member {
+	origin := p.Spine.Origin(o)
+	if origin == nil {
+		return sctx, false
+	}
+	octx := origin.SourceContext()
+	if octx.Location() == "" {
 		return p.Ctx, true
 	}
-	return sctx, false
+	var scopes syntax.Scopes
+	if p.Ctx != nil {
+		scopes = p.Ctx.Scopes
+	}
+	if octx.Scopes == scopes {
+		return octx, true
+	}
+	q := octx.Clone()
+	q.Scopes = scopes
+	return q, true
 }
 
 // note reports n, built from a Spine member.
@@ -147,7 +170,10 @@ func datumToSyntaxValueVisited(ctx context.Context, sctx *syntax.SourceContext, 
 		// A box is a container, so it becomes a syntax container: a
 		// SyntaxObject wrapping a box of syntax is opaque to quote and
 		// syntax->datum, which leave the contents wrapped.
-		return syntax.NewSyntaxBox(inner, sctx), nil
+		bctx, member := keep.ctxFor(sctx, o)
+		q := syntax.NewSyntaxBox(inner, bctx)
+		keep.note(member, q)
+		return q, nil
 	case *values.Vector:
 		dup := visited.ContainsOne(o)
 		if dup {

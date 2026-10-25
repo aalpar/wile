@@ -231,6 +231,52 @@ func TestMacroOriginChainSparesPassThrough(t *testing.T) {
 	}
 }
 
+// TestPassThroughKeepsItsOwnPosition: a form a macro hands back unchanged keeps
+// its own position, so a diagnostic inside it points at the user's binding
+// (:2:12 is the `(x)` of `(pass (let ((x)) x))`), not at the keyword (:2:1).
+// Every transformer kind and both layers agree; racket reports the binding's
+// column too. The vector row reaches the binding through a vector of the input.
+func TestPassThroughKeepsItsOwnPosition(t *testing.T) {
+	t.Parallel()
+
+	tcs := []struct{ name, def, use, at string }{
+		{"syntax-rules", `(syntax-rules () ((_ e) e))`, `(pass (let ((x)) x))`, ":2:12: "},
+		{"syntax-case", `(lambda (stx) (syntax-case stx () ((_ e) #'e)))`, `(pass (let ((x)) x))`, ":2:12: "},
+		{"er-macro-transformer", `(er-macro-transformer (lambda (f r c) (car (cdr f))))`, `(pass (let ((x)) x))`, ":2:12: "},
+		{"er-macro-transformer vector element", `(er-macro-transformer (lambda (f r c) (vector-ref (car (cdr f)) 0)))`,
+			`(pass #((let ((x)) x)))`, ":2:14: "},
+		{"er-macro-transformer box element", `(er-macro-transformer (lambda (f r c) (unbox (car (cdr f)))))`,
+			`(pass #&(let ((x)) x))`, ":2:14: "},
+	}
+	for _, tc := range tcs {
+		for _, l := range syntaxLayers {
+			t.Run(tc.name+"/"+l.name, func(t *testing.T) {
+				err := evalSyntaxFormsErr(t, "(define-syntax pass "+tc.def+")\n"+tc.use, l.opt)
+				qt.Assert(t, err, qt.IsNotNil)
+				qt.Assert(t, err.Error(), qt.Contains, tc.at+"let binding must be (name init) in let form")
+			})
+		}
+	}
+}
+
+// TestPassThroughWithoutPositionTakesTheKeywords: a pass-through form whose
+// own node has no position (here made by datum->syntax #f) falls back to the
+// ER keyword's, so the diagnostic still has a location (:2:86 is the er-id
+// that w's output names).
+func TestPassThroughWithoutPositionTakesTheKeywords(t *testing.T) {
+	t.Parallel()
+
+	src := "(define-syntax er-id (er-macro-transformer (lambda (f r c) (car (cdr f)))))\n" +
+		"(define-syntax w (lambda (stx) (syntax-case stx () ((_) (datum->syntax #'here (list #'er-id (datum->syntax #f '(let ((x)) x))))))))\n(w)"
+	for _, l := range syntaxLayers {
+		t.Run(l.name, func(t *testing.T) {
+			err := evalSyntaxFormsErr(t, src, l.opt)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, err.Error(), qt.Contains, ":2:86: let binding must be (name init) in let form")
+		})
+	}
+}
+
 // TestMacroOriginChainBlamesMacroBuiltSyntax: syntax a transformer builds in
 // the keyword's context carries the introduction scope, as the user's input
 // does, and is the macro's all the same. Go and Scheme layers agree.

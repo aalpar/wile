@@ -153,8 +153,9 @@ Examples:
       ((k proc)
        #'(let ((p (%er-proc proc #'k)))
            (lambda (stx)
-             (let ((spine (%syntax-spine stx)))
-               (%er-syntax (syntax-car stx) spine
-                 (p spine
-                    (lambda (sym) (datum->syntax #'k sym))
-                    free-identifier=?)))))))))
+             (call-with-values (lambda () (%syntax-spine stx))
+               (lambda (form origins)
+                 (%er-syntax (syntax-car stx) origins
+                   (p form
+                      (lambda (sym) (datum->syntax #'k sym))
+                      free-identifier=?))))))))))

@@ -49,7 +49,7 @@ func TestUnwrapSpine(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			got := UnwrapSpine(tc.in)
+			got, _ := UnwrapSpine(tc.in)
 			qt.Assert(t, got, qt.Not(qt.IsNil))
 			qt.Assert(t, onlySymbolSyntax(got), qt.IsTrue)
 			qt.Assert(t, dropLeafSyntax(got).SchemeString(), qt.Equals, tc.want)
@@ -82,7 +82,8 @@ func TestUnwrapSpineKeepsTheLeaf(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			qt.Assert(t, tc.leaf(UnwrapSpine(tc.in)) == values.Value(a), qt.IsTrue)
+			got, _ := UnwrapSpine(tc.in)
+			qt.Assert(t, tc.leaf(got) == values.Value(a), qt.IsTrue)
 		})
 	}
 }
@@ -92,7 +93,8 @@ func TestUnwrapSpineKeepsTheLeaf(t *testing.T) {
 func TestUnwrapSpineCyclicLabel(t *testing.T) {
 	cell := NewSyntaxCons(NewSyntaxSymbol("a", nil), SyntaxEmptyList, nil)
 	cell.Values[1] = cell
-	got, ok := UnwrapSpine(NewSyntaxDatumLabelAssignment(0, cell, nil)).(*values.Pair)
+	raw, _ := UnwrapSpine(NewSyntaxDatumLabelAssignment(0, cell, nil))
+	got, ok := raw.(*values.Pair)
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, got.Cdr() == values.Value(got), qt.IsTrue)
 }
@@ -102,7 +104,8 @@ func TestUnwrapSpineCyclicLabel(t *testing.T) {
 func TestUnwrapSpineUnlabeledCycle(t *testing.T) {
 	cell := NewSyntaxCons(NewSyntaxSymbol("x", nil), SyntaxEmptyList, nil)
 	cell.Values[1] = cell
-	got, ok := UnwrapSpine(SyntaxList(nil, cell, cell)).(*values.Pair)
+	raw, _ := UnwrapSpine(SyntaxList(nil, cell, cell))
+	got, ok := raw.(*values.Pair)
 	qt.Assert(t, ok, qt.IsTrue)
 	first, ok := got.Car().(*values.Pair)
 	qt.Assert(t, ok, qt.IsTrue)
@@ -156,25 +159,50 @@ func dropLeafSyntax(v values.Value) values.Value {
 	}
 }
 
+// TestInputSpine: every container of the unwrapped form maps back to the very
+// node it came from, so a rebuilt pass-through keeps that node's position;
+// nothing else is a member.
 func TestInputSpine(t *testing.T) {
 	c := qt.New(t)
-	deep := values.NewCons(values.NewInteger(1), values.EmptyList)
-	vec := values.NewVector(deep)
-	list := values.NewCons(vec, values.NewCons(values.NewInteger(2), values.EmptyList))
-	spine := InputSpineOf(list)
+	num := func(n int64) SyntaxValue {
+		return NewSyntaxObject(values.NewInteger(n), nil)
+	}
+	deep := SyntaxList(nil, num(1))
+	vec := NewSyntaxVector(nil, deep)
+	box := NewSyntaxBox(num(3), nil)
+	tail := NewSyntaxCons(num(2), NewSyntaxCons(box, SyntaxEmptyList, nil), nil)
+	list := NewSyntaxCons(vec, tail, nil)
+	raw, spine := UnwrapSpine(list)
 
-	c.Assert(spine.HasPair(list), qt.IsTrue)
-	c.Assert(spine.HasPair(list.Cdr()), qt.IsTrue)
-	c.Assert(spine.HasVector(vec), qt.IsTrue)
-	c.Assert(spine.HasPair(deep), qt.IsTrue, qt.Commentf("a pair inside a vector"))
-	c.Assert(spine.HasPair(values.NewCons(values.NewInteger(1), values.EmptyList)), qt.IsFalse, qt.Commentf("equal but not identical"))
-	c.Assert(spine.HasPair(vec), qt.IsFalse)
-	c.Assert(spine.HasVector(deep), qt.IsFalse)
-	c.Assert(spine.HasPair(values.NewInteger(2)), qt.IsFalse)
+	top := raw.(*values.Pair)
+	rawVec := top.Car().(*values.Vector)
+	rawDeep := rawVec.Elems()[0]
+	rawTail := top.Cdr().(*values.Pair)
+	rawBox := rawTail.Cdr().(*values.Pair).Car()
+	c.Assert(spine.Origin(top), qt.Equals, SyntaxValue(list))
+	c.Assert(spine.Origin(rawTail), qt.Equals, SyntaxValue(tail))
+	c.Assert(spine.Origin(rawVec), qt.Equals, SyntaxValue(vec))
+	c.Assert(spine.Origin(rawDeep), qt.Equals, deep, qt.Commentf("a pair inside a vector"))
+	c.Assert(spine.Origin(rawBox), qt.Equals, SyntaxValue(box))
+	c.Assert(spine.Origin(values.NewCons(values.NewInteger(1), values.EmptyList)), qt.IsNil, qt.Commentf("equal but not identical"))
+	c.Assert(spine.Origin(rawTail.Car()), qt.IsNil, qt.Commentf("an atom"))
+	c.Assert((*InputSpine)(nil).Origin(top), qt.IsNil)
 
+	c.Run("a label wrapper is not the origin", func(c *qt.C) {
+		cell := NewSyntaxCons(NewSyntaxSymbol("a", nil), SyntaxEmptyList, nil)
+		raw, spine := UnwrapSpine(NewSyntaxDatumLabelAssignment(0, cell, nil))
+		c.Assert(spine.Origin(raw), qt.Equals, SyntaxValue(cell))
+	})
 	c.Run("a cyclic spine terminates", func(c *qt.C) {
-		loop := values.NewCons(values.NewInteger(1), values.EmptyList)
-		loop.SetCdr(loop)
-		c.Assert(InputSpineOf(loop).HasPair(loop), qt.IsTrue)
+		loop := NewSyntaxCons(num(1), SyntaxEmptyList, nil)
+		loop.Values[1] = loop
+		raw, spine := UnwrapSpine(loop)
+		c.Assert(spine.Origin(raw), qt.Equals, SyntaxValue(loop))
+	})
+	c.Run("a non-syntax value has an empty spine", func(c *qt.C) {
+		v := values.NewCons(values.NewInteger(1), values.EmptyList)
+		raw, spine := UnwrapSpine(v)
+		c.Assert(raw, qt.Equals, values.Value(v))
+		c.Assert(spine.Origin(v), qt.IsNil)
 	})
 }
