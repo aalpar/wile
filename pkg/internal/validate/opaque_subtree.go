@@ -512,6 +512,14 @@ func forEachRawSymbolPair(env *environment.EnvironmentFrame, p *syntax.SyntaxPai
 			forEachDemotedOpener(env, p, head, quasi, mk, mode, fn)
 			return
 		}
+		if demoted {
+			// A demoted head spelled like a binding form may still be one to the
+			// compiler: a LATER (define lambda ...) in the same body reaches it, and
+			// validateForm (headDenotesSpecialForm) still compiles the form for the
+			// Predeclared slot. Read it as the form too, then as the call below; the
+			// union over-reports a genuine local named lambda, which is the safe side.
+			forEachRawBinderForm(env, p, head, head.Key(), mk, mode, fn)
+		}
 		if quasi == quasiDepthCode && forEachRawBinderForm(env, p, head, key, mk, mode, fn) {
 			return
 		}

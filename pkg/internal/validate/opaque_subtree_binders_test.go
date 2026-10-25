@@ -139,10 +139,15 @@ func TestRawWalkResolvesHeadsInBinderFrames(t *testing.T) {
 	}
 }
 
-// TestRawWalkBinderFormDispatchesOnDenotation: a local variable spelled lambda
-// is an ordinary operator, so its "parameter list" binds nothing and the quote
-// beneath it stays the barrier.
-func TestRawWalkBinderFormDispatchesOnDenotation(t *testing.T) {
+// TestRawWalkDemotedBinderFormIsReadBothWays: a local variable spelled lambda
+// demotes the head, but the compiler may still compile the form (a LATER define
+// of lambda in the same body leaves the slot Predeclared, and
+// headDenotesSpecialForm's Predeclared arm keeps the form). So the walk reads it
+// both as the form, whose parameter quote covers the body, and as a call. Here
+// the binding is a genuine local, so the form reading over-reports x; that is the
+// safe direction, because an unreported name is a set! target the inliner and the
+// boxing pass never see, while a reported one costs only a stamp or a box.
+func TestRawWalkDemotedBinderFormIsReadBothWays(t *testing.T) {
 	L, S := values.List, values.NewSymbol
 	env := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), binderTestEnv())
 	bindLocalSymbol(env, syntax.NewSyntaxSymbol("lambda", nil))
@@ -153,7 +158,7 @@ func TestRawWalkBinderFormDispatchesOnDenotation(t *testing.T) {
 			got = true
 		}
 	})
-	qt.Assert(t, got, qt.IsFalse)
+	qt.Assert(t, got, qt.IsTrue)
 }
 
 // TestRawWalkDottedQuasiquoteTail pins dottedTailMarker's nesting arm: `(a . `x)

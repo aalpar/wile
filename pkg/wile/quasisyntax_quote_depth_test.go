@@ -312,6 +312,24 @@ func TestMarkerNamedBinderInsideOpaqueSubtree(t *testing.T) {
 			`(define-syntax m3 (syntax-rules () ((_ e) (let ((quote list)) (quote e)))))
 			 (let ((f (lambda () 7)) (n 0)) ` + "`(a ,(m3 " + b + "))" + ` (list n (f)))`,
 			"(1 99)"},
+		// The inner lambda head reaches the body's Predeclared lambda slot, and
+		// Wile still compiles it as the form (validate.headDenotesSpecialForm), so
+		// the scan must read it as one. This pins agreement with Wile's compiler,
+		// not a portable answer: Racket reads lambda as the variable and rejects
+		// (quote) as bad syntax, and Chez refuses the define after an expression.
+		{"later define of lambda in the same body",
+			"(let ((f (lambda () 7)) (n 0)) `(a ,((lambda () ((lambda (quote) (quote " + b + ")) list) (define lambda 5) 1))) (list n (f)))",
+			"(1 99)"},
+		// Hygiene control: the template's quote is not the user's binder, so it
+		// stays the real quote and nothing fires. Racket and petite (0 7).
+		{"control: macro-introduced quote under a user binder",
+			`(define-syntax m (syntax-rules () ((_ q e) ((lambda (q) (quote e)) list))))
+			 (let ((f (lambda () 7)) (n 0)) ` + "`(a ,(m quote " + b + "))" + ` (list n (f)))`,
+			"(0 7)"},
+		{"control: macro-introduced quote under a user binder, unsyntax",
+			`(define-syntax m (syntax-rules () ((_ q e) ((lambda (q) (quote e)) list))))
+			 (let ((f (lambda () 7)) (n 0)) (quasisyntax (a #,(m quote ` + b + `))) (list n (f)))`,
+			"(0 7)"},
 		{"user macro binder under an unsyntax",
 			`(define-syntax bind1 (syntax-rules () ((_ v e body) ((lambda (v) body) e))))
 			 (let ((f (lambda () 7)) (n 0)) (quasisyntax (a #,(bind1 quote list (quote ` + b + `)))) (list n (f)))`,
