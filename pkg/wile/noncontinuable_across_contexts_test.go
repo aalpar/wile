@@ -34,7 +34,9 @@ import (
 // reaches and which the first driver above the transformer's root holds. The
 // handler then returns, so R7RS 6.11's secondary exception must fire, as it
 // does for the same jump taken directly (the last row, a control).
-// Chez raises &non-continuable on every row.
+// Chez raises &non-continuable on the eval, dynamic-wind and direct rows; the
+// composable and transformer rows have no Chez equivalent and are pinned by
+// agreement with the direct jump.
 func TestNonContinuableSecondaryAcrossContexts(t *testing.T) {
 	t.Parallel()
 
