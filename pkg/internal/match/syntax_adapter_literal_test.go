@@ -238,6 +238,24 @@ func TestLiteralNotShadowed(t *testing.T) {
 			want:         false,
 		},
 		{
+			// The RESIDUAL close, at unit level: an unrooted defB was never
+			// exported, so an import rooted at a library is another definition.
+			name:         "an unrooted literal is not another library's import",
+			defB:         pinned,
+			useB:         newRootedLiteralTestBinding("lit", "w16other", "lit", true),
+			sameSpelling: true,
+			want:         false,
+		},
+		{
+			// The #%base exception: an unrooted defB can be a library's own copy
+			// of a base binding, which a base-rooted import denotes too.
+			name:         "an unrooted literal still matches a base-rooted import by spelling",
+			defB:         pinned,
+			useB:         newRootedLiteralTestBinding("lit", environment.BaseOriginLib, "lit", true),
+			sameSpelling: true,
+			want:         true,
+		},
+		{
 			// defB denotes "else"; an imported binding denoting a DIFFERENT
 			// form ("=>") must not satisfy it, regardless of spelling — this is
 			// literalNotShadowed's half of the else-vs-=> cross-match this task

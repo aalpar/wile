@@ -653,14 +653,18 @@ func w16LibEngine(t *testing.T, libs map[string]string) *wile.Engine {
 // complete absence of one — is a different binding and must not match. The first
 // two rows and the syntax-case row answered MATCHED-LITERAL at the base.
 //
-// The discrimination is NOT absolute, and the RESIDUAL row says so out loud.
-// literalNotShadowed accepts a SAME-SPELLED imported binding of the name, from
-// any library, because an import mints a fresh *Binding and the rider cannot
-// tell which library minted it. So a use-site `lit` imported from an UNRELATED
-// library still matches the private literal, where R7RS §4.3.2 wants the
-// fallback. That row records today's answer as a residual, not as the correct
-// one; it is here so a later tightening of the rider is a measurable flip
-// rather than a silent change.
+// The RESIDUAL row is the case this used to leave open: a use-site `lit`
+// imported from an UNRELATED library matched the private literal, because an
+// import mints a fresh *Binding and the private literal carries no provenance
+// root to compare. It now answers OTHER, R7RS §4.3.2's fallback, by binding
+// identity: export roots a define at its own library at finalization, so an
+// unrooted literal was never exported, and an import rooted at a library is
+// some other definition. INSIDE is the ratchet against refusing every private
+// literal (the library's own use still matches); "importing the literal too",
+// BOUNDARY and the unit row TestLiteralNotShadowed/any_imported_binding_of_the_
+// same_name_is_accepted are the ones a refusal of every import turns red. BASE
+// pins the #%base exception: an unrooted literal can be a library's copy of a
+// base binding, so a base-rooted import still decides by spelling.
 //
 // The BOUNDARY row records the opposite direction: a legitimate re-export of
 // the SAME `lit` binding, reached through a prefix rename, is refused rather
@@ -708,6 +712,27 @@ func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
           ((_ x) #''OTHER))))))
 `
 
+	const libRulesProbeInside = `(define-library (w16lib)
+  (export probe)
+  (import (scheme base))
+  (begin
+    (define lit 42)
+    (define-syntax mg
+      (syntax-rules (lit)
+        ((_ lit) 'MATCHED-LITERAL)
+        ((_ x) 'OTHER)))
+    (define probe (mg lit))))
+`
+	const libRulesBaseLiteral = `(define-library (w16lib)
+  (export mc)
+  (import (scheme base))
+  (begin
+    (define-syntax mc
+      (syntax-rules (car)
+        ((_ car) 'MATCHED-LITERAL)
+        ((_ x) 'OTHER)))))
+`
+
 	const libUnrelatedLit = `(define-library (w16other)
   (export lit)
   (import (scheme base))
@@ -751,16 +776,31 @@ func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
 			want: "MATCHED-LITERAL",
 		},
 		{
-			// RESIDUAL, not the correct answer. The use-site `lit` is (w16other)'s
-			// binding and has nothing to do with (w16lib)'s private one, so R7RS
-			// §4.3.2 wants OTHER. It answers MATCHED-LITERAL because
-			// literalNotShadowed's IsImported rider accepts any imported binding
-			// of the name — the price of keeping the row above working. Dropping
-			// (w16other) from the import list is the discriminator: that program
-			// answers OTHER. Flip this want only together with the rider.
-			name: "RESIDUAL: an unrelated library's lit is still accepted",
+			// RESIDUAL, closed. The use-site `lit` is (w16other)'s binding and
+			// has nothing to do with (w16lib)'s private one, so R7RS §4.3.2
+			// wants OTHER. It answered MATCHED-LITERAL until literalNotShadowed
+			// refused an import rooted at a library against an unrooted
+			// (never-exported) definition-site literal.
+			name: "RESIDUAL: an unrelated library's lit is not the private literal",
 			libs: map[string]string{"w16lib.scm": libRules, "w16other.scm": libUnrelatedLit},
 			src:  "(import (w16lib) (w16other))\n(mg lit)",
+			want: "OTHER",
+		},
+		{
+			// The ratchet against a refusal of every private literal: inside
+			// w16lib the use site resolves the private `lit` itself.
+			name: "INSIDE: the library's own use of its private literal matches",
+			libs: map[string]string{"w16lib.scm": libRulesProbeInside},
+			src:  "(import (w16lib))\nprobe",
+			want: "MATCHED-LITERAL",
+		},
+		{
+			// The #%base exception. Refusing every import against an unrooted
+			// literal turns this OTHER: the library's `car` and the program's
+			// both come from the base, and the import is rooted there.
+			name: "BASE: a literal naming a base procedure matches its import",
+			libs: map[string]string{"w16lib.scm": libRulesBaseLiteral},
+			src:  "(import (scheme base) (w16lib))\n(mc car)",
 			want: "MATCHED-LITERAL",
 		},
 		{
@@ -813,12 +853,8 @@ func TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding(t *testing.T) {
 			// that no row recorded. Both sides carry an Origin here -- w16lib
 			// EXPORTS its lit, and w16other exports its own -- and the two
 			// origins are different libraries, so comparing bindings refuses
-			// what sameSpelling accepted. That is R7RS §4.3.2's answer, and it
-			// is a partial close of the RESIDUAL row above: whenever the
-			// macro's literal happens to be exported, the unrelated library's
-			// same-named binding stops matching. RESIDUAL itself stays
-			// MATCHED-LITERAL because w16lib does NOT export lit there, so defB
-			// is library-private and carries no origin to compare.
+			// what sameSpelling accepted. That is R7RS §4.3.2's answer for an
+			// exported literal; RESIDUAL above is the library-private one.
 			//
 			// (except (w16lib) lit) rather than a plain import: the unrelated
 			// library's lit has to be the one in scope at the use site for the

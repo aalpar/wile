@@ -583,35 +583,21 @@ func sameLiteralBinding(a, b *environment.Binding) bool {
 // The IsImported rider covers the one legitimate case pointer identity cannot:
 // an import mints a FRESH *Binding for a re-exported ordinary name, so a library
 // that exports both a macro and the variable the macro uses as a literal can
-// never be pointer-equal at the use site. An imported binding of the name is
-// therefore accepted — deliberately over-accepting across libraries, since the
-// rider cannot tell which library the import came from — but WHAT ELSE is
-// required to accept it depends on what defB denotes, exactly as the
-// narrowing paragraph below states: same spelling, when defB denotes no
-// form and DenotedForm cannot discriminate at all; the SAME denotation,
-// spelling-independent, when defB does. Neither condition is universal on
-// its own, and same spelling is never sufficient when defB denotes a
-// form — see the boundary paragraph below for the accepted cost of the
-// first case. The under-accepting alternative breaks the legitimate
+// never be pointer-equal at the use site. An imported binding is therefore
+// not refused outright, but WHAT is required to accept it depends on what defB
+// denotes, exactly as the narrowing paragraph below states: the same
+// provenance root, or same spelling where no root decides, when defB denotes
+// no form; the SAME denotation, spelling-independent, when defB does. Neither
+// condition is universal on its own, and same spelling is never sufficient
+// when defB denotes a form. The under-accepting alternative breaks the legitimate
 // re-export, and this predicate's false positive is a forgone
 // discrimination, not a capture.
-//
-// The over-acceptance is a SURVIVING residual of R7RS §4.3.2, not a closed case,
-// and it is not hypothetical: with a library exporting only a macro over its own
-// private `lit`, and an unrelated library exporting a different `lit`, importing
-// both makes (mg lit) match the literal where the spec wants the fallback. That
-// exact program is pinned — as today's answer, labelled residual — by the
-// imported-shadow row of TestCrossLibraryPatternLiteralNeedsTheDefinitionSiteBinding
-// (pkg/wile/matcher_pattern_gaps_test.go), so a later tightening of the rider has
-// a measurement to flip rather than a silent behaviour change. That row, and
-// every other row exercising this rider, is same-spelled — the residual is about
-// WHICH library's binding is accepted, never about accepting a different name.
 //
 // When defB denotes a form, the rider is narrowed to useB denoting the SAME
 // form — spelling-independent, like sameLiteralBinding's own widening, because
 // DenotedForm survives per-library minting and renaming alike. When defB denotes
-// no form (defB is an ordinary variable literal, or a user macro — the
-// private-`lit` case above), DenotedForm is "" on both sides and cannot
+// no form (defB is an ordinary variable literal, or a user macro, such as the
+// private `lit` below), DenotedForm is "" on both sides and cannot
 // discriminate at all, so the rider falls back to sameSpelling. Before match.go's
 // literal arm could reach a differently-spelled useB, sameSpelling was always
 // true here (the caller guaranteed it), so this fallback was unreachable with a
@@ -637,23 +623,37 @@ func sameLiteralBinding(a, b *environment.Binding) bool {
 // refuse what sameSpelling accepted: a library exporting both `mg` and `lit`,
 // imported (except (w16lib) lit) alongside an unrelated library exporting its
 // own `lit`, answered MATCHED-LITERAL and now answers OTHER. That is §4.3.2's
-// answer too, and it is a partial close of the RESIDUAL over-acceptance above —
-// specifically, whenever the macro's literal happens to be EXPORTED. Pinned as
+// answer too, for the case where the macro's literal is EXPORTED. Pinned as
 // "NARROWING: an exported literal no longer matches another library's same
 // name". Blast radius measured at zero in the stdlib: all 70 syntax-rules forms
 // under pkg/stdlib/lib carry empty literal lists, so no stdlib macro reaches
 // this predicate at all.
 //
-// RESIDUAL STAYS TABLED, and the reason is the step NOT taken. Stamping
-// library-PRIVATE defines with a phase-bearing root would give the residual
-// case two origins to compare and close it — and OriginRef is
-// {RootLib, RootName, RootPhase} with no scope discriminator, so stamping every
-// private slot makes two hygienically distinct same-named bindings
-// SameBinding-equal. free-identifier=? (prim_syntax.go) and ER-compare
-// (er_macro_compare.go) are pure functions of that stamp, so the step would
-// reintroduce name-keyed identity inside the predicate that decides identifier
-// equality. TestImportOfOneNameFromTwoPhasesConflicts is what it would silently
-// delete. The residual's own row keeps today's answer, labelled residual.
+// THE UNROOTED DEFINITION SIDE closes the RESIDUAL case, where the literal is
+// library-PRIVATE. stampLibraryExportOrigins roots every define a library
+// exports at itself, at finalization, before anything can import it; so a defB
+// with no root was never exported, and no import rooted at a library can be
+// it. With a library exporting only a macro over its own private `lit`, and an
+// unrelated library exporting a different `lit`, importing both made (mg lit)
+// match where §4.3.2 wants the fallback; it now answers OTHER. Pinned as
+// "RESIDUAL: an unrelated library's lit is not the private literal", with
+// "INSIDE: ..." as the library's own use, which pointer identity decides before
+// this arm runs.
+//
+// The private define is NOT stamped to get there. OriginRef is {RootLib,
+// RootName, RootPhase} with no scope discriminator, so stamping every private
+// slot would make two hygienically distinct same-named bindings SameBinding-
+// equal, and free-identifier=? (prim_syntax.go), ER-compare
+// (er_macro_compare.go) and importConflicts are pure functions of that stamp.
+// A nil root already means "its own root, equal only to itself", which is the
+// answer this arm needs.
+//
+// A useB rooted at environment.BaseOriginLib is the exception, and it falls back
+// to spelling as before: exportRoot's own premise is that a library's
+// un-imported copy of a base binding carries no root either, so an unrooted
+// defB can be the base definition a #%base import denotes. Measured: refusing
+// there flips "BASE: a literal naming a base procedure matches its import" and
+// TestPatternLiteralNamingAUserMacroMatches's define-syntax-over-else row.
 //
 // The sameSpelling fallback is NOT deletable, and that was measured rather than
 // assumed: replacing it with `return false` breaks
@@ -689,19 +689,27 @@ func literalNotShadowed(defB, useB *environment.Binding, sameSpelling bool) bool
 	}
 	denoted := environment.DenotedForm(defB)
 	if denoted == "" {
-		// R7RS §4.3.2 compares BINDINGS. When both sides carry an OriginRef the
-		// comparison is available, so take it: a prefixed or renamed re-export
-		// is the same binding under another spelling and matches, and two
-		// libraries' same-named exports are different bindings and do not.
+		// R7RS §4.3.2 compares BINDINGS, and a useB with an OriginRef makes the
+		// comparison available: a prefixed or renamed re-export is the same
+		// binding under another spelling and matches, and two libraries'
+		// same-named exports are different bindings and do not.
 		//
-		// `defB != nil` is not defensiveness inherited from the snippet this
-		// replaces: Origin() reaches (*Binding).Meta(), which is NOT nil-safe,
-		// while DenotedForm and sameLiteralBinding both nil-guard. The one
-		// production call site is guarded, so a nil defB is unreachable there —
-		// but the function tolerates one today and the unit table can supply
-		// one.
-		if defB != nil && defB.Origin() != nil && useB.Origin() != nil {
+		// The defB == nil test is not defensiveness: Origin() reaches
+		// (*Binding).Meta(), which is NOT nil-safe, while DenotedForm and
+		// sameLiteralBinding both nil-guard. The one production call site is
+		// guarded, so a nil defB is unreachable there, but the unit table
+		// supplies one.
+		if defB == nil || useB.Origin() == nil {
+			return sameSpelling
+		}
+		if defB.Origin() != nil {
 			return environment.SameBinding(defB, useB)
+		}
+		// An unrooted defB was never exported, so an import rooted at a library
+		// is some other definition. A #%base root is the exception (see the
+		// unrooted-definition paragraph above): spelling still decides there.
+		if useB.Origin().RootLib != environment.BaseOriginLib {
+			return false
 		}
 		return sameSpelling
 	}
