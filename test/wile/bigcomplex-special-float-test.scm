@@ -9,9 +9,9 @@
 ;;; Every group runs under an explicit equal?: chibi `test`'s default comparator
 ;;; is approximate (1e-5), which a float64-rounded imaginary part satisfies.
 ;;;
-;;; The multiplicative group pins today's answers so a change to them is
-;;; deliberate: they are right while the BigComplex parts fit in float64 and
-;;; wrong beyond (filed in todo/tier1-security-correctness.md).
+;;; The multiplicative groups pin real x complex and real / complex part-wise:
+;;; an out-of-range part stays finite and non-zero, an EXACT zero part
+;;; annihilates (0.0), and an INEXACT zero part gives NaN, as Chez does.
 
 (import (scheme base)
         (scheme inexact)
@@ -75,13 +75,32 @@
     ;; an INFINITE BigFloat partner is not clamped: +inf + -inf is NaN
     (test #t (nan? (+ +inf.0 (/ #m-1 #m0))))))
 
-;; The multiplicative arms keep the complex128 route.
-(test-group "multiplicative arms are unchanged"
+;; z's real part is an INEXACT zero (#m0), so +inf.0 times it is NaN; Chez
+;; agrees on (* +inf.0 0+9.87i) => +nan.0+inf.0i.
+(test-group "multiplicative arms, inexact zero real part"
   (with-exact-comparison
     (test "+nan.0+inf.0i" (number->string (* z +inf.0)))
+    (test "+nan.0+inf.0i" (number->string (* +inf.0 z)))
     (test "+nan.0+nan.0i" (number->string (* z +nan.0)))
     (test "0.0+0.0i" (number->string (/ z +inf.0)))
-    (test "+nan.0+nan.0i" (number->string (/ z +nan.0)))))
+    (test "+nan.0-inf.0i" (number->string (/ +inf.0 z)))
+    (test "+nan.0+nan.0i" (number->string (/ z +nan.0)))
+    (test "+nan.0+nan.0i" (number->string (/ +inf.0 (make-rectangular #m0.0 #m0.0))))))
+
+;; A BigFloat part past float64 range (either way) stays finite and non-zero.
+;; Chez gives the same answers for the exact spellings (expt 10 400).
+(test-group "multiplicative arms, out-of-range BigFloat parts"
+  (with-exact-comparison
+    (test "+inf.0+inf.0i" (number->string (* +inf.0 (make-rectangular #m1 #m1e400))))
+    (test "+inf.0+inf.0i" (number->string (* (make-rectangular #m1 #m1e400) +inf.0)))
+    (test "+inf.0+inf.0i" (number->string (* +inf.0 (make-rectangular #m1e-400 #m1))))
+    (test "+inf.0-inf.0i" (number->string (/ +inf.0 (make-rectangular #m1 #m1e400))))
+    (test "+inf.0-inf.0i" (number->string (/ +inf.0 (make-rectangular #m1e400 #m1e400))))
+    (test "+inf.0" (number->string (* +inf.0 #m1e-400)))
+    (test "-inf.0" (number->string (* +inf.0 #m-1e-400)))
+    ;; an INFINITE part is not clamped: Inf / Inf is NaN
+    (test "+nan.0+nan.0i" (number->string (/ +inf.0 (make-rectangular #m1 (/ #m1 #m0)))))
+    (test "+inf.0+inf.0i" (number->string (* +inf.0 (make-rectangular #m1 (/ #m1 #m0)))))))
 
 (test-end)
 (test-exit)

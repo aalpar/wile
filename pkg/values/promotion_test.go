@@ -16,6 +16,7 @@ package values
 
 import (
 	"math"
+	"math/big"
 	"strings"
 	"testing"
 
@@ -636,6 +637,183 @@ func TestSpecialFloatBigFloat_OutOfRangeIsFinite(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			c.Assert(tc.got.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestSpecialFloatExactPartner_OutOfRange pins the Inf/NaN guard on the Float x
+// BigInteger and Float x Rational contagion paths. The exact partner used to be
+// converted to float64 before the special Float decided the answer: 10^400 became
+// +inf.0 and 10^-400 became 0.0, so (+ +inf.0 (- 10^400)) was Inf + -Inf = NaN and
+// (* +inf.0 10^-400) was Inf * 0 = NaN. A finite non-zero partner now stays finite
+// and non-zero. Racket and Chez agree on every row.
+func TestSpecialFloatExactPartner_OutOfRange(t *testing.T) {
+	inf := NewFloat(math.Inf(1))
+	negInf := NewFloat(math.Inf(-1))
+	nan := NewFloat(math.NaN())
+	ten400 := new(big.Int).Exp(big.NewInt(10), big.NewInt(400), nil)
+	huge := NewBigInteger(ten400)
+	negHuge := NewBigInteger(new(big.Int).Neg(ten400))
+	hugeRat := NewRationalFromBigInt(ten400, big.NewInt(3))
+	tiny := NewRationalFromBigInt(big.NewInt(1), ten400)
+	negTiny := NewRationalFromBigInt(big.NewInt(-1), ten400)
+
+	divide := func(a, b Number) Number {
+		q, err := a.Divide(b)
+		if err != nil {
+			panic(err)
+		}
+		return q
+	}
+
+	tcs := []struct {
+		name string
+		got  Number
+		want string
+	}{
+		{"+inf.0 + -10^400", inf.Add(negHuge), "+inf.0"},
+		{"-10^400 + +inf.0", negHuge.Add(inf), "+inf.0"},
+		{"10^400 - +inf.0", huge.Subtract(inf), "-inf.0"},
+		{"+inf.0 - 10^400", inf.Subtract(huge), "+inf.0"},
+		{"-inf.0 - 10^400", negInf.Subtract(huge), "-inf.0"},
+		{"+inf.0 - 10^400/3", inf.Subtract(hugeRat), "+inf.0"},
+		{"+inf.0 / 10^400", divide(inf, huge), "+inf.0"},
+		{"-inf.0 / 10^400", divide(negInf, huge), "-inf.0"},
+		{"10^400 / +inf.0", divide(huge, inf), "0.0"},
+		{"+inf.0 * 10^-400", inf.Multiply(tiny), "+inf.0"},
+		{"10^-400 * +inf.0", tiny.Multiply(inf), "+inf.0"},
+		{"+inf.0 * -10^-400", inf.Multiply(negTiny), "-inf.0"},
+		{"-inf.0 * -10^-400", negInf.Multiply(negTiny), "+inf.0"},
+		{"+inf.0 / 10^-400", divide(inf, tiny), "+inf.0"},
+		{"10^-400 / -inf.0", divide(tiny, negInf), "-0.0"},
+		// Controls: a NaN still wins, and a FINITE Float partner is not clamped
+		// (finite contagion stays lossy: 10^400 rounds to +inf.0).
+		{"+nan.0 + 10^400", nan.Add(huge), "+nan.0"},
+		{"+nan.0 * 10^-400", nan.Multiply(tiny), "+nan.0"},
+		{"1.0 + 10^400", NewFloat(1).Add(huge), "+inf.0"},
+		{"10^400 * +inf.0", huge.Multiply(inf), "+inf.0"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			c.Assert(tc.got.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestSpecialFloatBigFloat_Underflow pins the underflow twin of the BigFloat
+// clamp: #m1e-400 converts to 0.0, and +inf.0 * 0.0 is NaN where the product of
+// +inf.0 and a positive number is +inf.0. An INEXACT zero is still zero.
+func TestSpecialFloatBigFloat_Underflow(t *testing.T) {
+	inf := NewFloat(math.Inf(1))
+	tests := []struct {
+		name string
+		got  Number
+		want string
+	}{
+		{"+inf.0 * 1e-400", inf.Multiply(NewBigFloatFromString("1e-400")), "+inf.0"},
+		{"+inf.0 * -1e-400", inf.Multiply(NewBigFloatFromString("-1e-400")), "-inf.0"},
+		{"1e-400 * +inf.0", NewBigFloatFromString("1e-400").Multiply(inf), "+inf.0"},
+		{"+inf.0 * BigFloat 0.0 is nan", inf.Multiply(NewBigFloatFromFloat64(0)), "+nan.0"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			c.Assert(tc.got.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestSpecialFloatBigComplex_Multiplicative pins real x complex and real / complex
+// for an Inf/NaN real and a BigComplex. Both used to go through complex128, which
+// rounds out-of-range parts to +-Inf or 0 and invents a +0.0 imaginary part for the
+// real, so 0 * Inf turned finite and infinite answers into NaN. An EXACT zero part
+// annihilates (0.0 in the inexact result); an INEXACT zero part gives NaN. Every
+// row agrees with Chez and Racket on the same value spelled with exact parts or
+// flonums.
+func TestSpecialFloatBigComplex_Multiplicative(t *testing.T) {
+	inf := NewFloat(math.Inf(1))
+	negInf := NewFloat(math.Inf(-1))
+	nan := NewFloat(math.NaN())
+	ten400 := new(big.Int).Exp(big.NewInt(10), big.NewInt(400), nil)
+	huge := NewBigInteger(ten400)
+	tiny := NewRationalFromBigInt(big.NewInt(1), ten400)
+	one := NewBigIntegerFromInt64(1)
+
+	plus2i := NewBigComplex(NewBigIntegerFromInt64(0), NewBigIntegerFromInt64(2))
+	exactHugeImag := NewBigComplex(one, huge)
+	exactHugeBoth := NewBigComplex(huge, huge)
+	exactTinyReal := NewBigComplex(tiny, one)
+	exactTinyImag := NewBigComplex(one, tiny)
+	bigHugeImag := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(1), NewBigFloatFromString("1e400"))
+	bigTinyReal := NewBigComplexFromBigFloats(NewBigFloatFromString("1e-400"), NewBigFloatFromFloat64(1))
+	inexactZeroReal := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(0), NewBigFloatFromString("9.87"))
+	inexactZero := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(0), NewBigFloatFromFloat64(0))
+	infImag := NewBigComplexFromBigFloats(NewBigFloatFromFloat64(1), NewBigFloatFromFloat64(math.Inf(1)))
+
+	divide := func(a, b Number) Number {
+		q, err := a.Divide(b)
+		if err != nil {
+			panic(err)
+		}
+		return q
+	}
+
+	tcs := []struct {
+		name string
+		got  Number
+		want string
+	}{
+		{"+inf.0 * +2i", inf.Multiply(plus2i), "0.0+inf.0i"},
+		{"+2i * +inf.0", plus2i.Multiply(inf), "0.0+inf.0i"},
+		{"-inf.0 * +2i", negInf.Multiply(plus2i), "0.0-inf.0i"},
+		{"+nan.0 * +2i", nan.Multiply(plus2i), "0.0+nan.0i"},
+		{"+inf.0 * 1+10^400i", inf.Multiply(exactHugeImag), "+inf.0+inf.0i"},
+		{"1+10^400i * +inf.0", exactHugeImag.Multiply(inf), "+inf.0+inf.0i"},
+		{"+inf.0 * 10^-400+1i", inf.Multiply(exactTinyReal), "+inf.0+inf.0i"},
+		{"+inf.0 * 1+#m1e400i", inf.Multiply(bigHugeImag), "+inf.0+inf.0i"},
+		{"+inf.0 * #m1e-400+1i", inf.Multiply(bigTinyReal), "+inf.0+inf.0i"},
+		{"+inf.0 * 1+inf.0i", inf.Multiply(infImag), "+inf.0+inf.0i"},
+		{"+inf.0 * 0.0+9.87i: inexact zero part is nan", inf.Multiply(inexactZeroReal), "+nan.0+inf.0i"},
+		{"+inf.0 * 0.0+0.0i", inf.Multiply(inexactZero), "+nan.0+nan.0i"},
+		{"+inf.0 / +2i", divide(inf, plus2i), "0.0-inf.0i"},
+		{"-inf.0 / +2i", divide(negInf, plus2i), "0.0+inf.0i"},
+		{"+nan.0 / +2i", divide(nan, plus2i), "0.0+nan.0i"},
+		{"+inf.0 / 1+10^400i", divide(inf, exactHugeImag), "+inf.0-inf.0i"},
+		{"+inf.0 / 10^400+10^400i", divide(inf, exactHugeBoth), "+inf.0-inf.0i"},
+		{"+inf.0 / 10^-400+1i", divide(inf, exactTinyReal), "+inf.0-inf.0i"},
+		{"+inf.0 / 1+10^-400i", divide(inf, exactTinyImag), "+inf.0-inf.0i"},
+		{"+inf.0 / 1+#m1e400i", divide(inf, bigHugeImag), "+inf.0-inf.0i"},
+		{"+inf.0 / 0.0+9.87i: inexact zero part is nan", divide(inf, inexactZeroReal), "+nan.0-inf.0i"},
+		{"+inf.0 / 0.0+0.0i", divide(inf, inexactZero), "+nan.0+nan.0i"},
+		{"+inf.0 / 1+inf.0i", divide(inf, infImag), "+nan.0+nan.0i"},
+		{"1+10^400i / +inf.0", divide(exactHugeImag, inf), "0.0+0.0i"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			_, ok := tc.got.(*BigComplex)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected *BigComplex, got %T", tc.got))
+			c.Assert(tc.got.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestSpecialFloatBigComplex_DivideTableAgreesWithMethod pins the BigComplex /
+// special-Float table entry. BigComplex.Divide divides by a real part-wise before
+// consulting the table, so only a direct table call reaches the entry; it must
+// give the method's answer.
+func TestSpecialFloatBigComplex_DivideTableAgreesWithMethod(t *testing.T) {
+	ten400 := new(big.Int).Exp(big.NewInt(10), big.NewInt(400), nil)
+	z := NewBigComplex(NewBigIntegerFromInt64(0), NewBigInteger(ten400))
+	for _, x := range []float64{math.Inf(1), math.Inf(-1), math.NaN()} {
+		t.Run(NewFloat(x).SchemeString(), func(t *testing.T) {
+			c := qt.New(t)
+			viaTable, err := bigComplexDivide[KindFloat](z, NewFloat(x))
+			c.Assert(err, qt.IsNil)
+			viaMethod, err := z.Divide(NewFloat(x))
+			c.Assert(err, qt.IsNil)
+			c.Assert(viaTable.SchemeString(), qt.Equals, viaMethod.SchemeString())
 		})
 	}
 }
