@@ -294,7 +294,27 @@ func openAuthorized(auth security.Authorizer, absPath string) (fs.File, string, 
 	if err != nil {
 		return nil, "", err
 	}
-	return f, absPath, nil
+	return f, openedName(absPath), nil
+}
+
+// openedName is the name an absolute operand's file is reported and pushed on
+// the load stack under. A ".." element is resolved against the filesystem,
+// because every reader of the name takes its directory lexically
+// (LoadStack.CurrentDir, lexicalIncludeContext): "/a/link/../x.scm" opened the
+// x.scm beside the link target's parent, and the lexical directory "/a" is a
+// different one, so an include nested in x.scm read /a/inc.scm. Any other name
+// is kept as written, so an ordinary path is reported as the program spelled
+// it. The cost is portNameFor's (extensions/files): a resolved name can show a
+// location the written one hid.
+func openedName(absPath string) string {
+	if !slices.Contains(strings.Split(filepath.ToSlash(absPath), "/"), "..") {
+		return absPath
+	}
+	resolved, err := filepath.EvalSymlinks(absPath)
+	if err != nil {
+		return absPath
+	}
+	return resolved
 }
 
 // WalkOSSchemeFiles walks baseDir on the OS filesystem, calling fn with the

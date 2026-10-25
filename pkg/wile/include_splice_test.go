@@ -19,6 +19,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -958,6 +959,54 @@ func TestIncludeInLibraryBodyMacrosResolveInTheLibrary(t *testing.T) {
 			result, err := engine.EvalProgram(context.Background(), tc.code, "includer.scm")
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestAbsoluteIncludeThroughALinkAndDotDotNestsAgainstTheOpenedFile pins that
+// the name an absolute include operand is pushed under names the file the OS
+// opened. "a/link/../x.scm" opens real/x.scm (link -> real/deep), but its
+// lexical directory is a/, so a relative include nested in it, immediate or
+// deferred, read a/inc.scm. Racket (racket/include, (file "...")): real. Chez
+// resolves a nested include against the CWD, so it is not comparable.
+func TestAbsoluteIncludeThroughALinkAndDotDotNestsAgainstTheOpenedFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a symlink")
+	}
+	tmp, err := filepath.EvalSymlinks(t.TempDir())
+	qt.Assert(t, err, qt.IsNil)
+	write := func(rel, data string) {
+		full := filepath.Join(tmp, rel)
+		qt.Assert(t, os.MkdirAll(filepath.Dir(full), 0o755), qt.IsNil)
+		qt.Assert(t, os.WriteFile(full, []byte(data), 0o644), qt.IsNil)
+	}
+	write("real/deep/keep", "")
+	write("real/inc.scm", `(define y 'real)`)
+	write("a/inc.scm", `(define y 'decoy)`)
+	write("real/now.scm", `(include "inc.scm")`)
+	write("real/later.scm", `(eval-when (load eval) (include "inc.scm"))`)
+	qt.Assert(t, os.Symlink(filepath.Join(tmp, "real", "deep"), filepath.Join(tmp, "a", "link")), qt.IsNil)
+
+	tcs := []struct {
+		name string
+		file string
+	}{
+		{name: "immediate include", file: "now.scm"},
+		{name: "include under eval-when", file: "later.scm"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			engine, err := wile.NewEngine(ctx,
+				wile.WithProfile(wile.KitchenSink),
+				wile.WithAuthorizer(nil),
+				wile.WithSourceOS(),
+			)
+			qt.Assert(t, err, qt.IsNil)
+			operand := filepath.Join(tmp, "a", "link") + "/../" + tc.file
+			result, err := engine.EvalProgram(ctx, `(include "`+operand+`") y`, "")
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result.SchemeString(), qt.Equals, "real")
 		})
 	}
 }
