@@ -27,6 +27,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/pkg/machine/compilation"
+	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
 )
@@ -970,11 +971,14 @@ func TestIncludeInLibraryBodyMacrosResolveInTheLibrary(t *testing.T) {
 }
 
 // TestAbsoluteIncludeThroughALinkAndDotDotNestsAgainstTheOpenedFile pins that
-// the name an absolute include operand is pushed under names the file the OS
-// opened. "a/link/../x.scm" opens real/x.scm (link -> real/deep), but its
-// lexical directory is a/, so a relative include nested in it, immediate or
-// deferred, read a/inc.scm. Racket (racket/include, (file "...")): real. Chez
-// resolves a nested include against the CWD, so it is not comparable.
+// the name an absolute include operand is pushed under names the file the open
+// read. "a/link/../x.scm" (a/link -> real/deep) reaches real/x.scm through a
+// plain open, but its lexical directory is a/, so a relative include nested in
+// it, immediate or deferred, read a/inc.scm. Racket (racket/include,
+// (file "...")): real. Chez resolves a nested include against the CWD, so it is
+// not comparable. Under a custom RootConfined authorizer (which, unlike the
+// built-in ones, does not refuse ".." after a link) os.Root reads the lexical
+// a/x.scm, and the nested include must follow that file, not the link.
 func TestAbsoluteIncludeThroughALinkAndDotDotNestsAgainstTheOpenedFile(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a symlink")
@@ -988,24 +992,30 @@ func TestAbsoluteIncludeThroughALinkAndDotDotNestsAgainstTheOpenedFile(t *testin
 	}
 	write("real/deep/keep", "")
 	write("real/inc.scm", `(define y 'real)`)
-	write("a/inc.scm", `(define y 'decoy)`)
-	write("real/now.scm", `(include "inc.scm")`)
-	write("real/later.scm", `(eval-when (load eval) (include "inc.scm"))`)
+	write("a/inc.scm", `(define y 'beside-link)`)
+	for _, dir := range []string{"real", "a"} {
+		write(dir+"/now.scm", `(define w '`+dir+`) (include "inc.scm")`)
+		write(dir+"/later.scm", `(define w '`+dir+`) (eval-when (load eval) (include "inc.scm"))`)
+	}
 	qt.Assert(t, os.Symlink(filepath.Join(tmp, "real", "deep"), filepath.Join(tmp, "a", "link")), qt.IsNil)
 
 	tcs := []struct {
 		name string
 		file string
+		auth security.Authorizer
+		want string
 	}{
-		{name: "immediate include", file: "now.scm"},
-		{name: "include under eval-when", file: "later.scm"},
+		{name: "immediate include", file: "now.scm", want: "(real real)"},
+		{name: "include under eval-when", file: "later.scm", want: "(real real)"},
+		{name: "immediate include, root-confined", file: "now.scm", auth: rootConfinedAll{root: tmp}, want: "(a beside-link)"},
+		{name: "include under eval-when, root-confined", file: "later.scm", auth: rootConfinedAll{root: tmp}, want: "(a beside-link)"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 			engine, err := wile.NewEngine(ctx,
 				wile.WithProfile(wile.KitchenSink),
-				wile.WithAuthorizer(nil),
+				wile.WithAuthorizer(tc.auth),
 				wile.WithSourceOS(),
 			)
 			qt.Assert(t, err, qt.IsNil)
@@ -1013,9 +1023,23 @@ func TestAbsoluteIncludeThroughALinkAndDotDotNestsAgainstTheOpenedFile(t *testin
 				_ = engine.Close()
 			})
 			operand := filepath.Join(tmp, "a", "link") + "/../" + tc.file
-			result, err := engine.EvalProgram(ctx, `(include "`+operand+`") y`, "")
+			result, err := engine.EvalProgram(ctx, `(include "`+operand+`") (list w y)`, "")
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, result.SchemeString(), qt.Equals, "real")
+			qt.Assert(t, result.SchemeString(), qt.Equals, tc.want)
 		})
 	}
+}
+
+// rootConfinedAll confines opens to root and allows everything: a custom
+// security.RootConfined authorizer.
+type rootConfinedAll struct {
+	root string
+}
+
+func (rootConfinedAll) Authorize(security.AccessRequest) error {
+	return nil
+}
+
+func (p rootConfinedAll) ConfinementRoot() (string, bool) {
+	return p.root, true
 }

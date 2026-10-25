@@ -123,21 +123,21 @@ func (p *PortObject) PortName() string {
 	return p.srcName
 }
 
-// MarkNameAsPath records that the port's name is the path of the file it
-// reads (a file port), not a display label. The reader then marks what it reads
-// from the port with SourceContext.FileIsPath, which lets an include inside a
-// form read from the port resolve against that file's directory. Call it before
-// the port escapes its constructor's caller. Nil-safe: a nil port has no name
-// to mark.
-func (p *PortObject) MarkNameAsPath() {
+// SetPortNameIsPath records whether the port's name is the path of the file
+// it reads (a file port) rather than a display label. The reader marks what it
+// reads from a port so named with SourceContext.FileIsPath, which lets an
+// include inside a form read from the port resolve against that file's
+// directory. Call it before the port escapes its constructor's caller.
+// Nil-safe: a nil port has no name to mark.
+func (p *PortObject) SetPortNameIsPath(isPath bool) {
 	if p == nil {
 		return
 	}
-	p.srcIsPath = true
+	p.srcIsPath = isPath
 }
 
 // PortNameIsPath reports whether PortName is the path of the file the port
-// reads (MarkNameAsPath) rather than a display label or "". Nil-safe: a nil
+// reads (SetPortNameIsPath) rather than a display label or "". Nil-safe: a nil
 // port has no name.
 func (p *PortObject) PortNameIsPath() bool {
 	if p == nil {

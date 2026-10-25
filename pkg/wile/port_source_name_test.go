@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/pkg/security"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/wile"
 
@@ -107,6 +108,29 @@ func TestReadSyntaxFromFilePortNamesTheFile(t *testing.T) {
 		     (write (list (syntax-source s) (syntax-line s) (syntax-column s)) o)
 		     (get-output-string o)))`)
 	qt.New(t).Assert(got, qt.Equals, `("`+filepath.Join(f.dir, "f.scm")+`" 2 2)`)
+}
+
+// The reader over a port carries the port's path mark onto what it reads: a
+// file port's syntax is marked as coming from a path (SourceContext.FileIsPath),
+// a string port's is not. TestPortNameSteersIncludeConsistently's live-stack
+// row is the behaviour this feeds.
+func TestReadSyntaxCarriesThePortsPathMark(t *testing.T) {
+	tcs := []struct {
+		name string
+		src  string
+		want bool
+	}{
+		{name: "file port", src: `(read-syntax (open-input-file "sub/m.scm"))`, want: true},
+		{name: "string port", src: `(read-syntax (open-input-string "(a b)"))`, want: false},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newPortNameFixture(t, map[string]string{"sub/m.scm": "(a b)\n"})
+			stx, ok := f.eval(tc.src).(syntax.SyntaxValue)
+			qt.New(t).Assert(ok, qt.IsTrue)
+			qt.New(t).Assert(stx.SourceContext().FileIsPath, qt.Equals, tc.want)
+		})
+	}
 }
 
 // I055-a2: a read error from a file port carries the file and the position in

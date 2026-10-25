@@ -63,7 +63,7 @@ type portBase struct {
 	// "echo stdout"); it is never a path to open. "" means the port has no
 	// name to give (string and bytevector ports, in-memory buffers).
 	srcName string
-	// srcIsPath is set (MarkNameAsPath) when srcName is the path of the file
+	// srcIsPath is set (SetPortNameIsPath) when srcName is the path of the file
 	// the port reads, so the reader may mark SourceContext.FileIsPath.
 	srcIsPath bool
 	// pos is where the port's next rune stands, counted by the port's guarded

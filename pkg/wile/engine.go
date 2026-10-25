@@ -888,8 +888,10 @@ func (p *Engine) EvalMultiple(ctx context.Context, code string) (Value, error) {
 }
 
 // EvalMultipleWithSource evaluates multiple expressions, returning the last result.
-// The source parameter identifies where the code came from (e.g. a filename)
-// and appears in error messages and stack traces.
+// The source parameter labels where the code came from in error messages and
+// stack traces. It is a label, not a location, whatever its shape: a relative include
+// resolves against the load stack ctx carries ([Engine.ContextWithLoadPath]),
+// and against source's directory only when ctx carries none.
 //
 // Each top-level form is compiled and run independently, so a forward reference
 // between two separate defines — (define (f) (g)) before (define (g) ...) —

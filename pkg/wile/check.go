@@ -26,6 +26,9 @@ import (
 // without running its run-time top level, and reports the first error with source location — the
 // go build equivalent for a Scheme program. It returns nil when the program
 // compiles clean. source labels the code in diagnostics; pass "" if none.
+// It is a label, not a location, whatever its shape: a relative include
+// resolves against the load stack ctx carries ([Engine.ContextWithLoadPath]),
+// and against source's directory only when ctx carries none.
 //
 // It mirrors [Engine.EvalProgram] exactly, including the whole-program (begin
 // form ...) splice that makes top-level defines mutually visible, and omits only

@@ -33,7 +33,7 @@ import (
 // opens the file (race-free via os.Root when the authorizer confines file
 // access; see confined.go), and wraps it in a port via makePort, which is
 // handed the resolved path as the port's name. The port is marked as named by
-// a path (MarkNameAsPath): the reader stamps the name into SourceContext.File
+// a path (SetPortNameIsPath): the reader stamps the name into SourceContext.File
 // with FileIsPath set, so include resolution steers by it.
 func openFilePort(
 	mc machine.CallContext, name string, action string,
@@ -60,7 +60,7 @@ func openFilePort(
 		return werr.WrapForeignFileError(err, name, filename.Value)
 	}
 	port := makePort(file, portNameFor(abs))
-	port.MarkNameAsPath()
+	port.SetPortNameIsPath(true)
 	mc.SetValue(port)
 	return nil
 }
@@ -263,7 +263,7 @@ func callWithFile(
 	defer file.Close() //nolint:errcheck
 
 	port := portCreator(file, portNameFor(abs))
-	port.MarkNameAsPath()
+	port.SetPortNameIsPath(true)
 
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)

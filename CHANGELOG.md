@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`values.SourceContext.FileIsPath`, `parser.(*Parser).SetFileIsPath`,
+  `values.(*PortObject).SetPortNameIsPath` and `PortNameIsPath`.** A reader
+  marks the contexts it builds when its file name is a location it opened (an
+  include, `load`, a library, a file port), so include resolution can tell a
+  real path from a caller's label by provenance rather than by shape. The zero
+  value is a label.
+
 - **`values.OperandPrecision`, `values.KernelPrecision`, `values.BigSqrt` and
   `(*BigFloat).Sqrt`.** The operand-max precision of a big-precision operation,
   the same capped at `values.MaxBigFloatKernelPrecision` for a transcendental
@@ -808,6 +815,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `let` — are affected and all five now report the structural error.
 
 ### Changed
+
+- **BREAKING (behavior): a program's source name never steers `include` under a
+  live load stack.** The name passed to `EvalProgram`, `EvalMultipleWithSource`,
+  `CheckProgram` or `ParseWithSource` is a label; with a load stack on the
+  context (`Engine.ContextWithLoadPath`) a relative include resolves against the
+  stack even when the label is absolute (it used to steer). A form read from a
+  file (include, `load`, library, file port) resolves against that file under a
+  virtual FS too, including a form compiled after the file is done (an
+  `eval-when` body).
+
+- **BREAKING (behavior): an absolute include, `load` or library path with a
+  `..` element is reported under the name of the file the open reached** (the
+  symlink-resolved path for a plain open, the lexically cleaned one under a
+  `RootConfined` authorizer), in `current-load-path`, `syntax-source` and
+  diagnostics, so a relative include nested in it resolves against that file's
+  directory. Other absolute names are kept as written.
+
+- **BREAKING (Go API): `values.SourceIndexes` stores column and line as
+  `int32`, saturating at `math.MaxInt32`** (index stays `int`), so a
+  `SourceContext` with `FileIsPath` stays in the 96-byte allocation class.
+  Accessors still return `int`. `AdvanceIndexes`' per-rune column step does not
+  saturate (inline budget): a single line over 2^31-1 characters wraps there.
 
 - **BREAKING (Go API): `compilation.ExpandAndCompile` and
   `ExpandAndCompileOptimized` take `(ctx, env, stx)`.** The `resolver`,

@@ -15,6 +15,8 @@
 package values_test
 
 import (
+	"math"
+	"strconv"
 	"testing"
 	"unsafe"
 
@@ -33,4 +35,32 @@ func TestSourceContextFitsItsSizeClass(t *testing.T) {
 	qt.Assert(t, unsafe.Sizeof(values.SourceIndexes{}), qt.Equals, uintptr(16))
 	qt.Assert(t, unsafe.Sizeof(values.SourceContext{}) <= 96, qt.IsTrue,
 		qt.Commentf("sizeof(SourceContext) = %d", unsafe.Sizeof(values.SourceContext{})))
+}
+
+// TestSourceIndexesSaturatesAtInt32 pins the int32 narrowing's overflow rule: a
+// column or line past 2^31-1 clamps at math.MaxInt32 rather than wrapping
+// negative, through the constructor and each mutator.
+func TestSourceIndexesSaturatesAtInt32(t *testing.T) {
+	if strconv.IntSize == 32 {
+		t.Skip("int cannot hold a value past MaxInt32")
+	}
+	over := math.MaxInt32
+	over += 5
+	si := values.NewSourceIndexes(0, over, over)
+	qt.Assert(t, si.Column(), qt.Equals, math.MaxInt32)
+	qt.Assert(t, si.Line(), qt.Equals, math.MaxInt32)
+
+	si.Inc(10)
+	qt.Assert(t, si.Column(), qt.Equals, math.MaxInt32)
+	si.Tab()
+	qt.Assert(t, si.Column(), qt.Equals, math.MaxInt32)
+	si.NewLine()
+	qt.Assert(t, si.Line(), qt.Equals, math.MaxInt32)
+	qt.Assert(t, si.Column(), qt.Equals, 0)
+
+	edge := values.NewSourceIndexes(0, math.MaxInt32, math.MaxInt32)
+	tab := values.AdvanceIndexes(edge, 'a', '\t', 1)
+	qt.Assert(t, tab.Column(), qt.Equals, math.MaxInt32)
+	nl := values.AdvanceIndexes(edge, 'a', '\n', 1)
+	qt.Assert(t, nl.Line(), qt.Equals, math.MaxInt32)
 }

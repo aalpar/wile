@@ -57,8 +57,10 @@ func (p *Engine) Parse(ctx context.Context, code string) (*Expression, error) {
 }
 
 // ParseWithSource parses a single Scheme expression from code.
-// The source parameter identifies where the code came from (e.g. a filename)
-// and appears in error messages.
+// The source parameter labels where the code came from in error messages.
+// It is a label, not a location, whatever its shape: a relative include
+// resolves against the load stack ctx carries ([Engine.ContextWithLoadPath]),
+// and against source's directory only when ctx carries none.
 func (p *Engine) ParseWithSource(ctx context.Context, code string, source string) (*Expression, error) {
 	return p.parse(ctx, code, source)
 }

@@ -59,14 +59,17 @@ func relWithinRoot(root, target string) (string, error) {
 // the authorized subtree; a plain os.Open would follow it. Resolving symlinks
 // and re-gating the real path keeps the gate target and the open target the
 // same file. When the path does not resolve (missing or broken link) the plain
-// open reports the underlying error.
-func openUnconfined(auth security.Authorizer, absPath string) (*os.File, error) {
+// open reports the underlying error. It returns the name it opened: realPath
+// when it resolved, else absPath.
+func openUnconfined(auth security.Authorizer, absPath string) (*os.File, string, error) {
 	realPath, err := filepath.EvalSymlinks(absPath)
 	if err != nil {
-		return os.Open(absPath)
+		f, openErr := os.Open(absPath)
+		return f, absPath, openErr
 	}
 	if realPath == absPath {
-		return os.Open(absPath)
+		f, openErr := os.Open(absPath)
+		return f, absPath, openErr
 	}
 	err = security.CheckWithAuthorizer(auth, security.AccessRequest{
 		Resource: security.ResourceCode,
@@ -74,42 +77,48 @@ func openUnconfined(auth security.Authorizer, absPath string) (*os.File, error) 
 		Target:   realPath,
 	})
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return os.Open(realPath)
+	f, err := os.Open(realPath)
+	return f, realPath, err
 }
 
 // confinedOpenFile opens absPath for reading, race-free when auth confines
 // filesystem access to a root. Under confinement a non-regular file (FIFO,
 // device) is refused: a sandboxed load has no business blocking on a planted
 // pipe, and the confined caller can never have meant /dev/stdin.
-func confinedOpenFile(auth security.Authorizer, absPath string) (*os.File, error) {
+//
+// It also returns the name of the file it opened, which can differ from absPath
+// in how a ".." element is taken: the confined arm opens the lexically cleaned
+// path (relWithinRoot's filepath.Abs folds "link/.." away before os.Root sees
+// it), the unconfined arm the symlink-resolved one (openUnconfined).
+func confinedOpenFile(auth security.Authorizer, absPath string) (*os.File, string, error) {
 	dir, confined := security.ConfinementRootOf(auth)
 	if !confined {
 		return openUnconfined(auth, absPath)
 	}
 	root, err := os.OpenRoot(dir)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer root.Close() //nolint:errcheck // read-only root handle; close error is irrelevant
 	rel, err := relWithinRoot(dir, absPath)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	f, err := root.Open(rel)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	fi, err := f.Stat()
 	if err != nil {
 		f.Close() //nolint:errcheck // failed open; close error is irrelevant
-		return nil, err
+		return nil, "", err
 	}
 	if !fi.Mode().IsRegular() {
 		f.Close() //nolint:errcheck // refused open; close error is irrelevant
-		return nil, werr.WrapForeignErrorf(werr.ErrFileOpen,
+		return nil, "", werr.WrapForeignErrorf(werr.ErrFileOpen,
 			"open %s: not a regular file", absPath)
 	}
-	return f, nil
+	return f, filepath.Clean(absPath), nil
 }
