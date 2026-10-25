@@ -163,3 +163,33 @@ func TestReadSyntaxRadixBigFloat(t *testing.T) {
 		})
 	}
 }
+
+// TestReadSyntaxRadixFractionPastFloat64KeepsItsDigits pins that a radix
+// fraction past float64 range takes the precision its digits need, as a
+// decimal one does (decimalLiteralPrecision), instead of a fixed 256 bits:
+// #x1<255 zeros>1.0 is 16^256+1, 1025 bits, and must equal the integer.
+func TestReadSyntaxRadixFractionPastFloat64KeepsItsDigits(t *testing.T) {
+	tcs := []struct{ prefix, digits string }{
+		{"#x", "1" + strings.Repeat("0", 255) + "1"},
+		{"#b", "1" + strings.Repeat("0", 1024) + "1"},
+		{"#o", "7" + strings.Repeat("0", 400) + "7"},
+		{"#x", "-F" + strings.Repeat("0", 300) + "F"},
+	}
+	read := func(c *qt.C, s string) values.Value {
+		env := environment.NewNamespace().Runtime()
+		syn, err := NewParser(env, true, strings.NewReader(s)).ReadSyntax(context.TODO())
+		c.Assert(err, qt.IsNil, qt.Commentf("%.40s", s))
+		return syn.Unwrap()
+	}
+	for _, tc := range tcs {
+		t.Run(tc.prefix+tc.digits[:4], func(t *testing.T) {
+			c := qt.New(t)
+			bf, ok := read(c, tc.prefix+tc.digits+".0").(*values.BigFloat)
+			c.Assert(ok, qt.IsTrue)
+			bi, ok := read(c, tc.prefix+tc.digits).(*values.BigInteger)
+			c.Assert(ok, qt.IsTrue)
+			got, _ := bf.BigFloatValue().Int(nil)
+			c.Assert(got.Cmp(bi.BigInt()), qt.Equals, 0)
+		})
+	}
+}

@@ -18,6 +18,7 @@ import (
 	"errors"
 	"math"
 	"math/big"
+	"math/bits"
 	"strconv"
 	"strings"
 
@@ -111,7 +112,7 @@ func ParseRealFloatStringWithBase(text string, base int) (values.Number, error) 
 		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
 			"ParseRealFloatStringWithBase: binary exponents are not Scheme notation: %s", text)
 	}
-	bf, _, err := big.ParseFloat(text, base, values.DefaultBigFloatPrecision, big.ToNearestEven)
+	bf, _, err := big.ParseFloat(text, base, radixLiteralPrecision(text, base), big.ToNearestEven)
 	if err != nil {
 		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
 			"ParseRealFloatStringWithBase: invalid base-%d real number: %s", base, text)
@@ -123,6 +124,21 @@ func ParseRealFloatStringWithBase(text string, base int) (values.Number, error) 
 		return values.NewBigFloat(bf), nil
 	}
 	return values.NewFloat(f), nil
+}
+
+// radixLiteralPrecision is decimalLiteralPrecision for a power-of-two radix:
+// the bits the literal's significant digits hold, floored at
+// DefaultBigFloatPrecision and clamped at MaxBigFloatLiteralPrecision, as an
+// unmarked decimal past float64 range is (NewBigFloatFromStringClamped). Only a
+// magnitude past float64 range keeps it; any other result rounds to a Float.
+func radixLiteralPrecision(text string, base int) uint {
+	digits := strings.TrimLeft(text, "+-")
+	if strings.Contains(digits, ".") {
+		digits = strings.TrimRight(digits, "0")
+	}
+	digits = strings.TrimLeft(strings.Replace(digits, ".", "", 1), "0")
+	needed := uint(len(digits) * bits.Len(uint(base-1)))
+	return min(max(uint(values.DefaultBigFloatPrecision), needed), values.MaxBigFloatLiteralPrecision)
 }
 
 // ParseSpecialFloat checks if s is +inf.0, -inf.0, +nan.0, or -nan.0
@@ -174,6 +190,16 @@ func ParseImaginaryStringNumber(s string) (values.Number, error) {
 	sf, ok := ParseSpecialFloat(trim)
 	if ok {
 		return values.NewComplexFromParts(0, sf.Value), nil
+	}
+
+	// Long precision (+1.5l0i) needs a BigComplex: the real part is the exact 0
+	// a pure imaginary implies, converted as make-rectangular converts it.
+	if hasLongPrecisionMarker(trim) {
+		iam, err := ParseRealFloatString(trim)
+		if err != nil {
+			return nil, err
+		}
+		return values.NewInexactBigComplex(values.NewInteger(0), iam), nil
 	}
 
 	// Exact coefficient — integer OR rational (R7RS §6.2.5: the coefficient of
@@ -254,6 +280,22 @@ func ParseComplexStringNumber(s string) (values.Number, error) {
 	realStr := trim[:signPos]
 	imagStr := trim[signPos:] // includes the sign
 
+	// A part marked l asks for long precision, which only a BigComplex holds.
+	// Each part is read as the standalone real it spells, so the marker on one
+	// part does not reach the other, and the pair is built as make-rectangular
+	// builds it.
+	if hasLongPrecisionMarker(realStr) || hasLongPrecisionMarker(imagStr) {
+		rel, err := parseComplexPart(realStr)
+		if err != nil {
+			return nil, err
+		}
+		img, err := parseComplexPart(imagStr)
+		if err != nil {
+			return nil, err
+		}
+		return values.NewInexactBigComplex(rel, img), nil
+	}
+
 	// Exact path: both parts integer or rational → exact BigComplex.
 	//
 	// values.Simplify collapses an exact-zero imaginary part to the exact real
@@ -302,6 +344,20 @@ func ParseComplexStringNumber(s string) (values.Number, error) {
 		}
 	}
 	return values.NewComplexFromParts(rel, img), nil
+}
+
+// parseComplexPart reads one part of a rectangular complex as the real it would
+// be standing alone: exact, a Float, or (marked l, or past float64 range) a
+// BigFloat. A bare sign is the coefficient of "+i" / "-i".
+func parseComplexPart(s string) (values.Number, error) {
+	if isExactPartString(s) {
+		return parseExactPart(s)
+	}
+	sf, ok := ParseSpecialFloat(s)
+	if ok {
+		return sf, nil
+	}
+	return ParseRealFloatString(s)
 }
 
 // hasSuffixFoldedI returns true if s ends with 'i' or 'I'.
@@ -371,10 +427,13 @@ func MakeExactNumber(n values.Number) (values.Number, error) {
 		// for; the *Float and *BigFloat arms above already call it.
 		return values.Simplify(values.NewBigComplex(reNum, imNum)), nil
 	case *values.BigComplex:
-		if v.IsExact() {
-			return v, nil
+		// An inexact BigComplex is what an l-marked complex literal reads as,
+		// so #e1.5l0+2i reaches here as #e1.5+2i reaches the *Complex arm.
+		q, err := v.ToExact()
+		if err != nil {
+			return nil, werr.WrapForeignErrorf(err, "MakeExactNumber: cannot convert BigComplex to exact")
 		}
-		return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "MakeExactNumber: cannot convert inexact BigComplex to exact")
+		return q, nil
 	default:
 		return nil, werr.WrapForeignErrorf(werr.ErrExactnessConversion, "MakeExactNumber: unsupported number type %T", n)
 	}
@@ -433,6 +492,11 @@ func MakeInexactNumber(n values.Number) values.Number {
 	case *values.Rational:
 		return values.NewFloat(v.Float64Truncated())
 	case *values.BigComplex:
+		// An inexact BigComplex (BigFloat parts, from an l-marked literal) is
+		// already inexact: #i leaves it, as it leaves a BigFloat.
+		if !v.IsExact() {
+			return v
+		}
 		reFloat := v.RealAsBigFloat().Float64Truncated()
 		imFloat := v.ImagAsBigFloat().Float64Truncated()
 		return values.NewComplexFromParts(reFloat, imFloat)

@@ -772,6 +772,8 @@ func TestStringToNumberAgreesWithReader(t *testing.T) {
 		"0x1p3", "0x1.8p1", "0X10", "1/-2", "1/+2", "4/-2", "1E3", "1D3", "+INF.0", "-NAN.0",
 		// Complex shapes the tokenizer used to split or misread.
 		".5+.5i", ".5e1+1i", "+1+.5i", "-12-.5e1i", "+nan.0+1i", "-nan.0-i",
+		// A part marked l makes a BigComplex.
+		"1.5l0+2i", "+1.5l0i", "1-1.5l0i", "1l0+i",
 	}
 	for _, pf := range prefixes {
 		for _, num := range numerals {
@@ -811,4 +813,16 @@ func readerDefectRow(prefix, numeral string) bool {
 		}
 	}
 	return false
+}
+
+// TestStringToNumberRadixFractionPastFloat64 is the string->number half of
+// TestReadSyntaxRadixFractionPastFloat64KeepsItsDigits: the radix argument
+// reaches the same precision rule as a #x prefix.
+func TestStringToNumberRadixFractionPastFloat64(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	digits := "1" + strings.Repeat("0", 255) + "1"
+	code := `(list (= (exact (string->number "` + digits + `.0" 16)) (string->number "` + digits + `" 16))` +
+		` (= (exact (string->number "#x` + digits + `.0")) (string->number "#x` + digits + `")))`
+	c.Assert(eval(t, engine, code).SchemeString(), qt.Equals, "(#t #t)")
 }

@@ -171,6 +171,14 @@ func TestMakeRectangularExactTypes(t *testing.T) {
 		// The control: an EXACT zero imaginary part still collapses, on the
 		// same branch, so the fix narrowed the rule rather than removing it.
 		{"make-rectangular bigfloat with exact zero imag still collapses", `(real? (make-rectangular #m1.0 0))`, values.TrueValue},
+		// An inexact complex has no exact part: an exact partner of a BigFloat
+		// converts at its precision, as a Rational partner always did (Racket and
+		// Chez: (make-rectangular 1.5 2) is 1.5+2.0i). The Integer and BigInteger
+		// arms used to keep it exact, the one way to mint a mixed-exactness complex.
+		{"make-rectangular bigfloat makes an integer imag inexact", `(inexact? (imag-part (make-rectangular #m1.5 2)))`, values.TrueValue},
+		{"make-rectangular bigfloat makes an integer real inexact", `(inexact? (real-part (make-rectangular 2 #m1.5)))`, values.TrueValue},
+		{"make-rectangular bigfloat makes a biginteger real inexact", `(inexact? (real-part (make-rectangular (expt 10 30) #m1.5)))`, values.TrueValue},
+		{"make-rectangular bigfloat with an exact zero real", `(inexact? (real-part (make-rectangular 0 #m1.5)))`, values.TrueValue},
 		// The plain-float branch had the SAME asymmetry pointing the other
 		// way: (make-rectangular #m1.0 0) collapsed while
 		// (make-rectangular 1.0 0) answered 1.0+0.0i with real? => #f. All
@@ -344,6 +352,34 @@ func TestBigComplexTranscendentalPrecision(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result := eval(t, engine, tc.code)
 			c.Assert(result.Internal(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestComplexLongLiteralIsMakeRectangular pins the reader rule for a complex
+// literal with an l-marked part: it is make-rectangular of the parts read
+// standing alone, through the reader and through string->number alike.
+func TestComplexLongLiteralIsMakeRectangular(t *testing.T) {
+	engine := newEngine(t)
+	tcs := []struct{ lit, re, im string }{
+		{"0.0+1.5l0i", "0.0", "1.5l0"},
+		{"1.5l0+2l0i", "1.5l0", "2l0"},
+		{"1.5l0+2i", "1.5l0", "2"},
+		{"1.5l0-1/3i", "1.5l0", "-1/3"},
+		{"2.5+1.5l0i", "2.5", "1.5l0"},
+		{"1l0+i", "1l0", "1"},
+		{"+1.5l0i", "0", "1.5l0"},
+		{"1.5l0+0.0i", "1.5l0", "0.0"},
+		{"1.5l0+0i", "1.5l0", "0"},
+		{"+inf.0-1.5l0i", "+inf.0", "-1.5l0"},
+		{"1.2345678901234567890123456789l0+1i", "1.2345678901234567890123456789l0", "1"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.lit, func(t *testing.T) {
+			c := qt.New(t)
+			mr := "(make-rectangular " + tc.re + " " + tc.im + ")"
+			code := "(list (eqv? " + tc.lit + " " + mr + ") (eqv? (string->number \"" + tc.lit + "\") " + mr + ") (exact? " + tc.lit + "))"
+			c.Assert(eval(t, engine, code).SchemeString(), qt.Equals, "(#t #t #f)", qt.Commentf("%s", code))
 		})
 	}
 }

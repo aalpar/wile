@@ -16,6 +16,7 @@ package parser
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"strings"
 	"testing"
@@ -190,10 +191,21 @@ func TestBigFloatWriteReadRoundTrip(t *testing.T) {
 		"1.2345678901234567890123456789",
 	}
 
+	// Values the reader's text-derived precision would not reproduce if it
+	// counted an exponent: a 256-bit power of ten writes as 1l+k, which must read
+	// back as the same 256-bit neighbour, not as exact 10^k.
+	ten := func(k int64) *values.BigFloat {
+		n := new(big.Int).Exp(big.NewInt(10), big.NewInt(k), nil)
+		return values.NewBigFloat(new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetInt(n))
+	}
+	built := map[string]*values.BigFloat{"256-bit 10^120": ten(120), "256-bit 10^400": ten(400)}
 	for _, tc := range tcs {
+		built[tc] = values.NewBigFloatFromString(tc)
+	}
+
+	for tc, bf := range built {
 		t.Run(tc, func(t *testing.T) {
 			c := qt.New(t)
-			bf := values.NewBigFloatFromString(tc)
 			c.Assert(bf, qt.IsNotNil)
 
 			written, err := values.WriteValueToString(bf)
@@ -248,4 +260,89 @@ func TestExponentMarkersStayDecimalOnly(t *testing.T) {
 			c.Assert(i.Value, qt.Equals, tc.expect)
 		})
 	}
+}
+
+// TestReadComplexLongPrecisionMarker pins the l marker inside a complex literal:
+// a part marked l reads as a BigFloat that keeps its digits, the result is a
+// BigComplex, and the marker does not reach the other part, which is read as
+// it would be standing alone and then made inexact (both parts BigFloat, as
+// make-rectangular builds them). Unmarked literals are the controls.
+func TestReadComplexLongPrecisionMarker(t *testing.T) {
+	const digits = "1.2345678901234567890123456789"
+	longDigits, _, err := big.ParseFloat(digits, 10, values.DefaultBigFloatPrecision, big.ToNearestEven)
+	qt.Assert(t, err, qt.IsNil)
+	third := new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetRat(big.NewRat(1, 3))
+	tcs := []struct {
+		input    string
+		re, im   *big.Float
+		realOnly bool
+	}{
+		{input: "0.0+1.5l0i", re: big.NewFloat(0), im: big.NewFloat(1.5)},
+		{input: "1.5l0+2l0i", re: big.NewFloat(1.5), im: big.NewFloat(2)},
+		{input: "1.5l0+2i", re: big.NewFloat(1.5), im: big.NewFloat(2)},
+		{input: "1.5l0+1/3i", re: big.NewFloat(1.5), im: third},
+		{input: "2.5+1.5l0i", re: big.NewFloat(2.5), im: big.NewFloat(1.5)},
+		{input: "1l0-i", re: big.NewFloat(1), im: big.NewFloat(-1)},
+		{input: "+1.5l0i", re: big.NewFloat(0), im: big.NewFloat(1.5)},
+		{input: "-1.5L0i", re: big.NewFloat(0), im: big.NewFloat(-1.5)},
+		{input: "1.5l0+0.0i", re: big.NewFloat(1.5), im: big.NewFloat(0)},
+		{input: "+inf.0+1.5l0i", re: new(big.Float).SetInf(false), im: big.NewFloat(1.5)},
+		{input: digits + "l0+1i", re: longDigits, im: big.NewFloat(1)},
+		{input: "1+" + digits + "l0i", re: big.NewFloat(1), im: longDigits},
+		// An exact zero imaginary part collapses to the BigFloat real.
+		{input: "1.5l0+0i", re: big.NewFloat(1.5), realOnly: true},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewNamespace().Runtime()
+			syn, err := NewParser(env, true, strings.NewReader(tc.input)).ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNil)
+			got := syn.Unwrap()
+			if tc.realOnly {
+				bf, ok := got.(*values.BigFloat)
+				c.Assert(ok, qt.IsTrue, qt.Commentf("expected BigFloat, got %T: %v", got, got))
+				c.Assert(bf.BigFloatValue().Cmp(tc.re), qt.Equals, 0)
+				return
+			}
+			bc, ok := got.(*values.BigComplex)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected BigComplex, got %T: %v", got, got))
+			for _, part := range []struct {
+				name string
+				n    values.Number
+				want *big.Float
+			}{{"real", bc.Real(), tc.re}, {"imag", bc.Imag(), tc.im}} {
+				bf, ok := part.n.(*values.BigFloat)
+				c.Assert(ok, qt.IsTrue, qt.Commentf("%s part: expected BigFloat, got %T", part.name, part.n))
+				c.Assert(bf.BigFloatValue().Cmp(part.want), qt.Equals, 0,
+					qt.Commentf("%s part: got %v, want %v", part.name, bf.BigFloatValue(), part.want))
+			}
+		})
+	}
+
+	// Controls: no l, no BigComplex.
+	for input, want := range map[string]string{"1.5+2.5i": "*values.Complex", "1+2i": "*values.BigComplex"} {
+		env := environment.NewNamespace().Runtime()
+		syn, err := NewParser(env, true, strings.NewReader(input)).ReadSyntax(context.TODO())
+		qt.Assert(t, err, qt.IsNil)
+		got := syn.Unwrap()
+		qt.Assert(t, fmt.Sprintf("%T", got), qt.Equals, want, qt.Commentf("%s", input))
+		bc, ok := got.(*values.BigComplex)
+		if ok {
+			qt.Assert(t, bc.IsExact(), qt.IsTrue)
+		}
+	}
+}
+
+// TestInexactPrefixLeavesAnInexactBigComplex pins that #i is the identity on
+// an inexact BigComplex, as it is on a BigFloat: #i1.5l0+2i keeps its BigFloat
+// parts rather than narrowing to a float64 Complex.
+func TestInexactPrefixLeavesAnInexactBigComplex(t *testing.T) {
+	c := qt.New(t)
+	env := environment.NewNamespace().Runtime()
+	syn, err := NewParser(env, true, strings.NewReader("#i1.5l0+2i")).ReadSyntax(context.TODO())
+	c.Assert(err, qt.IsNil)
+	got := syn.Unwrap()
+	_, ok := got.(*values.BigComplex)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("#i1.5l0+2i read as %T", got))
 }

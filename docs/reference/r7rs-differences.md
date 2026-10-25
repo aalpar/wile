@@ -748,8 +748,13 @@ four size specifications are mapped onto those available". Wile has two, `Float`
 **This applies on output too.** A `BigFloat` writes with `l`, so `1e1000` reads
 as a BigFloat and writes back as `1l+1000`, and `#m1.5` writes as `1.5l0`.
 Writing `e` would claim default precision, and the value would read back as a
-`Float` — a different type from the one written. Inside a complex number the
-marker is omitted, since a component is not read back as a real.
+`Float` — a different type from the one written. A complex literal with an
+`l`-marked part reads as the `BigComplex` `(make-rectangular` *re* *im*`)`
+builds from the parts read standing alone, so `1.5l0+2i` is a `BigComplex` of
+two BigFloats while `1.5+2i` stays a float64 complex. The writer still omits the
+marker inside a complex, so a `BigComplex` reads back as a float64 complex: a
+float64 operand meeting an exact complex yields a `BigComplex` today, and a
+marker would print in plain R7RS results such as `(+ 1.5 +i)`.
 
 **Wile is the only Scheme where `l` selects a different representation.** Racket,
 Chez, and MIT all collapse the four markers onto one flonum type, so `1.5l0`

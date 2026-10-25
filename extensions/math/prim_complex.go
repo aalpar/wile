@@ -73,24 +73,14 @@ func PrimMakeRectangular(mc machine.CallContext) error {
 	_, iIsBigFloat := i.(*values.BigFloat)
 
 	if rIsBigFloat || iIsBigFloat {
-		prec := values.OperandPrecision(r, i)
-		realPart, err := toBigComplexPart(r, prec, "make-rectangular")
-		if err != nil {
-			return err
-		}
-		imagPart, err := toBigComplexPart(i, prec, "make-rectangular")
-		if err != nil {
-			return err
-		}
-		// Simplify, not IsZero: on this branch at least one argument is
-		// INEXACT, and only an EXACT zero imaginary part licenses the descent
-		// to a real (values.Simplify, maybeSimplify, BigComplex.IsReal all say
-		// so, and R7RS agrees — (real? -2.5+0.0i) is #f). IsZero asked about
-		// magnitude, so (make-rectangular #m1.0 0.0) answered 1.0l0 while
-		// (make-rectangular 1.0 0.0) answered 1.0+0.0i: the same call, the
-		// same arguments modulo the real part's precision tier, opposite
-		// answers. (make-rectangular #m1.0 0) still collapses, correctly.
-		mc.SetValue(values.Simplify(values.NewBigComplex(realPart, imagPart)))
+		// NewInexactBigComplex collapses on an EXACT zero imaginary part only:
+		// on this branch at least one argument is inexact, and only an exact zero
+		// licenses the descent to a real (R7RS agrees, (real? -2.5+0.0i) is #f),
+		// so (make-rectangular #m1.0 0.0) stays complex, as
+		// (make-rectangular 1.0 0.0) does, while (make-rectangular #m1.0 0)
+		// collapses. An exact partner converts at the BigFloat's precision, as
+		// in every other inexact complex.
+		mc.SetValue(values.NewInexactBigComplex(rNum, iNum))
 		return nil
 	}
 
@@ -156,25 +146,6 @@ func isRealNumber(v values.Value) bool {
 		return n.IsReal()
 	default:
 		return false
-	}
-}
-
-// toBigComplexPart converts a real to a part of an inexact BigComplex whose
-// other part is a BigFloat; a Rational rounds at prec, that part's precision.
-func toBigComplexPart(v values.Value, prec uint, name string) (values.Number, error) {
-	switch n := v.(type) {
-	case *values.BigInteger:
-		return n, nil
-	case *values.BigFloat:
-		return n, nil
-	case *values.Integer:
-		return values.NewBigIntegerFromInt64(n.Value), nil
-	case *values.Float:
-		return values.NewBigFloatFromFloat64(n.Value), nil
-	case *values.Rational:
-		return values.NewBigFloat(new(big.Float).SetPrec(prec).SetRat(n.Rat())), nil
-	default:
-		return nil, werr.WrapForeignErrorf(werr.ErrNotAReal, "%s: expected a real number but got %T", name, v)
 	}
 }
 
