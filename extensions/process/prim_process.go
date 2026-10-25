@@ -180,7 +180,18 @@ func PrimProcessSpawn(mc machine.CallContext) error {
 		return iterErr
 	}
 
-	cmd := exec.CommandContext(ctx, command.Value, args...)
+	// The child outlives a with-timeout thunk that spawned it, as a thread does:
+	// only the timer's expiry, or the ctx below the timer, kills it.
+	// The ctx is held for the child's life and dropped once it is reaped; a spawn
+	// that fails drops it here.
+	spawnCtx, release := machine.SpawnContext(ctx)
+	spawned := false
+	defer func() {
+		if !spawned {
+			release()
+		}
+	}()
+	cmd := exec.CommandContext(spawnCtx, command.Value, args...)
 	// cmd.Err carries a LookPath failure (including exec.ErrDot). Report it here
 	// rather than letting Start() surface it, so the file:exec gate below is never
 	// asked about an empty or unresolved path. process:exec has already passed, so
@@ -222,13 +233,15 @@ func PrimProcessSpawn(mc machine.CallContext) error {
 		return werr.WrapForeignProcessError(err, "process-spawn", command.Value)
 	}
 
-	q := values.NewProcess(
+	q := values.NewSpawnedProcess(
 		command.Value,
 		cmd,
 		values.NewCharacterOutputPortFromWriterWithName(stdinPipe, pipeLabel(command.Value, "stdin")),
 		values.NewCharacterInputPortFromReaderWithName(stdoutPipe, pipeLabel(command.Value, "stdout")),
 		values.NewCharacterInputPortFromReaderWithName(stderrPipe, pipeLabel(command.Value, "stderr")),
+		release,
 	)
+	spawned = true
 	trackSpawnedProcess(mc, q)
 	mc.SetValue(q)
 	return nil

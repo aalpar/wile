@@ -51,6 +51,9 @@ type Process struct {
 	done     chan struct{}
 	waitErr  error
 	reaped   atomic.Bool
+
+	// afterReap, when non-nil, runs once the reap has completed (NewSpawnedProcess).
+	afterReap func()
 }
 
 // NewProcess creates a Process value. The cmd may be nil for testing.
@@ -62,13 +65,29 @@ func NewProcess(
 	stdout *PortObject,
 	stderr *PortObject,
 ) *Process {
+	return NewSpawnedProcess(command, cmd, stdin, stdout, stderr, nil)
+}
+
+// NewSpawnedProcess is NewProcess with afterReap, which, when non-nil, runs once
+// the child has been reaped, on the reaping goroutine and before any wait
+// returns: it drops what was held for the child's life (its spawn ctx). It
+// must not wait on this process, which would wait on itself.
+func NewSpawnedProcess(
+	command string,
+	cmd *exec.Cmd,
+	stdin *PortObject,
+	stdout *PortObject,
+	stderr *PortObject,
+	afterReap func(),
+) *Process {
 	return &Process{
-		cmd:     cmd,
-		command: command,
-		stdin:   stdin,
-		stdout:  stdout,
-		stderr:  stderr,
-		done:    make(chan struct{}),
+		cmd:       cmd,
+		command:   command,
+		stdin:     stdin,
+		stdout:    stdout,
+		stderr:    stderr,
+		done:      make(chan struct{}),
+		afterReap: afterReap,
 	}
 }
 
@@ -130,6 +149,9 @@ func (p *Process) WaitContext(ctx context.Context) (bool, error) {
 // reap makes the process's one cmd.Wait and publishes its outcome.
 func (p *Process) reap() {
 	p.waitErr = p.cmd.Wait()
+	if p.afterReap != nil {
+		p.afterReap()
+	}
 	p.reaped.Store(true)
 	close(p.done)
 }

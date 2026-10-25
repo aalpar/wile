@@ -131,9 +131,20 @@ which owns the timers, decides it (`supersedingTimerInterrupt`,
   runs the handler. Not converted: a control transfer already in flight, and a
   security denial, which must reach the embedder however the program is written.
 - **Anything else**: an embedder cancel or deadline, `thread-terminate!`, or the
-  end of the `with-timeout` thunk a thread was started in, whether the thunk
-  returned or its timer fired. A started thread's root has no synchronous parent,
-  so with no `with-timeout` of its own no context on its chain owns a timer. The
+  expiry of a `with-timeout` timer armed around a thread's start. Work a timed
+  thunk starts (a thread, a `process-spawn` child) outlives the thunk's normal
+  return and any escape from it. Its ctx (`machine.SpawnContext`) keeps the
+  starter's values and ends when a timer armed around the start expires, when
+  the ctx below those timers ends, or when a ctx a host layered above them ends
+  on its own, with that ending's `Err()` and cause, so a deadline stays
+  `context.DeadlineExceeded` and a cancel `context.Canceled`. Leaving a timer
+  ends its ctx with a cause of its own (`errTimerLeft`, which reads and matches
+  as `context.Canceled`), which is how the two are told apart. A thread's ctx
+  hides the starter's timers, so a thread it starts derives from it directly,
+  and outlives the thread, as what it started may (a child's ctx is released
+  when the child is reaped, a thread's only if it cannot start). A
+  started thread's root has no synchronous parent, so with no `with-timeout` of
+  its own no context on its chain owns a timer. The
   failure is an ordinary condition: a `guard` around the wait can catch it, and a
   program that catches it and finishes returns normally even though its context is
   cancelled (see *Boundaries*). So is a procedure a host function runs through
@@ -191,6 +202,13 @@ plain `false`; the primitive reads the ctx and decides. A timed acquire that tim
 out while its ctx is also cancelled reports the cancellation. A cv signal claimed
 at the cancellation boundary still answers `#t`: `blockOnWaiter` deregisters the
 waiter on the ctx arm unless `Signal`/`Broadcast` already claimed it.
+
+`exit` is not a cancellation. Called in any thread, and authorized
+(`process:exit`; refused, it raises the authorizer's error like any denial), it
+ends the process at once
+(`os.Exit`, after the host's exit hook): the other threads stop wherever they are
+and their `dynamic-wind` after thunks do not run, as in Racket. Today the calling
+thread's do not run either, an R7RS §6.14 gap (`docs/reference/r7rs-differences.md`).
 
 ## Who cancels the ctx: three sources, three safety arguments
 
@@ -270,10 +288,13 @@ be reported as a terminated thread's result. Pinned channel-free by
   the one `cmd.Wait` going, so the child's pipes still close when it exits, as
   after any completed wait. Separately, `process-spawn` uses
   `exec.CommandContext`, so the ctx a child was spawned under bounds its life: a
-  child spawned inside a timed thunk, or under an embedder ctx, is killed when
-  that ctx ends, and a later wait under a live ctx answers the killed status
-  (`-1`); a wait under the same ended ctx usually raises first. The spawning ctx
-  bounds the child; the waiting ctx bounds only the wait.
+  child spawned under an embedder ctx is killed when that ctx ends, and one
+  spawned inside a timed thunk when its timer expires (not when the thunk
+  returns: the spawn ctx is `machine.SpawnContext`'s, as a thread's is), and a
+  later wait under a live ctx answers the killed status (`-1`); a wait under the
+  same ended ctx usually raises first. The spawning ctx bounds the child; the
+  waiting ctx bounds only the wait. `system` runs its child to completion inside
+  the call, so the call's own ctx bounds it.
 - **A cancelled run never reports success to the embedder, but Scheme can still
   carry on past a cancellation.** `ErrOperationCancelled` is an ordinary condition,
   so a `guard` around a wait can catch it and the program continues until its next
@@ -422,9 +443,28 @@ this pins unchanged behaviour and passes on the code before the fix). `TestMutex
   held. The thread signals just before its wait, and the thunk waits for that
   signal before sleeping into the timer, so the cancellation reaches the wait and
   not the thread's first VM poll, whose reason would name the poll instead.
-- `TestJoinReportsJoineeCancellationAsUncaught`: a joinee that died of its own
-  cancelled wait is reported as an uncaught exception, not as the joiner's
-  cancellation. Same handshake.
+- `TestJoinReportsJoineeCancellationAsUncaught` (`pkg/machine`, on an injected
+  expiry): a joinee that died of its own cancelled wait is reported as an
+  uncaught exception, not as the joiner's cancellation. Same handshake.
+- `TestSpawnContextKeepsTheEndingsClass` (`pkg/machine`, real deadline-backed
+  timer ctxs): an expiry and a host deadline end the work's ctx as
+  `context.DeadlineExceeded`, a host cancel as `context.Canceled`.
+  `TestThreadStartedByAThreadEndsWithIt`: a thread a started thread starts ends
+  with it. `TestSpawnContextIsReleasedWhenTheWorkEnds`: the spawn ctx is ended
+  when a thread's start fails and when a child is reaped.
+  `TestWorkAThreadStartedOutlivesTheThread`: a thread's end does not end what
+  it started, with or without a timer.
+  `TestChildSpawnedInATimedThunkEndsOnlyByExpiry`: the `process-spawn` half;
+  `TestProcessSpawnedInATimedThunkDiesWithTheHostCtx` (`extensions/process`):
+  such a child still dies with the host's ctx.
+- `TestThreadStartedInATimedThunkEndsOnlyByExpiry` (`pkg/machine`): a thread a
+  `with-timeout` thunk started, at top level or inside `eval`, survives the
+  thunk's normal return and an escape from it, and is cancelled by the timer's
+  expiry, and by an outer timer's expiry after an inner thunk returned.
+  `TestThreadStartedInATimedThunkStillEndsWithItsEngine`: such a thread still
+  ends with the host's ctx, with a ctx the host layered above the timer, and
+  with `Engine.Close`. `TestLeavingATimerEndsItsContext`
+  (`pkg/machine`): a normal return or an escape still cancels the timer's own ctx.
 - `TestTerminateUnparksUntimedThreadJoin` — terminating the thread that is
   **parked in** the join unparks it. Its `joinee` arm is a labelled control that
   cannot fail: terminating the thread being **joined** always worked, and is the

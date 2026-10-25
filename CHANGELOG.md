@@ -53,6 +53,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   binds (`car`) still decides by spelling, so it still matches another
   library's `car`, where petite falls back.
 
+- **A thread or child process started inside a `with-timeout` thunk outlives
+  the thunk.** The thunk's normal return, or an escape from it, cancelled a
+  thread it started, which then died with "context canceled" wherever it was,
+  and killed a `process-spawn` child. Only the timer's expiry (or an enclosing
+  timer's) ends them now; the host's ctx, `thread-terminate!` and `Engine.Close`
+  still do, with the same `context.DeadlineExceeded` / `context.Canceled` class
+  as before.
+
+- **`exit` in a thread is documented: it ends the process.** The other threads
+  stop and their `dynamic-wind` after thunks do not run, as in Racket
+  (`docs/reference/r7rs-differences.md` item 22, which also records that the
+  calling thread's after thunks do not run either; behaviour unchanged).
+
 - **BREAKING (behavior): `char-ready?` requires a textual input port.** It
   answered `#t` without looking at its argument, so `(char-ready? 5)`, a binary
   input port and an output port all answered `#t`; each is now an error, as

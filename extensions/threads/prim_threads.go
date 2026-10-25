@@ -168,8 +168,14 @@ func PrimThreadStart(mc machine.CallContext) error {
 		return err
 	}
 
-	err = thread.Start(mc.Context())
+	// The spawn ctx is released only when the thread cannot start. A started
+	// thread's ctx is the parent of whatever the thread starts in turn, which can
+	// outlive the thread and must still end with the host's ctx, so its watches
+	// stay for as long as the ctx below them lives.
+	ctx, release := machine.SpawnContext(mc.Context())
+	err = thread.Start(ctx)
 	if err != nil {
+		release()
 		return werr.WrapForeignErrorf(err, "thread-start!")
 	}
 

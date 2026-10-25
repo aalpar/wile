@@ -16,6 +16,7 @@ package machine
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
@@ -75,6 +76,38 @@ func WithTimerFiringOnCue(ctx context.Context) (context.Context, func()) {
 		if expire != nil {
 			expire()
 		}
+	}
+	return context.WithValue(ctx, timerClockKey{}, clock), fire
+}
+
+// WithTimersFiringOnCue is WithTimerFiringOnCue for a run that arms several
+// with-timeouts: fire(i) expires the i-th timer armed in the run, counting from 0,
+// whatever its duration. Firing a timer not yet armed, or one already over, does
+// nothing.
+func WithTimersFiringOnCue(ctx context.Context) (context.Context, func(i int)) {
+	// Timers are armed on whichever thread runs a with-timeout.
+	var mu sync.Mutex
+	var expires []func()
+	clock := timerClock(func(_ *MachineContext, parent context.Context, _ time.Duration, cause error) (context.Context, context.CancelFunc) {
+		inner, cancel := context.WithCancelCause(parent)
+		mu.Lock()
+		defer mu.Unlock()
+		expires = append(expires, func() {
+			cancel(cause)
+		})
+		return inner, func() {
+			cancel(context.Canceled)
+		}
+	})
+	fire := func(i int) {
+		mu.Lock()
+		if i >= len(expires) {
+			mu.Unlock()
+			return
+		}
+		expire := expires[i]
+		mu.Unlock()
+		expire()
 	}
 	return context.WithValue(ctx, timerClockKey{}, clock), fire
 }
