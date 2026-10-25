@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
@@ -714,6 +715,40 @@ func TestSqrtExptBigTierAgreement(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			c.Assert(eval(t, engine, tc.code).Internal(), qt.Equals, values.TrueValue)
+		})
+	}
+}
+
+// TestExptUnitMagnitudeBounded pins that expt answers a base of magnitude 1, or
+// a Rational base that rounds to 1 at the working precision, without a log
+// refinement whose precision grows with the exponent's size. The budget is
+// generous: a row is about boundedness (the unbounded form took over 40s), not
+// speed.
+func TestExptUnitMagnitudeBounded(t *testing.T) {
+	engine := newEngine(t)
+	const budget = 10 * time.Second
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"minus one, even wide exact exponent", `(expt #m-1 (expt 10 100000))`, "1.0l0"},
+		{"minus one, even exact exponent", `(expt #m-1 (expt 10 30000))`, "1.0l0"},
+		{"minus one, wide bigfloat exponent", `(expt #m-1 #m1e100000)`, "1.0l0"},
+		// (1+2^-400)^(10^300000) = exp(10^300000 * 2^-400) overflows
+		{"rational just above one, wide exponent", `(expt (+ 1 (/ 1 (expt 2 400))) #m1e300000)`, "+inf.0"},
+		// (1-2^-400)^(-10^300000) = exp(10^300000 * 2^-400) overflows
+		{"rational just below one, wide negative exponent", `(expt (- 1 (/ 1 (expt 2 400))) #m-1e300000)`, "+inf.0"},
+		{"rational just above one, wide negative exponent", `(expt (+ 1 (/ 1 (expt 2 400))) #m-1e300000)`, "0.0l0"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			start := time.Now()
+			result := eval(t, engine, tc.code).Internal()
+			elapsed := time.Since(start)
+			c.Assert(result.SchemeString(), qt.Equals, tc.want)
+			c.Assert(elapsed < budget, qt.IsTrue, qt.Commentf("%s took %v", tc.code, elapsed))
 		})
 	}
 }

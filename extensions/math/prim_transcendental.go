@@ -810,6 +810,12 @@ func bigPowAbs(base values.Number, a, y *big.Float, prec, wp uint) *big.Float {
 	case a.Sign() == 0 || a.IsInf():
 		return zeroOrInf(prec, a.IsInf() != y.Signbit())
 	}
+	// |x| = 1 is 1 under any finite y; the caller applies the sign. Answering
+	// it here keeps a wide y off the log refinement below, which would grow
+	// with y's exponent and find ln 1 = 0 anyway.
+	if cmpAbsOne(base, a) == 0 {
+		return new(big.Float).SetPrec(prec).SetInt64(1)
+	}
 	n, acc := y.Int64()
 	if acc == big.Exact {
 		return bigPowInt(a, n, prec)
@@ -821,6 +827,18 @@ func bigPowAbs(base values.Number, a, y *big.Float, prec, wp uint) *big.Float {
 	// needs y's binary exponent in extra bits, from the base reconverted at
 	// that precision (a Rational base is not exact at wp).
 	t := new(big.Float).SetPrec(wp).Mul(y, values.BigLog(a, wp))
+	r, isRational := base.(*values.Rational)
+	if t.Sign() == 0 && isRational {
+		// Only a Rational base rounds to 1 at wp; every other a ≠ 1 is exact
+		// there. ln|r| ≈ |r|-1, exactly known, bounds t without a log: from
+		// 2^32 on it over- or underflows, and below that y's exponent, and so
+		// the refinement's precision, is bounded by the Rational's own size.
+		d := new(big.Rat).Sub(new(big.Rat).Abs(r.Rat()), big.NewRat(1, 1))
+		t0 := new(big.Float).SetPrec(64).Mul(y, new(big.Float).SetPrec(64).SetRat(d))
+		if t0.MantExp(nil) > 32 {
+			return zeroOrInf(prec, t0.Sign() > 0)
+		}
+	}
 	yExp := y.MantExp(nil)
 	if yExp > 0 && t.MantExp(nil) <= 32 {
 		lp := wp + uint(yExp)
