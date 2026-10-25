@@ -31,10 +31,11 @@ import (
 func TestChibiTestComparator(t *testing.T) {
 	t.Parallel()
 
-	c := qt.New(t)
 	ctx := context.Background()
 
-	newEngine := func() *wile.Engine {
+	// The handle is the SUBTEST's: a FailNow on the parent's, from the
+	// subtest's goroutine, aborts the wrong test.
+	newEngine := func(c *qt.C) *wile.Engine {
 		eng, err := wile.NewEngine(ctx,
 			wile.WithProfile(wile.KitchenSink),
 			wile.WithSourceFS(stdlib.FS),
@@ -94,7 +95,8 @@ func TestChibiTestComparator(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			eng := newEngine()
+			c := qt.New(t)
+			eng := newEngine(c)
 			result, err := eng.EvalMultiple(ctx, tc.code)
 			c.Assert(err, qt.IsNil)
 			c.Assert(result.SchemeString(), qt.Equals, tc.want)

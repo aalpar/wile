@@ -93,7 +93,7 @@ func TestLibraryNameVersionReference(t *testing.T) {
 	}
 	for _, tc := range accepted {
 		c.Run(tc.name, func(c *qt.C) {
-			got := evalSRFI(c, newSRFITestEngine(t), tc.expr)
+			got := evalSRFI(c, newSRFITestEngine(c), tc.expr)
 			c.Assert(got, qt.Equals, `#t`)
 		})
 	}
@@ -108,7 +108,7 @@ func TestLibraryNameVersionReference(t *testing.T) {
 	}
 	for _, tc := range rejected {
 		c.Run(tc.name, func(c *qt.C) {
-			_, err := newSRFITestEngine(t).EvalMultiple(t.Context(), tc.expr)
+			_, err := newSRFITestEngine(c).EvalMultiple(c.Context(), tc.expr)
 			c.Assert(err, qt.IsNotNil)
 		})
 	}
@@ -166,7 +166,7 @@ func TestRnrsHashtablesRecognitionIsIndependentOfTheExportList(t *testing.T) {
 		c.Run(tc.name, func(c *qt.C) {
 			// A FRESH engine per case: an import mutates the top level, so
 			// reusing one engine would let an earlier case decide a later one.
-			got := evalSRFI(c, newSRFITestEngine(t), tc.expr)
+			got := evalSRFI(c, newSRFITestEngine(c), tc.expr)
 			c.Assert(got, qt.Equals, `#t`)
 		})
 	}
