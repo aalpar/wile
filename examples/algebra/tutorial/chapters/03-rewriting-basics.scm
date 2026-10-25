@@ -35,18 +35,20 @@
     (lambda (p) (write t p) (get-output-string p))))
 
 (define (kind-rank t)
-  (cond ((number? t) 0) ((symbol? t) 1) ((string? t) 2) ((char? t) 3) ((pair? t) 4) (else 5)))
+  (cond ((real? t) 0) ((symbol? t) 1) ((string? t) 2)
+        ((char? t) 3) ((pair? t) 4) (else 5)))
 
 (define (sexp-before? a b)
-  ;; A strict total order on terms: numbers, symbols, strings, chars, pairs,
-  ;; then anything else. Numbers by value, exact before inexact on a tie
-  ;; (so 1 and 1.0 are distinct); strings and chars by their own order;
-  ;; pairs and the rest by their written form.
+  ;; A strict total order on the terms this chapter builds: reals, symbols,
+  ;; strings, chars, pairs, then anything else. Reals by value, exact before
+  ;; inexact on a tie (so 1 and 1.0 are distinct); strings and chars by their
+  ;; own order; pairs and the rest by their written form. Not ordered: NaN,
+  ;; -0.0 against 0.0, and distinct values that print alike (two procedures).
   (let ((ra (kind-rank a)) (rb (kind-rank b)))
     (cond
       ((< ra rb) #t)
       ((> ra rb) #f)
-      ((number? a) (or (< a b) (and (= a b) (exact? a) (inexact? b))))
+      ((real? a)   (or (< a b) (and (= a b) (exact? a) (inexact? b))))
       ((symbol? a) (string<? (symbol->string a) (symbol->string b)))
       ((string? a) (string<? a b))
       ((char? a)   (char<? a b))
