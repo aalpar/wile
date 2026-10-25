@@ -147,7 +147,7 @@ func equalHashStep(v Value, h uint64, stack []Value, budget int) (uint64, []Valu
 		// rather than merely harmless. Coarse by construction, which the
 		// one-directional contract permits.
 		h = mixHash(h, hashUint64(seedHashtable, uint64(t.Size())))
-		return mixHash(h, hashUint64(seedHashtable, uint64(t.kind))), stack
+		return mixHash(h, hashUint64(seedHashtable, uint64(t.kind.code))), stack
 	case Hashable:
 		// Every leaf whose equal? is content-based already carries a
 		// content-canonical HashCode: hashNaN canonicalizes NaN payloads,

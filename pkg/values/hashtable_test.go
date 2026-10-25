@@ -336,10 +336,10 @@ func TestHashtableKinds(t *testing.T) {
 // TestHashtableZeroValueIsEqualKind pins the zero-value choice. A bare
 // &Hashtable{} — which NewEmptyHashtable returns and Copy inherits — must keep
 // today's equal? semantics, so HashtableEqual is deliberately the zero value.
-// Reordering the iota silently reinterprets every existing table.
+// Giving HashtableEqual a non-zero code silently reinterprets every existing table.
 func TestHashtableZeroValueIsEqualKind(t *testing.T) {
 	qt.Assert(t, values.NewEmptyHashtable().Kind(), qt.Equals, values.HashtableEqual)
-	qt.Assert(t, values.HashtableEqual, qt.Equals, values.HashtableKind(0))
+	qt.Assert(t, values.HashtableEqual, qt.Equals, values.HashtableKind{})
 }
 
 // TestHashtableCyclicKeyTerminates is what lifting key admission buys and what it
@@ -422,31 +422,41 @@ func TestHashtableNestedKeyTerminates(t *testing.T) {
 
 // TestHashtableKindsAreExhaustive is the site-count ratchet for HashtableKind.
 //
-// hashKey, keyEqual and String all used to route an unlisted kind through a
-// `default:` arm that answered EQUAL, and prim_hashtables.go indexed a
-// 3-element array that PANICKED. So adding a fourth kind compiled clean and the
-// new kind silently inherited equal? key identity — wrong-key collapse, which is
-// data corruption rather than a loud failure.
+// hashKey, keyEqual, equivIdentity and PrimHashtableHashFunction answer the
+// equal kind from their default arms, so a fourth kind added without its rows
+// would silently inherit equal? key identity: wrong-key collapse, which is data
+// corruption rather than a loud failure.
 //
 // This test fails when the count changes, which is the prompt to give the new
-// kind a row in all four. It cannot check the arms directly (they are
-// unexported), so it checks the two things it can see: the count, and that every
-// kind in range renders a distinct name rather than falling to "unknown".
+// kind a row in all five (those four and String). It cannot check the arms
+// directly (they are unexported), so it checks the count and that every kind
+// renders a distinct name; TestHashtableKindCodesHaveNames checks the codes.
 func TestHashtableKindsAreExhaustive(t *testing.T) {
 	qt.Assert(t, values.HashtableKindCount, qt.Equals, 3,
 		qt.Commentf("a kind was added or removed: give it a row in hashKey, keyEqual, String, equivIdentity and PrimHashtableHashFunction"))
 
+	kinds := []values.HashtableKind{values.HashtableEqual, values.HashtableEq, values.HashtableEqv}
+	qt.Assert(t, kinds, qt.HasLen, values.HashtableKindCount)
 	seen := make(map[string]bool, values.HashtableKindCount)
-	for i := range values.HashtableKindCount {
-		name := values.HashtableKind(i).String()
-		qt.Assert(t, name, qt.Not(qt.Equals), "unknown",
-			qt.Commentf("HashtableKind(%d) has no String row", i))
+	for _, kind := range kinds {
+		name := kind.String()
 		qt.Assert(t, seen[name], qt.IsFalse,
 			qt.Commentf("two kinds render as %q", name))
 		seen[name] = true
 	}
-	// Out of range must be identifiable rather than silently equal.
-	qt.Assert(t, values.HashtableKind(values.HashtableKindCount).String(), qt.Equals, "unknown")
+}
+
+// TestHashtableKindIsOpaque pins the opacity that makes the three variables the
+// only kinds: a struct with no exported field cannot be built outside the
+// package, so HashtableKind(7) does not compile and no out-of-range kind can
+// reach NewHashtable. A uint8 kind admitted 253 kinds that stored as equal
+// tables while the inspection accessors refused them.
+func TestHashtableKindIsOpaque(t *testing.T) {
+	typ := reflect.TypeFor[values.HashtableKind]()
+	qt.Assert(t, typ.Kind(), qt.Equals, reflect.Struct)
+	for field := range typ.Fields() {
+		qt.Assert(t, field.IsExported(), qt.IsFalse, qt.Commentf("field %s is exported", field.Name))
+	}
 }
 
 // TestHashtableEqualGateUsesOneSnapshot pins that the leaf gate and the

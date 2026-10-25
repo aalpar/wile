@@ -285,24 +285,18 @@ func PrimHashtableEntries(mc machine.CallContext) error {
 // hashtable-equivalence-function must hand back: its identity token, and the name
 // under which the caller's own binding of it is looked for.
 //
-// A switch rather than an array indexed by HashtableKind. The array read
-// `equivNames[ht.Kind()]` PANICS on an out-of-range kind, and values.NewHashtable
-// is exported and validates nothing, so values.NewHashtable(HashtableKind(7))
-// reached it. Recovering at the VM boundary turned that into an opaque
-// ErrPanicRecovery. Worse, the panic was inconsistent: hashKey, keyEqual and
-// HashtableKind.String all treat an unknown kind as equal via their own default
-// arms, so the array was the one site claiming a policy the type did not have.
-// Refusing explicitly is the policy that can actually be relied on.
-func equivIdentity(kind values.HashtableKind) (*machine.PrimitiveIdentity, string, bool) {
+// values.HashtableKind is opaque, so its three variables are the only kinds that
+// exist; the default arm is HashtableEqual, as in hashKey and keyEqual. (While the
+// kind was a uint8, values.NewHashtable(HashtableKind(7)) was constructible and
+// this switch refused it while storage treated it as equal.)
+func equivIdentity(kind values.HashtableKind) (*machine.PrimitiveIdentity, string) {
 	switch kind {
-	case values.HashtableEqual:
-		return identityEqualQ, "equal?", true
 	case values.HashtableEq:
-		return identityEqQ, "eq?", true
+		return identityEqQ, "eq?"
 	case values.HashtableEqv:
-		return identityEqvQ, "eqv?", true
+		return identityEqvQ, "eqv?"
 	default:
-		return nil, "", false
+		return identityEqualQ, "equal?"
 	}
 }
 
@@ -334,11 +328,7 @@ func PrimHashtableEquivalenceFunction(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	identity, name, ok := equivIdentity(ht.Kind())
-	if !ok {
-		return werr.WrapForeignErrorf(werr.ErrUnsupportedHashtableKind,
-			"hashtable-equivalence-function: table has unknown kind %d", uint8(ht.Kind()))
-	}
+	identity, name := equivIdentity(ht.Kind())
 	_, equivFn, ok := rememberedEqualPair(ht)
 	if ok {
 		mc.SetValue(equivFn)
@@ -356,8 +346,7 @@ func PrimHashtableEquivalenceFunction(mc machine.CallContext) error {
 // The two spellings coincide only while there are three kinds, and the §13.3 rule
 // is about eq and eqv tables specifically — so under the complement a fourth kind
 // would silently answer #f for a table that does have a hash function. The
-// default arm refuses instead, matching equivIdentity's policy for the same
-// question.
+// default arm is the equal kind, the only other inhabitant of the opaque type.
 func PrimHashtableHashFunction(mc machine.CallContext) error {
 	ht, err := helpers.RequireArg[*values.Hashtable](mc, 0, werr.ErrNotAHashtable, "hashtable-hash-function")
 	if err != nil {
@@ -367,16 +356,13 @@ func PrimHashtableHashFunction(mc machine.CallContext) error {
 	case values.HashtableEq, values.HashtableEqv:
 		mc.SetValue(values.FalseValue)
 		return nil
-	case values.HashtableEqual:
+	default:
 		hashFn, _, ok := rememberedEqualPair(ht)
 		if ok {
 			mc.SetValue(hashFn)
 			return nil
 		}
 		return setRecognizedPrimitive(mc, identityEqualHash, "equal-hash", "hashtable-hash-function")
-	default:
-		return werr.WrapForeignErrorf(werr.ErrUnsupportedHashtableKind,
-			"hashtable-hash-function: table has unknown kind %d", uint8(ht.Kind()))
 	}
 }
 

@@ -16,7 +16,6 @@ package wile
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"testing/fstest"
 
@@ -25,7 +24,6 @@ import (
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/values"
-	"github.com/aalpar/wile/pkg/werr"
 )
 
 // TestMakeHashtableRecognitionSurvivesImports pins that (make-hashtable
@@ -344,38 +342,6 @@ func TestHashtableRemembersTheProceduresItWasMadeWith(t *testing.T) {
 			}
 			got := evalSRFI(c, newEngine(c), tc.expr)
 			c.Assert(got, qt.Equals, tc.want)
-		})
-	}
-}
-
-// TestHashtableAccessorsRefuseAnUnknownKind pins the refusal both accessors owe
-// an out-of-range kind, which is reachable only from Go: values.NewHashtable is
-// exported and validates nothing.
-//
-// equivIdentity is a switch rather than an array precisely so an unknown kind
-// refuses explicitly instead of panicking (see its doc), and hashtable-hash-function
-// owes the same refusal, where it previously answered #f for anything that was
-// not the equal kind — a complement only accidentally equivalent to "eq or eqv".
-//
-// This pins the REFUSAL and not the accessors' check order. The order is
-// unobservable, because a remembering table is always the equal kind: a table
-// with an out-of-range kind comes from values.NewHashtable, which never sets the
-// remembered slot. Swapping the two checks fails no test, measured — and saying
-// otherwise here is a claim this file cannot back.
-func TestHashtableAccessorsRefuseAnUnknownKind(t *testing.T) {
-	t.Parallel()
-
-	c := qt.New(t)
-
-	for _, name := range []string{"hashtable-equivalence-function", "hashtable-hash-function"} {
-		c.Run(name, func(c *qt.C) {
-			eng := newSRFITestEngine(t)
-			err := eng.Define("odd-table", WrapValue(values.NewHashtable(values.HashtableKind(values.HashtableKindCount))))
-			c.Assert(err, qt.IsNil)
-			_, err = eng.EvalMultiple(context.Background(), "("+name+" odd-table)")
-			c.Assert(err, qt.IsNotNil)
-			c.Assert(errors.Is(err, werr.ErrUnsupportedHashtableKind), qt.IsTrue,
-				qt.Commentf("must match the sentinel with errors.Is, got %v", err))
 		})
 	}
 }
