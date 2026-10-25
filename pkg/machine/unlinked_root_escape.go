@@ -24,7 +24,8 @@ import (
 // unlinkedRootEscape marks an uncaught raise out of a root that ran
 // synchronously for the caller but is not linked to its chain, so it searched
 // none of the caller's handlers: an expansion-time root, which runs a macro
-// transformer, a phase-1 expression or a library body. Its
+// transformer, a phase-1 expression or a library body, or the root of an engine
+// run a host function started (Engine.Call, Engine.EvalMultiple). Its
 // *ErrExceptionEscape means "uncaught on that root", not "uncaught": the first
 // foreign-call bridge it reaches raises the condition in the caller's handlers
 // (applyCallableError), the mechanism thread-join! uses for a joinee's outcome.
