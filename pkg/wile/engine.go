@@ -1182,9 +1182,11 @@ func (p *Engine) callCallable(ctx context.Context, callable values.Callable, arg
 	sub := mc.NewSubContext()
 	defer machine.ReleaseTopLevelContext(mc)
 	defer machine.ReleaseSubContext(sub)
+	// A foreign callable runs here, before RunHostCall: its raise escapes the
+	// same root, so it is marked the same way.
 	_, err := sub.ApplyCallable(callable, args...)
 	if err != nil {
-		return nil, p.wrapRuntimeError(err)
+		return nil, p.wrapRuntimeError(markEngineRootEscape(ctx, err))
 	}
 
 	// Run the VM loop; escape continuations are caught and converted, and a

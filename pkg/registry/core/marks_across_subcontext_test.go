@@ -89,7 +89,9 @@ func TestMarks_NestedGuardReRaiseEscalates(t *testing.T) {
 // The capture-time snapshot a resume consults below its frames held the
 // segment's own marks too, so they stayed in force for the rest of the run:
 // the first row answered ((0 outer) (1 inner)). Petite and Racket agree with
-// every row.
+// the first three rows; the eval row, which embeds procedure values in the
+// evaluated form, runs on neither, and was checked against petite as the
+// equivalent program with the continuation and counter in top-level vectors.
 func TestMarks_ResumedParameterizeEndsWithItsExtent(t *testing.T) {
 	t.Parallel()
 

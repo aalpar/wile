@@ -400,8 +400,9 @@ func TestEngineCallIsNotAPrompt(t *testing.T) {
 // handlers when the host returns Call's error. The call's root holds none of
 // those handlers, so its uncaught raise is uncaught only on that root; before,
 // it ended the evaluation past every guard, while the func-typed callback, which
-// runs a linked sub-context, was caught. Each row runs through both hosts and
-// must answer the same.
+// runs a linked sub-context, was caught. The table rows run through both hosts
+// and answer the same; the subtests after it are where the hosts differ or only
+// host-call applies.
 func TestEngineCallRaiseIsCatchableByTheCaller(t *testing.T) {
 	t.Parallel()
 
@@ -466,6 +467,41 @@ func TestEngineCallRaiseIsCatchableByTheCaller(t *testing.T) {
 				qt.Assert(t, got.SchemeString(), qt.Equals, tc.want)
 			})
 		}
+	}
+
+	// A foreign callable raises while Call applies it, before the call's run
+	// starts; that raise escapes the same root. The func-typed callback refuses a
+	// primitive, so this is host-call only.
+	t.Run("a primitive applied by the call raises/host-call", func(t *testing.T) {
+		t.Parallel()
+		engine := newHostCallEngine(t)
+		got, err := engine.EvalMultiple(context.Background(), `(guard (e (#t (list 'caught e))) (host-call raise))`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, got.SchemeString(), qt.Equals, "(caught 0)")
+	})
+
+	// raise-continuable is where the hosts differ. The func-typed callback's
+	// sub-context is linked to the caller, so the handler returns into the
+	// callback (43). Through host-call the Call has ended by the time the
+	// condition reaches the caller's handlers, so there is no continuation to
+	// return to: it is raised non-continuable, and the handler's return is the
+	// R7RS 6.11 secondary error.
+	for _, tc := range []struct {
+		host string
+		want string
+	}{
+		{"host-call-func", "43"},
+		{"host-call", "(secondary #t)"},
+	} {
+		t.Run("raise-continuable/"+tc.host, func(t *testing.T) {
+			t.Parallel()
+			engine := newHostCallEngine(t)
+			got, err := engine.EvalMultiple(context.Background(), `(guard (e ((error-object? e) (list 'secondary #t)))
+			  (with-exception-handler (lambda (c) 42)
+			    (lambda () (+ 1 (`+tc.host+` (lambda (_) (raise-continuable 'c)))))))`)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got.SchemeString(), qt.Equals, tc.want)
+		})
 	}
 
 	t.Run("uncaught, it still reaches the embedder as a Scheme exception", func(t *testing.T) {
