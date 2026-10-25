@@ -361,8 +361,31 @@ func (p *MachineContext) ClosureEnv() *environment.EnvironmentFrame {
 	if q != nil {
 		return q
 	}
-	p.envPooled = false
+	p.disownEnv()
 	return p.env
+}
+
+// disownEnv gives up the pool's claim on p.env: the clear OpPushEnv, a retaining
+// OpMakeClosure and ClosureEnv make so that Invariant H ("a frame with
+// envPooled=true is never any other frame's parent") holds. The claim has more
+// than one holder whenever a continuation was saved while p.env was already the
+// live frame (a non-tail call's frame, saved before its operands evaluate; a
+// non-tail with-continuation-mark's frame, saved before its body), because
+// NewMachineContinuationFromMachineContext copies the flag. Clearing only the live
+// copy let RestoreAndRelease hand the saved one back, and the frame was recycled
+// under the closure or let frame that had just been parented on it.
+//
+// Only the run of frames at the top of the chain can share p.env, by the argument
+// on transferEnvOwnership: a frame saved before p.env was acquired holds another
+// env, and so does everything below it. Clearing a saved flag never releases
+// anything; at worst the frame goes to the GC instead of the pool.
+func (p *MachineContext) disownEnv() {
+	p.envPooled = false
+	for c := p.cont; c != nil && c.env == p.env; c = c.parent {
+		if c.envPooled {
+			c.envPooled = false
+		}
+	}
 }
 
 // Authorizer returns the security authorizer from this context's namespace,
@@ -741,8 +764,8 @@ func (p *MachineContext) Run() error {
 		case OpPushEnv:
 			slotCount := int(instr.Arg)
 			lenv := environment.NewLocalEnvironment(slotCount)
+			mc.disownEnv() // before mc.env moves: it is the parent being disowned
 			mc.env = environment.NewEnvironmentFrameWithParent(lenv, mc.env)
-			mc.envPooled = false
 			mc.pc++
 
 		case OpSelfTailCall:
@@ -926,7 +949,7 @@ func (p *MachineContext) Run() error {
 			// causes is H's price, and removing THAT clear is a
 			// use-after-release which has been reverted three times.
 			if tpl.RetainsLexicalEnv() {
-				mc.envPooled = false
+				mc.disownEnv()
 			}
 			cls := NewClosureCapturing(tpl, closureLink(mc.env, tpl), free)
 			backPatchSelfSlot(cls, free, selfSlot)
@@ -1440,6 +1463,10 @@ func (p *MachineContext) CaptureStackTrace(maxDepth int) StackTrace {
 			depth++
 		}
 
+		// The entry last appended for this context, for folding a
+		// with-continuation-mark frame into the activation it belongs to.
+		var last activationEntry
+
 		// Live (current) frame of this context.
 		if mc.template != nil && depth < maxDepth {
 			trace = append(trace, StackFrame{
@@ -1447,6 +1474,7 @@ func (p *MachineContext) CaptureStackTrace(maxDepth int) StackTrace {
 				CurrentLoc:   mc.template.SourceAt(mc.pc),
 			})
 			depth++
+			last = activationEntry{idx: len(trace) - 1, env: mc.env, template: mc.template}
 		}
 
 		// Saved frames. Continuation PCs are return addresses (one past the
@@ -1460,12 +1488,29 @@ func (p *MachineContext) CaptureStackTrace(maxDepth int) StackTrace {
 				cont = cont.parent
 				continue
 			}
-			frame := StackFrame{}
+			var loc *syntax.SourceContext
+			if cont.template != nil {
+				loc = cont.template.SourceAt(cont.pc - 1)
+			}
+			markFrame := cont.isMarkFrame()
+			if last.sameActivation(cont) && (markFrame || last.markFrame) {
+				// One activation, two frames: a non-tail with-continuation-mark
+				// pushed one of them. Keep a single entry, located where the
+				// activation's real call frame (the one that is not the mark
+				// frame) says it is, as before marks pushed frames.
+				if last.markFrame {
+					trace[last.idx].CurrentLoc = loc
+					last.markFrame = markFrame
+				}
+				cont = cont.parent
+				continue
+			}
+			frame := StackFrame{CurrentLoc: loc}
 			if cont.template != nil {
 				frame.FunctionName = cont.template.Name()
-				frame.CurrentLoc = cont.template.SourceAt(cont.pc - 1)
 			}
 			trace = append(trace, frame)
+			last = activationEntry{idx: len(trace) - 1, env: cont.env, template: cont.template, markFrame: markFrame}
 			cont = cont.parent
 			depth++
 		}
@@ -1492,6 +1537,32 @@ func (p *MachineContext) CaptureStackTrace(maxDepth int) StackTrace {
 	}
 
 	return trace
+}
+
+// activationEntry is the stack-trace entry CaptureStackTrace last appended for a
+// context, with the activation (env and template) it rendered.
+type activationEntry struct {
+	idx       int
+	env       *environment.EnvironmentFrame
+	template  *NativeTemplate
+	markFrame bool
+}
+
+// sameActivation reports whether cont, saved below e, runs in the activation e
+// rendered: the same template, and e's env is cont's env or a let frame inside it
+// (parameterize's let* puts the mark frame's env one or more frames below the
+// activation's). Two activations of one template never qualify: each call's frame
+// is parented on the closure's captured env, not on the caller's frame.
+func (e activationEntry) sameActivation(cont *MachineContinuation) bool {
+	if e.template == nil || cont.template != e.template {
+		return false
+	}
+	for env := e.env; env != nil; env = env.Parent() {
+		if env == cont.env {
+			return true
+		}
+	}
+	return false
 }
 
 // countFrames counts the number of frames in the continuation chain.

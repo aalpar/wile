@@ -25,8 +25,7 @@ var _ values.Value = (*BoxedValues)(nil)
 // value register into a SINGLE values.Value so it can be saved on the eval
 // stack as one slot. It never escapes to Scheme: it lives only on
 // the eval stack between an OperationBoxValues and its paired OperationUnboxValues
-// (currently dynamic-wind, bracketing the after-thunk call). Identified by type,
-// like noMarkSentinelType.
+// (currently dynamic-wind, bracketing the after-thunk call). Identified by type.
 //
 // It is used through a POINTER (*BoxedValues), and that is load-bearing, not
 // incidental. The struct holds a slice, so the bare struct type is not

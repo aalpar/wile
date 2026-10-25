@@ -121,6 +121,20 @@ func TestOpcodeFusion(t *testing.T) {
 			wantOps:    []machine.OpCode{machine.OpCallForeignCachedTail},
 			wantResult: "4",
 		},
+		{
+			// SetContMark states its stack delta, so the depth after it is known
+			// and the body's tail call is fused in both arms.
+			name:       "tail foreign call in a non-tail with-continuation-mark body",
+			code:       "((lambda (x) (list (with-continuation-mark 'a 1 (string-length x)))) \"test\")",
+			wantOps:    []machine.OpCode{machine.OpCallForeignCachedTail},
+			wantResult: "(4)",
+		},
+		{
+			name:       "tail foreign call in a tail with-continuation-mark body",
+			code:       "((lambda (x) (with-continuation-mark 'a 1 (string-length x))) \"test\")",
+			wantOps:    []machine.OpCode{machine.OpCallForeignCachedTail},
+			wantResult: "4",
+		},
 
 		// --- Wave 8: CallLocal / CallCachedBinding ---
 		{

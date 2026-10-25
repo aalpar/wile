@@ -205,6 +205,19 @@ func (p CompileTimeCallContext) WithEnclosingDefines(body []validate.ValidatedEx
 	return q
 }
 
+// TailOfPushedFrame returns a copy describing an expression in tail position of a
+// continuation frame the enclosing form pushed itself (a non-tail
+// with-continuation-mark body): a tail call there returns through that frame, so
+// inTail is true, but the frame resumes in the enclosing procedure's env, so no
+// frame reuse is armed. OpSelfTailCall or OpReleaseEnvFrame there would rebind or
+// release the env the pushed frame returns into. Built from NotInTail so
+// frameReuse is dropped and enclosingDefines kept, for the same reasons.
+func (p CompileTimeCallContext) TailOfPushedFrame() CompileTimeCallContext {
+	q := p.NotInTail()
+	q.inTail = true
+	return q
+}
+
 // UnderLetFrame returns a copy describing the body of a let. It is the ONLY site
 // that may say so, because it is paired 1:1 with compileValidatedLet's single
 // descent into a body.

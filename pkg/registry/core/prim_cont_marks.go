@@ -238,7 +238,8 @@ var PrimContinuationMarkSetQ = helpers.MakeTypePredicate(func(o values.Value) bo
 
 // PrimContinuationMarks implements (continuation-marks cont [prompt-tag]).
 // Extracts a ContinuationMarkSet from a captured continuation (the result of
-// call/cc), optionally stopping at prompt-tag.
+// call/cc) or a composable one (call-with-composable-continuation), optionally
+// stopping at prompt-tag.
 func PrimContinuationMarks(mc machine.CallContext) error {
 	tag := machine.DefaultPromptTag
 	v, ok, err := helpers.ParseOptionalArg(mc.Arg(1), "continuation-marks")
@@ -257,11 +258,18 @@ func PrimContinuationMarks(mc machine.CallContext) error {
 		mc.SetValue(&machine.ContinuationMarkSet{})
 		return nil
 	}
-	capt, err := helpers.RequireType[*machine.CapturedContinuation](mc.Arg(0), werr.ErrNotAContinuation, "continuation-marks")
-	if err != nil {
-		return err
+	switch k := mc.Arg(0).(type) {
+	case *machine.CapturedContinuation:
+		mc.SetValue(machine.CollectMarksFromCapture(k.ComposableContinuation(), tag))
+	case *machine.ComposableContinuation:
+		// The segment ends at its prompt, and the walk at the segment's bottom frame
+		// (even after an invocation grafted it onto a caller), so its marks stop
+		// there whatever the tag.
+		mc.SetValue(machine.CollectMarksFromCapture(k, tag))
+	default:
+		return werr.WrapForeignErrorf(werr.ErrNotAContinuation,
+			"continuation-marks: expected a continuation but got %T", mc.Arg(0))
 	}
-	mc.SetValue(machine.CollectMarksFromCapture(capt.ComposableContinuation(), tag))
 	return nil
 }
 

@@ -77,8 +77,9 @@ type ComposableContinuation struct {
 	// no frame of its own in the segment, so without this copy (continuation-marks k)
 	// cannot see them. It is a straight clone, NOT the key-collapsed capturedMarks:
 	// a segment that does carry the marks on a chain frame (the non-tail case) would
-	// report them twice if the collapsed snapshot were prepended as well. Nil for a
-	// composable continuation, which snapshots nothing. See CollectMarksFromCapture.
+	// report them twice if the collapsed snapshot were prepended as well. A composable
+	// capture records this field and not capturedMarks (RecordLiveMarksInto). See
+	// CollectMarksFromCapture.
 	liveMarks []markEntry
 	// escalatorArms are the non-continuable finalizer frames' arms carried by this
 	// segment, precomputed at capture. Nil for essentially every capture, which is
