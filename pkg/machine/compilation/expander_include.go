@@ -113,7 +113,13 @@ func (p *ExpanderTimeContinuation) expandIncludedFile(sym *syntax.SyntaxSymbol, 
 		return nil, err
 	}
 
+	// The splice leaves no include form for the compiler to wrap an error in, so
+	// the include is recorded as the forms' origin, as a macro use is: an error
+	// raised on any of them names the include, and a macro used in the file
+	// chains to it (pushOrigin reads the parent off the use site).
+	origin := pushOrigin(sym.Key(), sym.SourceContext(), src)
 	for i, form := range forms {
+		form = syntax.FlipScopeStampOrigin(form, nil, origin, nil)
 		for s := range sym.Scopes().All() {
 			form = syntax.AddScopeToSyntax(form, s)
 		}

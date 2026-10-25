@@ -16,6 +16,7 @@ package wile_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,6 +25,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/machine/compilation"
 	"github.com/aalpar/wile/pkg/wile"
 )
 
@@ -366,6 +368,56 @@ func TestIncludeErrorsKeepTheirLocations(t *testing.T) {
 			_, err := evalIncludeProgram(t, fsys, tc.code)
 			qt.Assert(t, err, qt.IsNotNil)
 			qt.Assert(t, err.Error(), qt.Contains, tc.want)
+		})
+	}
+}
+
+// TestIncludedFormErrorNamesTheInclude pins B29 gap 1: a form spliced from an
+// included file that fails to compile names the include that brought it in, as
+// a macro expansion's error names the macro. The splice leaves no include form
+// for the compiler to wrap, so the frame rides on the included forms' origin.
+func TestIncludedFormErrorNamesTheInclude(t *testing.T) {
+	fsys := fstest.MapFS{
+		"badcompile.scm": &fstest.MapFile{Data: []byte("(define ok 1)\n(define bad (lambda))\n")},
+		"outer.scm":      &fstest.MapFile{Data: []byte("(define o 1)\n(include \"badcompile.scm\")\n")},
+		"usesmac.scm":    &fstest.MapFile{Data: []byte("(define-syntax badif (syntax-rules () ((_ x) (if x))))\n(badif 1)\n")},
+		"badset.scm":     &fstest.MapFile{Data: []byte("(define ok 1)\n(set! nope 2)\n")},
+	}
+	tcs := []struct {
+		name string
+		code string
+		want []string
+	}{
+		{name: "compile error in an included form", code: "(define a 1)\n(include \"badcompile.scm\")",
+			want: []string{"badcompile.scm:2:13: lambda requires", "expanded from 'include' at includer.scm:2:1"}},
+		{name: "compiler-raised error in an included form", code: "(define a 1)\n(include \"badset.scm\")",
+			want: []string{"badset.scm:2:6: no such binding", "expanded from 'include' at includer.scm:2:1"}},
+		{name: "include-ci names itself", code: "(define a 1)\n(include-ci \"badcompile.scm\")",
+			want: []string{"expanded from 'include-ci' at includer.scm:2:1"}},
+		{name: "nested include names both includes", code: "(include \"outer.scm\")",
+			want: []string{"expanded from 'include' at outer.scm:2:1", "expanded from 'include' at includer.scm:1:1"}},
+		{name: "macro used in an included file chains to the include", code: "(define a 1)\n(include \"usesmac.scm\")",
+			want: []string{"expanded from 'badif' at usesmac.scm:2:", "expanded from 'include' at includer.scm:2:1"}},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := evalIncludeProgram(t, fsys, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+			for _, want := range tc.want {
+				qt.Check(t, strings.Count(err.Error(), want), qt.Equals, 1, qt.Commentf("%s", err.Error()))
+			}
+			// The frame is carried, not only rendered: the failing node's
+			// SourcedError holds the include in its origin chain.
+			var deepest, se *compilation.SourcedError
+			for e := err; errors.As(e, &se); e = se.Cause {
+				deepest = se
+			}
+			qt.Assert(t, deepest, qt.IsNotNil)
+			found := false
+			for o := deepest.Source.Origin; o != nil; o = o.Parent {
+				found = found || strings.HasPrefix(o.Identifier, "include")
+			}
+			qt.Check(t, found, qt.IsTrue, qt.Commentf("no include in the origin chain of %v", deepest))
 		})
 	}
 }
