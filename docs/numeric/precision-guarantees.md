@@ -189,7 +189,7 @@ engine := wile.New(
 |----------|---------------|---------|
 | Integer overflow (int64) | Promote to BigInteger | Error: implementation restriction |
 | Exact division (Integer / Integer) | Rational | Error unless result is exact integer |
-| Float × BigComplex | BigComplex (lattice promotion) | complex128 (stays in machine domain) |
+| Float × BigComplex | BigComplex for a BigFloat-part one (lattice promotion); Complex for an exact one | complex128 (stays in machine domain) |
 | `(expt 2 1000)` | BigInteger | Error: implementation restriction |
 | Reader literal `#z...` | BigInteger | Error at parse time |
 

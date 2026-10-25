@@ -226,7 +226,9 @@ func initPromotionTable() {
 	}
 	// Float + Complex → Complex (both float64-based, no loss).
 	set(F, C, C)
-	// Float + BigComplex → BigComplex.
+	// Float + BigComplex → BigComplex, for a BigComplex with a BigFloat part. An
+	// EXACT BigComplex meeting a Float or Complex gives a Complex, which this
+	// kind-level table cannot say (meetsFloat64 decides it at the operation).
 	set(F, BC, BC)
 	// BigFloat + Complex → BigComplex (BigFloat can't fit in complex128).
 	set(BF, C, BC)
@@ -557,11 +559,14 @@ func specialFloatNeedsGuard(srcKind, dstKind, lubKind NumericKind) bool {
 // The guard short-circuits to float64 arithmetic on finiteClampedFloat64
 // operands, preserving the *Float return type.
 //
-// For the Float×BigComplex → BigComplex case the result stays a BigComplex
-// (issue #362), and bigComplexSpecialOp owns it: a real Inf/NaN has no imaginary
+// For the Float×BigComplex → BigComplex case, an inexact BigComplex, the result
+// stays a BigComplex (issue #362), and bigComplexSpecialOp owns it: a real Inf/NaN has no imaginary
 // part, so each operation works on the BigComplex's parts directly rather than
 // through complex128, which would round them and invent a +0.0 imaginary part
 // for the real (I175). makeDivideDispatch has its own divide counterpart.
+//
+// An EXACT BigComplex meeting a Float or Complex is decided ahead of all of it,
+// part-wise through partsOp, and gives a Complex (meetsFloat64, big_complex.go).
 func makeArithmeticDispatch[T Number](
 	srcKind NumericKind,
 	sameTypeOp func(T, Number) Number,
@@ -569,6 +574,7 @@ func makeArithmeticDispatch[T Number](
 	float64Op func(float64, float64) float64,
 	realComplexOp func(float64, complex128) complex128,
 	bigComplexSpecialOp func(p, o Number) Number,
+	partsOp func(a, b, c, d Number) (Number, Number),
 ) [numKinds]func(T, Number) Number {
 	ensurePromotionInit()
 	var table [numKinds]func(T, Number) Number
@@ -637,8 +643,33 @@ func makeArithmeticDispatch[T Number](
 				return applyOp(promSrc(p), promDst(o))
 			}
 		}
+		if float64BigComplexKinds(srcKind, dstKind) {
+			// Ahead of the Inf/NaN guard: each part operation owns its own.
+			promoted := table[dstKind]
+			table[dstKind] = func(p T, o Number) Number {
+				if !meetsFloat64(p, o) {
+					return promoted(p, o)
+				}
+				a, b := float64Parts(p)
+				c, d := float64Parts(o)
+				return complexOfParts(partsOp(a, b, c, d))
+			}
+		}
 	}
 	return table
+}
+
+// float64BigComplexKinds reports whether the kind pair is a BigComplex and a
+// Float or Complex: the pairs meetsFloat64 can hold, so the only table entries
+// that need to ask it.
+func float64BigComplexKinds(srcKind, dstKind NumericKind) bool {
+	isFloat64 := func(k NumericKind) bool {
+		return k == KindFloat || k == KindComplex
+	}
+	if srcKind == KindBigComplex {
+		return isFloat64(dstKind)
+	}
+	return dstKind == KindBigComplex && isFloat64(srcKind)
 }
 
 // bigComplexSpecialAdd is makeAddDispatch's bigComplexSpecialOp: one operand is
@@ -669,9 +700,10 @@ func bigComplexSpecialSubtract(p, o Number) Number {
 }
 
 // specialImaginaryPart is the imaginary part z carries into a special-float
-// result. A BigFloat part is kept exactly. An exact part (BigInteger, Rational)
-// rounds to float64, as every other inexact-contagion path does
-// (contagionOverParts), so (+ +inf.0 1+1/3i) and (+ 1.0 1+1/3i) agree on it.
+// result. A BigFloat part is kept exactly. An exact part rounds to float64; only
+// a BigComplex mixing a BigFloat part with an exact one (the Go API builds one,
+// Scheme arithmetic does not) brings one here, since an exact BigComplex gives a
+// Complex ahead of the guard (meetsFloat64).
 func specialImaginaryPart(z *BigComplex) *BigFloat {
 	im, ok := z.Imag().(*BigFloat)
 	if ok {
@@ -780,6 +812,7 @@ func makeAddDispatch[T Number](srcKind NumericKind, sameTypeAdd func(T, Number) 
 		},
 		realAddComplex,
 		bigComplexSpecialAdd,
+		addParts,
 	)
 }
 
@@ -794,6 +827,7 @@ func makeSubtractDispatch[T Number](srcKind NumericKind, sameTypeSub func(T, Num
 		},
 		realSubtractComplex,
 		bigComplexSpecialSubtract,
+		subtractParts,
 	)
 }
 
@@ -808,6 +842,7 @@ func makeMultiplyDispatch[T Number](srcKind NumericKind, sameTypeMul func(T, Num
 		},
 		realMultiplyComplex,
 		bigComplexSpecialMultiply,
+		multiplyParts,
 	)
 }
 
@@ -881,6 +916,22 @@ func makeDivideDispatch[T Number](
 		default:
 			table[dstKind] = func(p T, o Number) (Number, error) {
 				return promSrc(p).Divide(promDst(o))
+			}
+		}
+		if float64BigComplexKinds(srcKind, dstKind) {
+			// See the twin case in makeArithmeticDispatch.
+			promoted := table[dstKind]
+			table[dstKind] = func(p T, o Number) (Number, error) {
+				if !meetsFloat64(p, o) {
+					return promoted(p, o)
+				}
+				a, b := float64Parts(p)
+				c, d := float64Parts(o)
+				re, im, err := smithDivideParts(a, b, c, d)
+				if err != nil {
+					return nil, err
+				}
+				return complexOfParts(re, im), nil
 			}
 		}
 	}

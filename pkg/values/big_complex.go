@@ -224,8 +224,7 @@ func bigComplexToComplex128WithAccuracy(n Number) Complex128Result {
 func init() {
 	bigComplexAdd = makeAddDispatch(KindBigComplex, func(p *BigComplex, o Number) Number {
 		v := o.(*BigComplex)
-		newReal := p.real.Add(v.real)
-		newImag := p.imag.Add(v.imag)
+		newReal, newImag := addParts(p.real, p.imag, v.real, v.imag)
 		// A promoted real arrives with an EXACT zero imaginary part (promotion.go), so
 		// the additive identity hands p.imag back UNTOUCHED and a signed zero survives.
 		// contagionOverParts then stops that exact zero from leaking into the result.
@@ -235,8 +234,7 @@ func init() {
 
 	bigComplexSubtract = makeSubtractDispatch(KindBigComplex, func(p *BigComplex, o Number) Number {
 		v := o.(*BigComplex)
-		newReal := p.real.Subtract(v.real)
-		newImag := p.imag.Subtract(v.imag)
+		newReal, newImag := subtractParts(p.real, p.imag, v.real, v.imag)
 		newReal, newImag = contagionOverParts(p, v, newReal, newImag)
 		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag))
 	})
@@ -247,12 +245,7 @@ func init() {
 
 	bigComplexMultiply = makeMultiplyDispatch(KindBigComplex, func(p *BigComplex, o Number) Number {
 		v := o.(*BigComplex)
-		ac := p.real.Multiply(v.real)
-		bd := p.imag.Multiply(v.imag)
-		ad := p.real.Multiply(v.imag)
-		bc := p.imag.Multiply(v.real)
-		newReal := ac.Subtract(bd)
-		newImag := ad.Add(bc)
+		newReal, newImag := multiplyParts(p.real, p.imag, v.real, v.imag)
 		// A promoted real has an EXACT zero imaginary part, so the annihilation rule
 		// kills the cross terms (ad and bd become exact 0) and the surviving product
 		// keeps its sign: -0.0 * 2.0 stays -0.0 instead of being swallowed by an IEEE
@@ -416,10 +409,133 @@ func (p *BigComplex) Divide(o Number) (Number, error) {
 		if err != nil {
 			return nil, err
 		}
+		if meetsFloat64(p, o) {
+			return complexOfParts(newReal, newImag), nil
+		}
 		newReal, newImag = contagionOverParts(p, o, newReal, newImag)
 		return maybeSimplify(promoteToBigComplexPart(newReal), promoteToBigComplexPart(newImag)), nil
 	}
 	return bigComplexDivide[o.Kind()](p, o)
+}
+
+// An EXACT BigComplex meeting a Float or Complex gives a Complex, the same
+// contagion as Float x Rational giving a Float: the exact operand is absorbed
+// into the inexact one's representation. The promotion table cannot say this.
+// KindBigComplex covers both exact and inexact (BigFloat-part) values, and the
+// inexact ones keep Float x BigComplex -> BigComplex, so the rule is decided here,
+// on the operands, by every dispatch site that can see the pair: the arithmetic
+// dispatch tables (makeArithmeticDispatch, makeDivideDispatch) and
+// BigComplex.Divide's real-divisor shortcut, which runs before them.
+//
+// The parts are computed one by one, the exact ones kept exact, and each part
+// operation is the real contagion (Float x Rational -> Float, an exact zero
+// annihilating). That is how Chez computes it (s/5_3.ss), and it is observable:
+// rounding +2i to 0.0+2.0i first makes (* +inf.0 +2i) NaN instead of 0.0+inf.0i,
+// and (* -1.0 +1/3i) -0.0-0.333i instead of 0.0-0.333i.
+
+// meetsFloat64 reports whether one of p, o is an exact BigComplex and the other
+// a Float or Complex.
+func meetsFloat64(p, o Number) bool {
+	z, ok := p.(*BigComplex)
+	other := o
+	if !ok {
+		z, ok = o.(*BigComplex)
+		other = p
+	}
+	if !ok || !z.IsExact() {
+		return false
+	}
+	switch other.(type) {
+	case *Float, *Complex:
+		return true
+	}
+	return false
+}
+
+// float64Parts returns n's parts for meetsFloat64's part-wise arithmetic. A real
+// operand's imaginary part is an EXACT zero: a real has no imaginary component,
+// and the exact-zero rules then keep a signed zero, as promoter[Float][BigComplex]
+// arranges for the BigComplex path. A Complex's parts are Floats.
+func float64Parts(n Number) (Number, Number) {
+	switch v := n.(type) {
+	case *BigComplex:
+		return v.real, v.imag
+	case *Complex:
+		return NewFloat(real(v.Value)), NewFloat(imag(v.Value))
+	}
+	return n, NewInteger(0)
+}
+
+// complexOfParts builds the Complex that a meetsFloat64 pair produces. An exact
+// part rounds to float64, an exact zero to +0.0 (Chez: (* -1.0 +2i) is 0.0-2.0i).
+// The imaginary part cannot be an exact zero: the exact operand's is non-zero and
+// meets the other's under + and -, and a Float scales it under * and /.
+func complexOfParts(re, im Number) Number {
+	return NewComplex(complex(NumberToFloat64(re), NumberToFloat64(im)))
+}
+
+// addParts is (a+bi) + (c+di) over parts.
+func addParts(a, b, c, d Number) (Number, Number) {
+	return a.Add(c), b.Add(d)
+}
+
+// subtractParts is (a+bi) - (c+di) over parts.
+func subtractParts(a, b, c, d Number) (Number, Number) {
+	return a.Subtract(c), b.Subtract(d)
+}
+
+// multiplyParts is (a+bi)(c+di) = (ac-bd) + (ad+bc)i over parts.
+func multiplyParts(a, b, c, d Number) (Number, Number) {
+	ac := a.Multiply(c)
+	bd := b.Multiply(d)
+	ad := a.Multiply(d)
+	bc := b.Multiply(c)
+	return ac.Subtract(bd), ad.Add(bc)
+}
+
+// smithDivideParts is (a+bi) / (c+di) over parts by Smith's algorithm (1962), as
+// Chez computes a complex quotient (s/5_3.ss) and realDivideComplex a float64 one.
+// It divides through by the larger divisor part, so a Float part does not
+// overflow or flush in c^2+d^2: (/ 1+1/3i 1e200+1e200i) is 6.666666666666667e-201-...,
+// not 0. A NaN part compares unordered and takes the second branch, as Chez's >=
+// does. BigComplex x BigComplex keeps the direct formula in bigComplexDivide: its
+// parts have no float64 range to leave.
+//
+// A real divisor (an exact zero d) divides each part, as Chez does for a flonum
+// divisor: Smith's ratio d/c would be 0/c, and with c = +nan.0 the other branch's
+// c/d divides by the exact zero.
+func smithDivideParts(a, b, c, d Number) (Number, Number, error) {
+	if isExactZero(d) {
+		return divideBoth(a, b, c)
+	}
+	ord := CompareNumbers(c.Abs(), d.Abs())
+	if ord == OrderGreater || ord == OrderEqual {
+		r, err := d.Divide(c)
+		if err != nil {
+			return nil, nil, err
+		}
+		den := c.Add(r.Multiply(d))
+		return divideBoth(a.Add(b.Multiply(r)), b.Subtract(a.Multiply(r)), den)
+	}
+	r, err := c.Divide(d)
+	if err != nil {
+		return nil, nil, err
+	}
+	den := d.Add(r.Multiply(c))
+	return divideBoth(a.Multiply(r).Add(b), b.Multiply(r).Subtract(a), den)
+}
+
+// divideBoth is re/den, im/den.
+func divideBoth(re, im, den Number) (Number, Number, error) {
+	q, err := re.Divide(den)
+	if err != nil {
+		return nil, nil, err
+	}
+	qi, err := im.Divide(den)
+	if err != nil {
+		return nil, nil, err
+	}
+	return q, qi, nil
 }
 
 // Negate returns the negation of this BigComplex.
