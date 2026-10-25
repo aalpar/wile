@@ -313,7 +313,7 @@ func TestMarkerNamedBinderInsideOpaqueSubtree(t *testing.T) {
 			 (let ((f (lambda () 7)) (n 0)) ` + "`(a ,(m3 " + b + "))" + ` (list n (f)))`,
 			"(1 99)"},
 		// The inner lambda head reaches the body's Predeclared lambda slot, and
-		// Wile still compiles it as the form (validate.headDenotesSpecialForm), so
+		// Wile still compiles it as the form (validate.HeadDenotesSpecialForm), so
 		// the scan must read it as one. This pins agreement with Wile's compiler,
 		// not a portable answer: Racket reads lambda as the variable and rejects
 		// (quote) as bad syntax, and Chez refuses the define after an expression.
@@ -384,7 +384,7 @@ func TestQuasisyntaxUnsyntaxUnderQuoteKeepsLetBinder(t *testing.T) {
 // A head spelled quasiquote or quasisyntax that resolves to a binding denoting no
 // form is not necessarily a call to the compiler: a Predeclared slot (a LATER
 // define in the same body) and a top-level variable reached from inside a let
-// body still compile as the form (validate.headDenotesSpecialForm). The scan reads
+// body still compile as the form (validate.HeadDenotesSpecialForm). The scan reads
 // such a head both ways and reports the union, so each row below puts the unquote
 // beneath a quote barrier or a binder the call reading alone would hide.
 func TestDemotedOpenerIsReadBothWays(t *testing.T) {

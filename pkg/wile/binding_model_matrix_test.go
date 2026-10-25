@@ -399,7 +399,7 @@ func TestBindingModelMatrix(t *testing.T) {
 		//
 		// This holds by ordinary fallthrough now, not by a special case: the head
 		// resolves to a variable that is neither predeclared nor sealed, so
-		// headDenotesSpecialForm reaches referenceReachesBinderDirectly and the
+		// HeadDenotesSpecialForm reaches referenceReachesBinderDirectly and the
 		// form is a call. It used to need the own-head exemption to be REFUSED
 		// here — the exemption resolved the binder off the same env, landed on
 		// the let's binding and re-read the call as a definition.
@@ -455,7 +455,7 @@ func TestBindingModelMatrix(t *testing.T) {
 		// definition in every context — R7RS §5.3.1 (p.26) contemplates defining
 		// a variable whose name is a syntactic keyword, and both peers answer 3.
 		//
-		// Three rows because three DIFFERENT arms of headDenotesSpecialForm carry
+		// Three rows because three DIFFERENT arms of HeadDenotesSpecialForm carry
 		// them and nothing else pins the correspondence: the Predeclared arm at
 		// top level, and the nil-binding arm inside a lambda or let body. A change
 		// to the letrec* pre-scan or to bindBodyDefineNames could break one

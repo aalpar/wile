@@ -53,7 +53,7 @@ package compilation
 // binding it already emits a runtime-resolution load ("Binding not yet defined
 // at compile time"). predeclareBinding below creates a full BindingTypeVariable,
 // which is more than that path requires — and the surplus is what the
-// validator's headDenotesSpecialForm reads as a variable shadowing a keyword.
+// validator's HeadDenotesSpecialForm reads as a variable shadowing a keyword.
 // Top-level mutual recursion never needed letrec* at all: the reference sits in
 // a lambda body and resolves when the procedure is called.
 //

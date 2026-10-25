@@ -26,7 +26,9 @@ import (
 
 // resolveCondExpandClause finds the first matching clause in a cond-expand form.
 // Handles validation, registry lookup, feature requirement parsing, and clause
-// matching. Returns the matched clause pair whose cdr contains the body forms.
+// matching. Returns the matched clause's body forms, the elements after its
+// requirement; an empty body is a nil slice. The body is collected here, behind
+// the proper-list check every clause passes, so no caller re-checks its shape.
 //
 // It is a free function so the expander can resolve a clause without a
 // CompileTimeContinuation. Both extra parameters are load-bearing:
@@ -44,7 +46,7 @@ import (
 // env must be non-nil. An improper clause list is refused here (ErrNotAPair):
 // the expander and processCondExpand (the library-body caller) both reach this
 // function with no validator in front of them.
-func resolveCondExpandClause(ctx context.Context, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator, args syntax.SyntaxValue, source *syntax.SourceContext) (*syntax.SyntaxPair, error) {
+func resolveCondExpandClause(ctx context.Context, env *environment.EnvironmentFrame, evaluator machine.MacroEvaluator, args syntax.SyntaxValue, source *syntax.SourceContext) ([]syntax.SyntaxValue, error) {
 	if syntax.IsSyntaxEmptyList(args) {
 		return nil, wrapSourcedError(source, werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no clauses"))
 	}
@@ -71,7 +73,7 @@ func resolveCondExpandClause(ctx context.Context, env *environment.EnvironmentFr
 		}
 	}
 
-	var matchedClause syntax.SyntaxValue
+	var matchedClause *syntax.SyntaxPair
 	tail, err := syntax.SyntaxForEach(ctx, argsPair, func(_ context.Context, i int, hasNext bool, clause syntax.SyntaxValue) error {
 		clauseSource := source
 		if clause.SourceContext() != nil {
@@ -126,38 +128,31 @@ func resolveCondExpandClause(ctx context.Context, env *environment.EnvironmentFr
 		return nil, wrapSourcedError(source, werr.WrapForeignErrorf(werr.ErrNoMatchingClause, "cond-expand: no matching clause"))
 	}
 
-	return matchedClause.(*syntax.SyntaxPair), nil
+	// The clause passed IsList, so the walk ends on the empty list and the
+	// callback cannot fail: neither result carries information.
+	var body []syntax.SyntaxValue
+	_, _ = matchedClause.SyntaxForEach(ctx, func(_ context.Context, i int, _ bool, form syntax.SyntaxValue) error {
+		if i > 0 {
+			body = append(body, form)
+		}
+		return nil
+	})
+	return body, nil
 }
 
 // processCondExpand handles (cond-expand <clause> ...) within a library.
 // Each clause is (<feature-requirement> <library-declaration> ...)
 // The first clause whose feature requirement is satisfied has its declarations processed.
 func (p *CompileTimeContinuation) processCondExpand(ctctx CompileTimeCallContext, lib *CompiledLibrary, args syntax.SyntaxValue) error {
-	matchedPair, err := resolveCondExpandClause(ctctx.ctx, p.env, p.evaluator, args, p.currentSource())
+	decls, err := resolveCondExpandClause(ctctx.ctx, p.env, p.evaluator, args, p.currentSource())
 	if err != nil {
 		return err
 	}
-
-	// Process the declarations in the matched clause
-	declsExpr := matchedPair.SyntaxCdr()
-	if syntax.IsSyntaxEmptyList(declsExpr) {
-		return nil // Empty clause body is valid
-	}
-
-	declsPair, ok := declsExpr.(*syntax.SyntaxPair)
-	if !ok {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrNotAPair, "cond-expand: expected list of declarations"))
-	}
-
-	// Process each declaration
-	tail, err := syntax.SyntaxForEach(ctctx.ctx, declsPair, func(_ context.Context, _ int, _ bool, decl syntax.SyntaxValue) error {
-		return p.processLibraryDeclaration(ctctx, lib, decl)
-	})
-	if err != nil {
-		return err
-	}
-	if !syntax.IsSyntaxEmptyList(tail) {
-		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "cond-expand: declaration list must be a proper list"))
+	for _, decl := range decls {
+		err = p.processLibraryDeclaration(ctctx, lib, decl)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -44,6 +44,7 @@ import (
 	"github.com/aalpar/wile/pkg/machine"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/internal/validate"
 	"github.com/aalpar/wile/pkg/schemeutil"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
@@ -127,6 +128,9 @@ type ExpanderTimeContinuation struct {
 	// recognize its own. Shared by pointer with child expanders. See
 	// expander_use_site.go.
 	useSiteScopes *useSiteScopeLog
+	// defines records the predeclared top-level slots whose define this run has
+	// expanded. Shared by pointer with child expanders. See expandedDefineLog.
+	defines *expandedDefineLog
 }
 
 // NewExpanderTimeContinuation creates a new ExpanderTimeContinuation. The
@@ -144,6 +148,7 @@ func NewExpanderTimeContinuation(ctx context.Context, env *environment.Environme
 		evaluator:     evaluator,
 		depthGuard:    &expandDepthGuard{max: NamespaceMaxExpandDepth(env)},
 		useSiteScopes: &useSiteScopeLog{scopes: values.NewMapSet[*syntax.Scope](0)},
+		defines:       &expandedDefineLog{},
 	}
 	return q
 }
@@ -167,6 +172,7 @@ func (p *ExpanderTimeContinuation) newChildExpander(env *environment.Environment
 		evaluator:     p.evaluator,
 		depthGuard:    p.depthGuard,
 		useSiteScopes: p.useSiteScopes,
+		defines:       p.defines,
 	}
 	return q
 }
@@ -350,13 +356,14 @@ func (p *ExpanderTimeContinuation) ExpandPrimitiveForm(primName string, sym *syn
 // reported a macro reachable solely real macro call that the expander itself expands perfectly
 // well.
 // The second result is the head binding dispatch reads: the pin when D2 stopped on a
-// Primitive pin, and otherwise ARM 1's resolution — the same key, receiver and scope
+// Primitive pin, nil when it stopped on a Variable pin, and otherwise ARM 1's
+// resolution — the same key, receiver and scope
 // set a caller would otherwise re-derive one call later. It is returned rather than
 // re-asked because no arm below creates a binding, which is the window
 // CLAUDE.local.md requires for a *Binding to be a valid identity.
 //
-// It is nil when the head does not resolve at the current phase, and a nil head is
-// not ambiguous at the call site: lookupHeadPrimitiveExpander feeds it straight to
+// It is nil when the head does not resolve at the current phase, or when D2 stopped
+// on a Variable pin, and a nil head is not ambiguous at the call site: lookupHeadPrimitiveExpander feeds it straight to
 // environment.DenotedForm, which answers "" for nil and falls through to
 // LookupPrimitiveExpander — exactly what an unresolved head did before.
 //
@@ -468,9 +475,13 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(
 	}
 	if pinned != nil && pinned.BindingType() == environment.BindingTypeVariable {
 		// pinned != nil implies a non-nil index: PinnedBinding reads through it.
+		//
+		// No head: the use-site variable verdict (lookupHeadPrimitiveExpander) is
+		// about the USE SITE's own binding, and a pinned procedure is neither that
+		// nor a form. nil keeps the spelling lookup this path has always had.
 		gi := environment.PinnedIndex(sym)
 		if gi.Sealed() || gi.Env != p.env.GlobalEnvironment() {
-			return nil, pinned, false
+			return nil, nil, false
 		}
 	}
 
@@ -660,8 +671,8 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 // so a renamed or prefixed import expands as that form. A binding whose value is
 // the expander itself (a phase-1 row, or an import of one) is used directly;
 // otherwise the expander is looked up under the denoted form's name. A head that
-// denotes no form keeps the spelling lookup, which is the pre-existing behaviour
-// for unbound heads, variables, and phase-2+ code.
+// denotes no form keeps the spelling lookup (unbound heads, phase-2+ code),
+// except that a variable which shadows the form makes the head a call.
 //
 // denoted is a canonical spelling this method synthesizes, never a name the user
 // wrote, so it is looked up directly against the sealed phase-1 row rather than
@@ -682,14 +693,29 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 // same scope set — passed in rather than re-derived. It may be nil, which
 // DenotedForm answers "" for, so an unresolved head falls through to
 // LookupPrimitiveExpander exactly as it did when this function resolved for
-// itself.
+// itself. A nil result means the form is a call: no expander, or a variable
+// that shadows the form (validate.HeadDenotesSpecialForm).
 func (p *ExpanderTimeContinuation) lookupHeadPrimitiveExpander(
 	sym *values.Symbol, scopes syntax.Scopes, head *environment.Binding,
 ) *PrimitiveExpander {
 	b := head
 	denoted := environment.DenotedForm(b)
 	if denoted == "" {
-		return LookupPrimitiveExpander(p.env, sym, scopes)
+		// A use-site variable the reference reaches shadows the form, by the
+		// validator's own rule: R7RS §5.3.1 lets a top-level define bind a keyword
+		// name, and the forms this expander consumes (include, cond-expand,
+		// define-syntax, ...) get no second look from the compiler. The rule's
+		// hygiene guard keeps a body-position reference to a top-level shadow on
+		// the form, as it keeps if there. Asked only when the spelling names an
+		// expander: an ordinary call has nothing to shadow.
+		pe := LookupPrimitiveExpander(p.env, sym, scopes)
+		if pe == nil {
+			return nil
+		}
+		if !validate.HeadDenotesSpecialForm(p.env, sym, scopes, b, p.defines.ahead(sym, b)) {
+			return nil
+		}
+		return pe
 	}
 	pe, ok := b.Value().(*PrimitiveExpander)
 	if ok {

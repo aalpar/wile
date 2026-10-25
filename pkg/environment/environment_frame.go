@@ -930,7 +930,7 @@ func (p *EnvironmentFrame) TryGetLocalIndex(key *values.Symbol, q syntax.ScopeSe
 // whether a local variable shadows a macro.
 //
 // THE VALIDATOR NO LONGER CALLS IT. "Does this head denote a special form" is
-// decided by binding IDENTITY in validate.headDenotesSpecialForm — resolve by
+// decided by binding IDENTITY in validate.HeadDenotesSpecialForm — resolve by
 // scopes, refuse a non-variable, compare against the sealed binding — because a
 // local-only test could not see a top-level define or a library import shadowing
 // a form. Locality turned out to be the wrong question in the other direction

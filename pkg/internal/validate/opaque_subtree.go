@@ -63,7 +63,7 @@ import (
 // compiler would evaluate a position is a fact this package can decide
 // (forEachRawSymbol / quasiHeadDepth) — structure, plus one resolution per head to
 // ask which marker it denotes. The compiler decides the same way EXCEPT for a head
-// that resolves to a non-form binding: validateForm (headDenotesSpecialForm) still
+// that resolves to a non-form binding: validateForm (HeadDenotesSpecialForm) still
 // compiles the form for a Predeclared slot and for a top-level variable reached
 // from a body (validate.go, "STILL DIVERGENT"), so forEachDemotedOpener reads such
 // a head both ways. What an unevaluated macro would expand to is not decidable. Skipping a symbol because it is
@@ -329,7 +329,7 @@ func resolveHead(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) (s
 // evaluated; a demoted head yields key "" for the caller to walk as a call.
 //
 // The compiler is NARROWER than "resolves to a non-form binding", though.
-// validateForm (headDenotesSpecialForm) still compiles the form when the head
+// validateForm (HeadDenotesSpecialForm) still compiles the form when the head
 // reaches a Predeclared slot, which a LATER (define quasisyntax ...) in the same
 // body mints, and when it reaches a top-level variable from inside a let or
 // lambda body (the divergence documented there as STILL DIVERGENT). So for a head
@@ -515,7 +515,7 @@ func forEachRawSymbolPair(env *environment.EnvironmentFrame, p *syntax.SyntaxPai
 		if demoted {
 			// A demoted head spelled like a binding form may still be one to the
 			// compiler: a LATER (define lambda ...) in the same body reaches it, and
-			// validateForm (headDenotesSpecialForm) still compiles the form for the
+			// validateForm (HeadDenotesSpecialForm) still compiles the form for the
 			// Predeclared slot. Read it as the form too, then as the call below; the
 			// union over-reports a genuine local named lambda, which is the safe side.
 			forEachRawBinderForm(env, p, head, head.Key(), mk, mode, fn)

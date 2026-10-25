@@ -425,7 +425,7 @@ func (p *ExpanderTimeContinuation) expandDefineForm(sym *syntax.SyntaxSymbol, ex
 	}
 
 	// Check if it's a function definition (define (name args...) body...)
-	_, isSymbol := first.(*syntax.SyntaxSymbol)
+	firstSym, isSymbol := first.(*syntax.SyntaxSymbol)
 	if !isSymbol {
 		// Function shorthand: (define (name . formals) body...) is sugar for
 		// (define name (lambda formals body...)), so its body must get the same
@@ -457,6 +457,7 @@ func (p *ExpanderTimeContinuation) expandDefineForm(sym *syntax.SyntaxSymbol, ex
 		}
 		signature := syntax.NewSyntaxCons(name, formalsStx, first.SourceContext())
 		args := syntax.NewSyntaxCons(signature, expandedBody, sym.SourceContext())
+		p.noteDefineExpanded(name)
 		return syntax.NewSyntaxCons(sym, args, sym.SourceContext()), nil
 	}
 
@@ -465,6 +466,7 @@ func (p *ExpanderTimeContinuation) expandDefineForm(sym *syntax.SyntaxSymbol, ex
 	if err != nil {
 		return nil, err
 	}
+	p.noteDefineExpanded(firstSym)
 
 	// Build (define var expanded-value)
 	args := syntax.SyntaxList(sym.SourceContext(), first, expandedValue)

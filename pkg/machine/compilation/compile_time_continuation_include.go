@@ -383,7 +383,7 @@ func (p *CompileTimeContinuation) processFormsWithLetrecSemantics(ctctx CompileT
 // This enables forward references within library bodies and included files.
 // See letrec_semantics.go for the shared pattern documentation.
 func (p *CompileTimeContinuation) predeclareDefineBinding(v syntax.SyntaxValue) {
-	nameSym := extractDefineName(p.env, v)
+	nameSym := extractDefineName(p.env, nil, v)
 	if nameSym == nil {
 		return
 	}

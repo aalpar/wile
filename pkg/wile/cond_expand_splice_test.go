@@ -79,10 +79,19 @@ func TestCondExpandInExpressionPosition(t *testing.T) {
 		{name: "selected clause value is the or's", code: `(or (cond-expand (r7rs 3) (else #f)) 5)`, want: "3"},
 		{name: "last body form is the value", code: `(+ 1 (cond-expand (else 2 3)))`, want: "4"},
 		{name: "empty selected body is a void between forms", code: `(begin (cond-expand (else)) 1)`, want: "1"},
+		// The row that tells the body treatment from expanding each form alone:
+		// only ExpandBodyWithDefineSyntax predeclares the define, so only it lets
+		// the use after the define read the shadowing variable (X25). An
+		// expression-position begin answers the same; per-form expansion answers
+		// (5). A define-syntax and its use do not discriminate: expandDefineSyntax
+		// binds the keyword when it is reached either way. Neither oracle reads a
+		// cond-expand in expression position.
+		{name: "a define in the clause shadows for the forms after it", code: `(list (cond-expand (else (define include (lambda a 'mine)) (include "v.scm"))))`, want: "(mine)"},
+		{name: "control: the same body in an expression-position begin", code: `(list (begin (define include (lambda a 'mine)) (include "v.scm")))`, want: "(mine)"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := evalIncludeProgram(t, fstest.MapFS{}, tc.code)
+			got, err := evalIncludeProgram(t, fstest.MapFS{"v.scm": &fstest.MapFile{Data: []byte(`5`)}}, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, got, qt.Equals, tc.want)
 		})
@@ -347,6 +356,42 @@ func TestCondExpandPassedToAMacroDoesNotCaptureTheMacrosBinder(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := evalIncludeProgram(t, fstest.MapFS{}, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got, qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestImportShadowedBySpliceInALibrary pins what a library sees when an
+// included file or a cond-expand clause defines a name the library imported.
+// A splice inside one (begin ...) body joins that body's letrec* pre-scan, so a
+// reference compiled before the define already reads it. At declaration level
+// each declaration compiles on its own, so the earlier reference keeps the
+// import, exactly as three plain begin declarations do (the control row): the
+// splices add no rule of their own. R7RS 5.6.1 makes redefining an import an
+// error and Petite Chez refuses it ("multiple definitions"); Wile accepting it
+// is filed separately.
+func TestImportShadowedBySpliceInALibrary(t *testing.T) {
+	sq := `(define (square x) 'mine)`
+	tcs := []struct {
+		name string
+		decl string
+		want string
+	}{
+		{name: "include in a begin body", decl: `(begin (define (before) (square 3)) (include "sq.scm") (define (after) (square 3)))`, want: "(mine mine)"},
+		{name: "cond-expand in a begin body", decl: `(begin (define (before) (square 3)) (cond-expand (else ` + sq + `)) (define (after) (square 3)))`, want: "(mine mine)"},
+		{name: "include declaration", decl: `(begin (define (before) (square 3))) (include "sq.scm") (begin (define (after) (square 3)))`, want: "(9 mine)"},
+		{name: "cond-expand declaration", decl: `(begin (define (before) (square 3))) (cond-expand (else (begin ` + sq + `))) (begin (define (after) (square 3)))`, want: "(9 mine)"},
+		{name: "control: three begin declarations", decl: `(begin (define (before) (square 3))) (begin ` + sq + `) (begin (define (after) (square 3)))`, want: "(9 mine)"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			fsys := fstest.MapFS{
+				"sh.sld": &fstest.MapFile{Data: []byte(`(define-library (sh) (export before after) (import (scheme base)) ` + tc.decl + `)`)},
+				"sq.scm": &fstest.MapFile{Data: []byte(sq)},
+			}
+			got, err := evalIncludeProgram(t, fsys, `(import (sh)) (list (before) (after))`,
+				wile.WithSourceFS(stdlib.FS), wile.WithLibraryPaths("."))
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, got, qt.Equals, tc.want)
 		})

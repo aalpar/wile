@@ -123,10 +123,12 @@ func TestAmbiguousReferenceIsALocatedCompilationError(t *testing.T) {
 		{"begin", "(begin 4)"},
 	}
 	for _, h := range heads {
-		tcs = append(tcs,
-			row{name: "tied head " + h.name, code: tiedHeadTop(h.name, h.ref), want: top},
-			row{name: "local tied head " + h.name, code: tiedHeadLocal(h.name, h.ref), want: local},
-		)
+		tcs = append(tcs, row{name: "local tied head " + h.name, code: tiedHeadLocal(h.name, h.ref), want: local})
+		// The top-level begin row is TestTiedBeginHeadIsACallAtTopLevel.
+		if h.name == "begin" {
+			continue
+		}
+		tcs = append(tcs, row{name: "tied head " + h.name, code: tiedHeadTop(h.name, h.ref), want: top})
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -168,4 +170,18 @@ func TestQuoteSyntaxOfAnAmbiguousIdentifierIsSyntax(t *testing.T) {
 			qt.Assert(t, got, qt.Equals, "#'x")
 		})
 	}
+}
+
+// TestTiedBeginHeadIsACallAtTopLevel replaces the top-level "tied head begin"
+// row above, pinning today's answer. m's template splices with a begin of its
+// own, and at top level that head reaches def-m's (define begin ...), whose
+// define has already expanded, so it is a call to that procedure and the tie
+// inside it is never a head (X25). The spliced (define given-x ...) is then an
+// argument, which Wile accepts; Racket refuses it ("define: not allowed in an
+// expression context"), a separate leniency that is filed. EvalProgram is the
+// path both wile -e and wile --file take.
+func TestTiedBeginHeadIsACallAtTopLevel(t *testing.T) {
+	got, err := evalIncludeProgram(t, fstest.MapFS{}, tiedHeadTop("begin", "(begin 4)"))
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, got, qt.Equals, "1")
 }

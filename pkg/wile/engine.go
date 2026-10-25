@@ -944,7 +944,7 @@ func (p *Engine) EvalProgram(ctx context.Context, code string, source string) (V
 // string surgery.
 //
 // THE HEAD CARRIES A FRESH SCOPE, and that is load-bearing, not decoration. The
-// head is no longer dispatched by name: validate.headDenotesSpecialForm decides
+// head is no longer dispatched by name: validate.HeadDenotesSpecialForm decides
 // by the binding it resolves to, so a program containing (define begin 9) made
 // its OWN wrapper a call — the whole file compiled to (9 form ...) and died with
 // "expected a procedure, got #<void>" after running. A scope the user's ∅-scoped

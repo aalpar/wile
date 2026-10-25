@@ -349,7 +349,7 @@ var compileTimeBindingSpecs = []nameDoc{
 // and these rows are the docstring's home only: a keyword binding would occupy
 // the same (phase 0, sealed) slot the value writer needs, and DefineOwnGlobal cannot
 // change an existing slot's type, so the procedure would be refused in value
-// position. Head dispatch is unaffected: headDenotesSpecialForm decides it
+// position. Head dispatch is unaffected: HeadDenotesSpecialForm decides it
 // from the sealed Variable binding, not from membership in this file's tables.
 //
 //nolint:govet

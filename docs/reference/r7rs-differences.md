@@ -8,7 +8,7 @@ This document catalogs differences between the current implementation and the R7
 
 ## Summary
 
-20 known differences exist:
+21 known differences exist:
 1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Correct for string, bytevector and regular-file ports; on a port that can block (stdin, a pipe) the `#t` is a promise the next read may break.
 2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
 3. `set-current-directory!` changes an **engine-scoped** current directory, not the process's working directory: the host and every other engine are unaffected, and relative paths the engine resolves (file primitives, `load`/`include`, a spawned process's start directory) resolve against it. Until it is first called, the engine follows the host's working directory live. Host-side resolution (a relative target handed straight to `pkg/security`'s containment check, the CLI's script argument) still uses the process directory.
@@ -138,6 +138,17 @@ This document catalogs differences between the current implementation and the R7
     library's variable. One consequence is visible in compile-time diagnostics:
     the arity check no longer treats an imported binding as non-rebindable when
     its library assigns it.
+21. A top-level `define` of a special-form name (`(define include f)`,
+    `(define if f)`) shadows the form at head position for the forms after it
+    at the program's top level, but **not** from a lambda body or a macro
+    argument: `(define include (lambda a 'mine)) (define (f) (include "v.scm"))
+    (f)` still includes the file, where Racket and Petite Chez answer `mine`
+    (R7RS §5.3.1 lets the define bind the keyword name). The reference carries
+    a scope its binder lacks, and at that point in the pipeline the shape is
+    indistinguishable from a template identifier the user's define must not
+    capture. Inside a library the same shapes do read the shadow. Pinned by
+    `TestHeadShadowStillDivergentThroughScopes` (`pkg/wile`); closing it is
+    P6.6's arc.
 
 ---
 

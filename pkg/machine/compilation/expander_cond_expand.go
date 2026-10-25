@@ -53,32 +53,23 @@ import (
 // capture the macro's own binders. The head is a FRESH-scope begin for the
 // reason spliceBegin gives.
 //
-// No current test discriminates ExpandBodyWithDefineSyntax from expanding each
-// form with ExpandExpression: a body-treatment-only difference (predeclared
-// forward references inside the clause) has no program in the suite that
-// observes it. The choice follows expandBeginForm and is recorded in the plan.
+// The body treatment is observable through its pre-scan: a define in the
+// clause shadows a special form for the forms after it only when it was
+// predeclared, and a reference compiled before such a define in a library
+// begin body reads it. TestCondExpandInExpressionPosition and
+// TestImportShadowedBySpliceInALibrary each redden under per-form expansion.
 func (p *ExpanderTimeContinuation) expandCondExpandForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	srcCtx := expr.SourceContext()
 	if srcCtx == nil || syntax.IsSyntaxEmptyList(expr) {
 		// (cond-expand) has no operands, hence no location of their own.
 		srcCtx = sym.SourceContext()
 	}
-	matched, err := resolveCondExpandClause(p.ctx, p.env, p.evaluator, expr, srcCtx)
+	forms, err := resolveCondExpandClause(p.ctx, p.env, p.evaluator, expr, srcCtx)
 	if err != nil {
 		return nil, err
 	}
-
-	body := matched.SyntaxCdr()
-	if syntax.IsSyntaxEmptyList(body) {
+	if len(forms) == 0 {
 		return spliceBegin(sym, "cond-expand", nil), nil
-	}
-	bodyPair, ok := asNonEmptyPair(body)
-	if !ok {
-		return nil, wrapSourcedError(srcCtx, werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "cond-expand: expected list of expressions"))
-	}
-	forms, err := collectBodyExpressions(bodyPair)
-	if err != nil {
-		return nil, wrapSourcedError(srcCtx, werr.WrapForeignErrorf(err, "cond-expand: failed to collect clause body"))
 	}
 	expanded, err := p.ExpandBodyWithDefineSyntax(forms)
 	if err != nil {

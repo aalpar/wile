@@ -22,7 +22,7 @@ package machine_test
 //     HasLocalVariableBinding: the expander's macro shadow check. Checks
 //     binding-site scopes. It is NO LONGER the validator's special-form shadow
 //     check — that is decided by binding identity in
-//     validate.headDenotesSpecialForm, which resolves by scopes and compares
+//     validate.HeadDenotesSpecialForm, which resolves by scopes and compares
 //     against the sealed binding.
 //
 //   Path 2 — Compiler (machine/compile_time_continuation.go)
