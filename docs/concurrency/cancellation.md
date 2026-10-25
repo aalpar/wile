@@ -195,9 +195,9 @@ at the cancellation boundary still answers `#t`: `blockOnWaiter` deregisters the
 waiter on the ctx arm unless `Signal`/`Broadcast` already claimed it.
 
 `exit` is not a cancellation. Called in any thread, it ends the process at once
-(`os.Exit`, after the host's exit hook): the other threads stop wherever they are,
-and no `dynamic-wind` after thunk runs, in the calling thread or any other, as in
-Racket (`docs/reference/r7rs-differences.md`).
+(`os.Exit`, after the host's exit hook): the other threads stop wherever they are
+and their `dynamic-wind` after thunks do not run, as in Racket. Today the calling
+thread's do not run either, an R7RS §6.14 gap (`docs/reference/r7rs-differences.md`).
 
 ## Who cancels the ctx: three sources, three safety arguments
 

@@ -150,11 +150,11 @@ This document catalogs differences between the current implementation and the R7
     `TestHeadShadowStillDivergentThroughScopes` (`pkg/wile`); closing it is
     P6.6's arc.
 22. `exit` ends the **process** at once, from whichever SRFI-18 thread calls
-    it: the other threads stop where they are, and no `dynamic-wind` after
-    thunk runs, in the calling thread or any other. R7RS §6.14 says `exit` "runs
-    all outstanding dynamic-wind *after* procedures" (it has one thread); Racket
-    agrees with Wile on both counts, Petite Chez runs the calling thread's after
-    thunks. See *`exit` Ends the Process From Any Thread* below.
+    it: the other threads stop where they are and their after thunks do not
+    run, as in Racket. Separately, no after thunk runs in the calling thread
+    either, a departure from R7RS §6.14 ("runs all outstanding dynamic-wind
+    *after* procedures") that holds on the main thread too. See *`exit` Ends
+    the Process From Any Thread* below.
 
 ---
 
@@ -568,8 +568,8 @@ Both end the process through `os.Exit` (after the host's exit hook,
 `system.SetExitHook`), on the goroutine of the thread that called them. So
 `exit` in a thread started with `thread-start!` ends the program with that
 thread's status, the main thread does not continue past whatever it was doing,
-and nothing unwinds: no `dynamic-wind` after thunk runs, neither the calling
-thread's nor the main thread's.
+and nothing unwinds: no `dynamic-wind` after thunk runs, neither the main
+thread's nor, today, the calling thread's.
 
 ```scheme
 (dynamic-wind
@@ -582,14 +582,18 @@ thread's nor the main thread's.
 ;; process status 3, prints nothing
 ```
 
-**Why.** It matches Racket, where `exit` in any thread runs the exit handler,
-which ends the process without unwinding. R7RS §6.14 has one thread, and asks
-`exit` to run the outstanding after thunks first; Wile runs none, even on the
-main thread (Petite Chez runs them). `emergency-exit` is the procedure R7RS lets
-skip them.
+**Threads.** Ending the program from any thread, with the other threads'
+after thunks not run, is the decided behaviour, and matches Racket. R7RS §6.14
+has one thread and says nothing about the others. Pinned by
+`TestCLI_ExitInAThreadEndsTheProgram` (`cmd/wile`).
 
-**Impact.** Cleanup a program needs at exit belongs before the `exit` call, not
-in an after thunk. Pinned by `TestCLI_ExitInAThreadEndsTheProgram` (`cmd/wile`).
+**The calling thread's after thunks.** R7RS §6.14 asks `exit` to run the
+outstanding after thunks first, and only `emergency-exit` may skip them. Wile
+runs none, on the main thread too: `(dynamic-wind (lambda () #f) (lambda ()
+(exit 4)) (lambda () (display "after")))` exits 4 and prints nothing, where
+Petite Chez prints `after` (Racket prints nothing). This is a current gap
+(`exitWithCode`'s comment calls the cleanup not yet implemented), not a
+decision, and is not pinned.
 
 ## `(library X)` Asks Whether X Is Available, Not What X Does
 

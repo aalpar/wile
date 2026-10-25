@@ -36,8 +36,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   ctx, `thread-terminate!` and `Engine.Close` still end it.
 
 - **`exit` in a thread is documented: it ends the process.** The other threads
-  stop, and no `dynamic-wind` after thunk runs in any thread, as in Racket
-  (`docs/reference/r7rs-differences.md` item 22; behaviour unchanged).
+  stop and their `dynamic-wind` after thunks do not run, as in Racket
+  (`docs/reference/r7rs-differences.md` item 22, which also records that the
+  calling thread's after thunks do not run either; behaviour unchanged).
 
 - **BREAKING (behavior): `char-ready?` requires a textual input port.** It
   answered `#t` without looking at its argument, so `(char-ready? 5)`, a binary

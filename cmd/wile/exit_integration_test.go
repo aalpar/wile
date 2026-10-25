@@ -32,7 +32,9 @@ import (
 // thread waits on a condition variable nobody signals, so the program can end
 // only through the thread's exit, whatever the scheduling. The deadline guards a
 // hang; nothing asserts how long the run took. A behaviour kept on purpose, so
-// this pin passes on the commit that added it.
+// this pin passes on the commit that added it. Whether the calling thread's own
+// after thunks run is not pinned: none do today, an R7RS §6.14 gap
+// (docs/reference/r7rs-differences.md item 22), not a decision.
 func TestCLI_ExitInAThreadEndsTheProgram(t *testing.T) {
 	c := qt.New(t)
 	dir := c.TempDir()
