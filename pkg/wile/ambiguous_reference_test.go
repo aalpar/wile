@@ -54,6 +54,27 @@ func ambiguousLocal(ref string) string {
 	return "(define (f)\n" + fmt.Sprintf(ambiguousDefM, ref) + "(def-m m x)\n(m))\n(f)"
 }
 
+// ambiguousDefMNamed is ambiguousDefM with the tied name spelled name, so the
+// tie can be placed at a form head (a binder named if, lambda, set!, ...). The
+// line layout is ambiguousDefM's, so (m) stays on line 10 or 11.
+const ambiguousDefMNamed = `(define-syntax def-m
+  (syntax-rules ()
+    ((_ m given-x)
+     (begin
+       (define %[1]s (lambda args 1))
+       (define-syntax m
+         (syntax-rules ()
+           ((_) (begin (define given-x (lambda args 2)) %[2]s))))))))
+`
+
+func tiedHeadTop(name, ref string) string {
+	return fmt.Sprintf(ambiguousDefMNamed, name, ref) + "(def-m m " + name + ")\n(m)"
+}
+
+func tiedHeadLocal(name, ref string) string {
+	return "(define (f)\n" + fmt.Sprintf(ambiguousDefMNamed, name, ref) + "(def-m m " + name + ")\n(m))\n(f)"
+}
+
 // TestAmbiguousReferenceIsALocatedCompilationError pins B45 (X21): a reference
 // whose scope set ties among incomparable binders is refused with
 // ErrAmbiguousBinding located at the identifier. It used to panic in the
@@ -63,17 +84,23 @@ func ambiguousLocal(ref string) string {
 //
 // The rows are the positions whose first resolver call is not CompileSymbol's:
 // set!, the head of a call (expander macro lookup, validator form head, arity
-// check, HOF inlining, self-call and inline-candidate probes), a callback
-// argument (capture-safety), a lambda's free variable (closure capture), and a
-// let-syntax template identifier (definition-site pin). Each takes the
-// conservative answer on a tie, so CompileSymbol's located refusal is reported.
+// check, HOF inlining), a callback argument (capture-safety), a lambda's free
+// variable (closure capture), and a let-syntax template identifier
+// (definition-site pin). Each takes the conservative answer on a tie, so
+// CompileSymbol's located refusal is reported.
+//
+// The "tied head" rows spell the tied name as a special form. A tie at a head is
+// its own answer, never a miss: read as a miss, the spelling decided, and the
+// form compiled as the core form ((if #f 'then 'else) printed else). Racket
+// refuses each as ambiguous.
 func TestAmbiguousReferenceIsALocatedCompilationError(t *testing.T) {
 	const top, local = "includer.scm:10:1: ", "includer.scm:11:1: "
-	tcs := []struct {
+	type row struct {
 		name string
 		code string
 		want string
-	}{
+	}
+	tcs := []row{
 		{name: "global reference", code: ambiguousTop("(display x)"), want: top},
 		{name: "local reference", code: ambiguousLocal("x"), want: local},
 		{name: "set! target", code: ambiguousTop("(set! x 3)"), want: top},
@@ -86,13 +113,28 @@ func TestAmbiguousReferenceIsALocatedCompilationError(t *testing.T) {
 		{name: "captured local", code: ambiguousLocal("(lambda () x)"), want: local},
 		{name: "let-syntax template", code: ambiguousTop("(let-syntax ((k (syntax-rules () ((_) x)))) (k))"), want: top},
 	}
+	heads := []struct{ name, ref string }{
+		{"if", "(if #f 'then 'else)"},
+		{"lambda", "((lambda (y) y) 7)"},
+		{"quote", "(quote q)"},
+		{"set!", "(let ((z 1)) (set! z 5) z)"},
+		{"let-syntax", "(let-syntax () 9)"},
+		{"when", "(when #t 3)"},
+		{"begin", "(begin 4)"},
+	}
+	for _, h := range heads {
+		tcs = append(tcs,
+			row{name: "tied head " + h.name, code: tiedHeadTop(h.name, h.ref), want: top},
+			row{name: "local tied head " + h.name, code: tiedHeadLocal(h.name, h.ref), want: local},
+		)
+	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := evalIncludeProgram(t, fstest.MapFS{}, tc.code)
 			qt.Assert(t, err, qt.IsNotNil)
 			qt.Check(t, errors.Is(err, werr.ErrAmbiguousBinding), qt.IsTrue, qt.Commentf("%v", err))
 			qt.Check(t, errors.Is(err, werr.ErrInternal), qt.IsFalse, qt.Commentf("%v", err))
-			qt.Check(t, err.Error(), qt.Contains, `"x"`)
+			qt.Check(t, err.Error(), qt.Contains, "resolves ambiguously")
 			qt.Check(t, strings.Count(err.Error(), tc.want), qt.Equals, 1, qt.Commentf("%v", err))
 			qt.Check(t, err.Error(), qt.Contains, "expanded from 'm' at "+strings.TrimSuffix(tc.want, ": "))
 			var deepest, se *compilation.SourcedError

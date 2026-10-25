@@ -84,7 +84,8 @@ func (p *ExpanderContext) MacroValue(id *syntax.SyntaxSymbol) (values.Value, boo
 	if p == nil || p.expander == nil {
 		return nil, false
 	}
-	bnd, _ := p.expander.lookupMacroBinding(id, id.Scopes())
+	// A tie denotes no macro value; a use of id refuses it, located.
+	bnd, _, _ := p.expander.lookupMacroBinding(id, id.Scopes())
 	if bnd == nil {
 		return nil, false
 	}

@@ -351,15 +351,18 @@ func (p *ExpanderTimeContinuation) ExpandPrimitiveForm(primName string, sym *syn
 // not ambiguous at the call site: lookupHeadPrimitiveExpander feeds it straight to
 // environment.DenotedForm, which answers "" for nil and falls through to
 // LookupPrimitiveExpander — exactly what an unresolved head did before.
+//
+// The third result reports an incomparable tie at ARM 1, with both bindings nil.
+// It is not a miss, and a caller must not read it as one: see ARM 1.
 func (p *ExpanderTimeContinuation) lookupMacroBinding(
 	sym *syntax.SyntaxSymbol, symbolScopes syntax.Scopes,
-) (macro *environment.Binding, head *environment.Binding) {
+) (macro *environment.Binding, head *environment.Binding, tied bool) {
 	sym0, ok := sym.Unwrap().(*values.Symbol)
 	if !ok {
 		// The one path that returns before ARM 1 resolves anything, so there is no
 		// head to hand back. It cannot fire at the ExpandSyntaxExpression call site,
 		// which has already unwrapped this same symbol successfully.
-		return nil, nil
+		return nil, nil, false
 	}
 
 	// ARM 1: current-phase local+global, scope-precise. Resolve under the reference's
@@ -386,20 +389,20 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(
 	// sits between the pin and arm 2, which makes pin-beats-ambient the whole behavior
 	// change.
 	//
-	// An incomparable tie is no macro use, and no head: the spelling decides, as
-	// headFormName answers for a tie, and a head that denotes no form is compiled
-	// as a reference, where CompileSymbol refuses the tie with its location.
+	// An incomparable tie is its own answer, never a miss: a miss lets the
+	// spelling decide, and a tied head spelled if would expand as the core if
+	// (Racket refuses it as ambiguous). The caller refuses it, located.
 	var ambient *environment.Binding
-	bnd, tied := p.env.TryGetBinding(sym0, syntax.ScopesOf(symbolScopes))
-	if tied {
-		return nil, nil
+	bnd, ambiguous := p.env.TryGetBinding(sym0, syntax.ScopesOf(symbolScopes))
+	if ambiguous {
+		return nil, nil, true
 	}
 	// Captured before ARM 2 reassigns bnd below; this is the head every return
 	// from here on reports.
 	head = bnd
 	if bnd != nil && bnd.BindingType() == environment.BindingTypeSyntax {
 		if coIntroducedByExpansion(bnd) {
-			return bnd, head
+			return bnd, head, false
 		}
 		ambient = bnd
 	}
@@ -447,19 +450,19 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(
 	// still capture a template's cond-expand or define-syntax.
 	pinned := environment.PinnedBinding(sym)
 	if pinned != nil && pinned.BindingType() == environment.BindingTypeSyntax {
-		return pinned, head
+		return pinned, head, false
 	}
 	if pinned != nil && pinned.BindingType() == environment.BindingTypePrimitive {
 		_, compiler := pinned.Value().(*SyntaxCompiler)
 		if !compiler {
-			return nil, pinned
+			return nil, pinned, false
 		}
 	}
 	if pinned != nil && pinned.BindingType() == environment.BindingTypeVariable {
 		// pinned != nil implies a non-nil index: PinnedBinding reads through it.
 		gi := environment.PinnedIndex(sym)
 		if gi.Sealed() || gi.Env != p.env.GlobalEnvironment() {
-			return nil, pinned
+			return nil, pinned, false
 		}
 	}
 
@@ -467,7 +470,7 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(
 	// phase stands. This is how a direct reference inside a procedural transformer body
 	// reaches a phase-0 (define-syntax …): that keyword lives in p.env's own phase there.
 	if ambient != nil {
-		return ambient, head
+		return ambient, head, false
 	}
 
 	// ARM 2: NextPhase (define-syntax storage). A top-level user (define-syntax …) lands
@@ -475,7 +478,7 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(
 	expandEnv := p.env.NextPhase()
 	bnd = expandEnv.GetBinding(sym0, syntax.ScopesOf(symbolScopes))
 	if bnd != nil && bnd.BindingType() == environment.BindingTypeSyntax {
-		return bnd, head
+		return bnd, head, false
 	}
 
 	// ARM 2b: the owner's SEALED phase-1 tier, from phase 2 and above. A
@@ -548,14 +551,14 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(
 		if ge != nil {
 			bnd = ge.SealedBindingAt(sym0, syntax.ScopesOf(symbolScopes), environment.PhaseExpand)
 			if bnd != nil && bnd.BindingType() == environment.BindingTypeSyntax {
-				return bnd, head
+				return bnd, head, false
 			}
 		}
 	}
 
 	// ARM 3: library-scope (unexported helper macro of the symbol's own library).
 	if p.env.Namespace() == nil {
-		return nil, head
+		return nil, head, false
 	}
 	for scope := range symbolScopes.All() {
 		libEnv := p.env.Namespace().LookupLibraryEnv(scope)
@@ -572,10 +575,10 @@ func (p *ExpanderTimeContinuation) lookupMacroBinding(
 		// So the final step is a nominal by-name lookup within the routed env.
 		libBnd := libEnv.Expand().GetBinding(sym0, syntax.AllScopes())
 		if libBnd != nil && libBnd.BindingType() == environment.BindingTypeSyntax {
-			return libBnd, head
+			return libBnd, head, false
 		}
 	}
-	return nil, head
+	return nil, head, false
 }
 
 // ExpandSyntaxExpression checks if sym is a macro and expands it, or returns
@@ -615,7 +618,10 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 	hasLocalBinding := p.hasLocalVariableBinding(sym0, sym.Scopes())
 
 	if !hasLocalBinding {
-		bnd, head := p.lookupMacroBinding(sym, sym.Scopes())
+		bnd, head, tied := p.lookupMacroBinding(sym, sym.Scopes())
+		if tied {
+			return nil, ambiguousReference(sym, "")
+		}
 		if bnd != nil {
 			return p.expandMacroInvocation(sym, expr, bnd, pairCtx)
 		}
@@ -1015,7 +1021,10 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 	// to be a hand-copied two-step version, missing the library arm, so (expand-once …) reported a macro
 	// reachable only through a library scope as not-a-macro, even though expansion
 	// itself handled it fine.
-	bnd, _ := p.lookupMacroBinding(sym, sym.Scopes())
+	bnd, _, tied := p.lookupMacroBinding(sym, sym.Scopes())
+	if tied {
+		return nil, false, ambiguousReference(sym, "")
+	}
 	if bnd == nil {
 		// Not a macro - no expansion
 		return expr, false, nil

@@ -157,14 +157,15 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 			// form; anything else keeps the spelling as the candidacy key. Both
 			// uses of b below happen in this call, off this env, with no binding
 			// created in between, so b is a valid identity for the sealed compare.
-			b := resolveFormHead(env, symVal, sym)
+			b, tied := resolveFormHead(env, symVal, sym)
 			name := symVal.Key
 			denoted := environment.DenotedForm(b)
 			if denoted != "" {
 				name = denoted
 			}
 			spec := forms.RegistryFor(env).Lookup(name)
-			if spec != nil && spec.Validate != nil && (denoted != "" || headDenotesSpecialForm(env, symVal, sym.Scopes(), b)) {
+			isForm := !tied && (denoted != "" || headDenotesSpecialForm(env, symVal, sym.Scopes(), b))
+			if spec != nil && spec.Validate != nil && isForm {
 				expr := spec.Validate(ctx, env, pair, result)
 				if expr != nil {
 					// Override formName only for passthrough forms (prefixed with "@")
@@ -311,29 +312,28 @@ func headDenotesSpecialForm(
 // satisfies. The expander's lookupMacroBinding lets that pin fall through to the
 // use-site macro lookup instead, so the two sites agree on every pin but that one.
 //
-// An incomparable scope-set tie resolves to nil, so the spelling decides, as
-// compilation.headFormName answers for a tie. A head spelled as no form is then
-// a call, and the compiler refuses the operator reference with
-// ErrAmbiguousBinding located at the identifier. Raising here instead reached
-// the compile path's recover as ErrInternal, with no location.
-func resolveFormHead(env *environment.EnvironmentFrame, symVal *values.Symbol, sym *syntax.SyntaxSymbol) *environment.Binding {
+// tied reports an incomparable scope-set tie, with a nil binding. It is not a
+// miss: a miss lets the spelling decide, and a tied head spelled if would
+// validate as the core if, where Racket refuses it as ambiguous. validateForm
+// reads a tied head as no form, so the form is a call and the compiler refuses
+// the operator with ErrAmbiguousBinding located at the identifier. Raising here
+// instead reached the compile path's recover as ErrInternal, with no location.
+func resolveFormHead(env *environment.EnvironmentFrame, symVal *values.Symbol, sym *syntax.SyntaxSymbol) (b *environment.Binding, tied bool) {
 	if env == nil {
-		return nil
+		return nil, false
 	}
 	if env.GlobalEnvironment() == nil {
-		return nil
+		return nil, false
 	}
 	scopes := syntax.ScopesOf(sym.Scopes())
 	if env.HasLocalVariableBinding(symVal, scopes) {
-		b, _ := env.TryGetBinding(symVal, scopes)
-		return b
+		return env.TryGetBinding(symVal, scopes)
 	}
 	pinned := environment.PinnedBinding(sym)
 	if environment.DenotedForm(pinned) != "" {
-		return pinned
+		return pinned, false
 	}
-	b, _ := env.TryGetBinding(symVal, scopes)
-	return b
+	return env.TryGetBinding(symVal, scopes)
 }
 
 // referenceReachesBinderDirectly reports whether the reference sym reaches the
@@ -395,8 +395,12 @@ func referenceReachesBinderDirectly(
 	if !b.Scopes().IsEmpty() {
 		return true
 	}
-	// A tie in the library's store reaches nothing directly.
-	libGI, _ := env.TryGetGlobalIndexFromLibraryScopes(symVal, scopes)
+	// A tie in the library's store answers true: the head is then a reference,
+	// not a form, and the compiler refuses it. false would read it as the form.
+	libGI, tied := env.TryGetGlobalIndexFromLibraryScopes(symVal, scopes)
+	if tied {
+		return true
+	}
 	if libGI == nil || libGI.Env == nil {
 		return false
 	}

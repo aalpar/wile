@@ -124,8 +124,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   plain `syntax-rules`) panicked in the resolver and was reported as an internal
   error with no location. It now raises `identifier "x" resolves ambiguously
   among incomparable hygienic scope sets` at the identifier, whether it is a
-  reference, an operator, a callback argument, a captured variable or a `set!`
-  target. `(quote-syntax x)` and a `syntax` template of such an
+  reference, an operator, a callback argument, a captured variable, a `set!`
+  target, or a form head spelled as a special form (a tied `if` is refused, not
+  compiled as the core `if`). `(quote-syntax x)` and a `syntax` template of such an
   identifier return the syntax object, as Racket does.
 - **An `include` a macro receives directly as an argument keeps its use-site
   scope unless the macro splices it.** `(m (include "u.scm"))`, with `m`
