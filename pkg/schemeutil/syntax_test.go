@@ -110,18 +110,20 @@ func (p *DatumToSyntaxValueSuite) TestVector(c *qt.C) {
 	c.Assert(datum, valuestest.SchemeEquals, vec)
 }
 
+// TestBox: a box is a syntax container, like a vector. A SyntaxObject wrapping
+// a box of syntax would be opaque to UnwrapAll, so quote would leave the
+// contents wrapped (#&#'42).
 func (p *DatumToSyntaxValueSuite) TestBox(c *qt.C) {
 	box := values.NewBox(values.NewInteger(42))
 	result, err := DatumToSyntaxValue(context.Background(), p.sctx, box)
 	c.Assert(err, qt.IsNil)
 
-	synObj, ok := result.(*syntax.SyntaxObject)
+	synBox, ok := result.(*syntax.SyntaxBox)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", result))
+	c.Assert(synBox.SourceContext(), qt.Equals, p.sctx)
+	_, ok = synBox.Value.(*syntax.SyntaxObject)
 	c.Assert(ok, qt.IsTrue)
-	resultBox, ok := synObj.Datum().(*values.Box)
-	c.Assert(ok, qt.IsTrue)
-	// The box contents should be wrapped in syntax
-	_, ok = resultBox.Unbox().(syntax.SyntaxValue)
-	c.Assert(ok, qt.IsTrue)
+	c.Assert(result.UnwrapAll(), valuestest.SchemeEquals, box)
 }
 
 func (p *DatumToSyntaxValueSuite) TestAlreadySyntax(c *qt.C) {
@@ -381,43 +383,5 @@ func TestDatumToSyntaxValueKeeping(t *testing.T) {
 		got, err := DatumToSyntaxValueKeeping(context.Background(), stamped, inner, &Kept{Spine: spine, Ctx: plain})
 		c.Assert(err, qt.IsNil)
 		c.Assert(got.SourceContext(), qt.Equals, plain)
-	})
-}
-
-func TestDatumToSyntaxValueKeepingAsDatumToSyntax(t *testing.T) {
-	sctx := &syntax.SourceContext{Text: "s"}
-	convert := func(c *qt.C, o values.Value, asDatum bool) syntax.SyntaxValue {
-		got, err := DatumToSyntaxValueKeeping(context.Background(), sctx, o, &Kept{AsDatumToSyntax: asDatum})
-		c.Assert(err, qt.IsNil)
-		return got
-	}
-	box := values.NewBox(values.NewSymbol("foo"))
-	var voidVec *values.Vector
-
-	c := qt.New(t)
-	c.Run("a box is an opaque literal with raw contents", func(c *qt.C) {
-		obj, ok := convert(c, box, true).(*syntax.SyntaxObject)
-		c.Assert(ok, qt.IsTrue)
-		c.Assert(obj.Unwrap(), qt.Equals, values.Value(box))
-	})
-	c.Run("otherwise a box holds converted contents", func(c *qt.C) {
-		obj, ok := convert(c, box, false).(*syntax.SyntaxObject)
-		c.Assert(ok, qt.IsTrue)
-		c.Assert(obj.Unwrap(), qt.Not(qt.Equals), values.Value(box))
-	})
-	c.Run("a void is a literal", func(c *qt.C) {
-		_, ok := convert(c, values.Void, true).(*syntax.SyntaxObject)
-		c.Assert(ok, qt.IsTrue)
-		c.Assert(convert(c, values.Void, false), qt.Equals, syntax.SyntaxVoid)
-	})
-	c.Run("a void vector is an empty syntax-vector, not a dereference", func(c *qt.C) {
-		vec, ok := convert(c, voidVec, true).(*syntax.SyntaxVector)
-		c.Assert(ok, qt.IsTrue)
-		c.Assert(vec.Values, qt.HasLen, 0)
-	})
-	c.Run("syntax and the empty list are left alone", func(c *qt.C) {
-		sym := syntax.NewSyntaxSymbol("x", sctx)
-		c.Assert(convert(c, sym, true), qt.Equals, syntax.SyntaxValue(sym))
-		c.Assert(convert(c, values.EmptyList, true), qt.Equals, syntax.SyntaxEmptyList)
 	})
 }

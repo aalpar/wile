@@ -281,26 +281,40 @@ func TestMacroOriginChainKeepsSplicedKeywordPosition(t *testing.T) {
 	}
 }
 
-// TestSchemeLayerERConversionMatchesDatumToSyntax: the Scheme layer's ER shim
-// converts a transformer's result as datum->syntax does, so a box keeps its raw
-// contents and a void stays a literal. The Go layer's converter has always
-// differed on both; that difference is recorded, not asserted as a goal.
-func TestSchemeLayerERConversionMatchesDatumToSyntax(t *testing.T) {
+// TestERConversionAgreesOnBothLayers: both layers convert an ER transformer's
+// result with one converter. A box is a syntax container, so a box the proc
+// passes through or builds comes back as data (racket and petite: #&(a b));
+// a void result is refused (racket: "received value from syntax expander was
+// not syntax", petite: "invalid syntax #<void>").
+func TestERConversionAgreesOnBothLayers(t *testing.T) {
 	t.Parallel()
 
-	scheme := wile.WithSchemeSyntaxForms()
-	box := "(define-syntax m (er-macro-transformer (lambda (f r c) (list 'quote (box 'foo)))))\n(m)"
+	const quoteIt = "(define-syntax m (er-macro-transformer (lambda (f r c) (list (r 'quote) "
+	tcs := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{"pass-through box", quoteIt + "(car (cdr f))))))\n(m #&(a b))", "#&(a b)"},
+		{"built box", quoteIt + "(box 'foo)))))\n(m)", "#&foo"},
+		{"nested built box", quoteIt + "(box (list 'a (box 'b)))))))\n(m)", "#&(a #&b)"},
+	}
+	for _, tc := range tcs {
+		for _, l := range syntaxLayers {
+			t.Run(tc.name+"/"+l.name, func(t *testing.T) {
+				qt.Assert(t, evalSyntaxForms(t, tc.src, l.opt), qt.Equals, tc.want)
+			})
+		}
+	}
 	void := "(define-syntax m (er-macro-transformer (lambda (f r c) (if #f #f))))\n(list (m))"
-	t.Run("box/scheme", func(t *testing.T) {
-		qt.Assert(t, evalSyntaxForms(t, box, scheme), qt.Equals, "#&foo")
-	})
-	t.Run("void/scheme", func(t *testing.T) {
-		qt.Assert(t, evalSyntaxForms(t, void, scheme), qt.Equals, "(#<void>)")
-	})
-	t.Run("void/go refuses", func(t *testing.T) {
-		err := evalSyntaxFormsErr(t, void)
-		qt.Assert(t, err, qt.IsNotNil)
-	})
+	for _, l := range syntaxLayers {
+		t.Run("void refused/"+l.name, func(t *testing.T) {
+			err := evalSyntaxFormsErr(t, void, l.opt)
+			qt.Assert(t, errors.Is(err, werr.ErrUnexpectedNil), qt.IsTrue, qt.Commentf("%v", err))
+			qt.Assert(t, err.Error(), qt.Contains, ":2:7: ")
+			qt.Assert(t, err.Error(), qt.Contains, "er-macro-transformer: transformer produced no result")
+		})
+	}
 }
 
 // TestMacroOriginChainOnEveryExpanderFailure (B30): the chain is rendered by

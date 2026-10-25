@@ -71,13 +71,6 @@ type Kept struct {
 
 	// Rebuilt, when non-nil, receives each node built from a Spine member.
 	Rebuilt func(syntax.SyntaxValue)
-
-	// AsDatumToSyntax makes the conversion agree with the datum->syntax
-	// primitive where DatumToSyntaxValue differs from it: a box and a void are
-	// opaque literals (a box's contents stay raw), and a void vector is an empty
-	// syntax-vector. The Scheme layer's ER shim sets it, so its output did not
-	// change when it moved off datum->syntax.
-	AsDatumToSyntax bool
 }
 
 // DatumToSyntaxValueKeeping is DatumToSyntaxValue for a transformer's result,
@@ -120,12 +113,7 @@ func datumToSyntaxValueVisited(ctx context.Context, sctx *syntax.SourceContext, 
 		return nil, werr.WrapForeignErrorf(werr.ErrParseDepthExceeded,
 			"DatumToSyntaxValue: datum nested deeper than %d", DefaultMaxDatumToSyntaxDepth)
 	}
-	if keep != nil && keep.AsDatumToSyntax {
-		opaque := datumToSyntaxOpaque(sctx, o)
-		if opaque != nil {
-			return opaque, nil
-		}
-	} else if values.IsVoid(o) {
+	if values.IsVoid(o) {
 		return syntax.SyntaxVoid, nil
 	}
 	if values.IsEmptyList(o) {
@@ -156,7 +144,10 @@ func datumToSyntaxValueVisited(ctx context.Context, sctx *syntax.SourceContext, 
 		if err != nil {
 			return nil, err
 		}
-		return syntax.NewSyntaxObject(values.NewBox(inner), sctx), nil
+		// A box is a container, so it becomes a syntax container: a
+		// SyntaxObject wrapping a box of syntax is opaque to quote and
+		// syntax->datum, which leave the contents wrapped.
+		return syntax.NewSyntaxBox(inner, sctx), nil
 	case *values.Vector:
 		dup := visited.ContainsOne(o)
 		if dup {
@@ -179,28 +170,6 @@ func datumToSyntaxValueVisited(ctx context.Context, sctx *syntax.SourceContext, 
 		// If the datum is not a Datum, we convert it to a Datum first.
 		return syntax.NewSyntaxObject(v, sctx), nil
 	}
-}
-
-// datumToSyntaxOpaque is the AsDatumToSyntax exception: the node datum->syntax
-// makes of o where DatumToSyntaxValue would recurse into it or make a
-// SyntaxVoid, or nil when o is not one of those. A syntax value is left to the
-// caller (void-ness of a syntax value is not looked at, as in datum->syntax).
-func datumToSyntaxOpaque(sctx *syntax.SourceContext, o values.Value) syntax.SyntaxValue {
-	switch v := o.(type) {
-	case syntax.SyntaxValue:
-		return nil
-	case *values.Vector:
-		if v.IsVoid() {
-			return syntax.NewSyntaxVector(sctx)
-		}
-		return nil
-	case *values.Box:
-		return syntax.NewSyntaxObject(v, sctx)
-	}
-	if values.IsVoid(o) {
-		return syntax.NewSyntaxObject(o, sctx)
-	}
-	return nil
 }
 
 // datumListToSyntaxValue converts one cons spine iteratively, so list LENGTH

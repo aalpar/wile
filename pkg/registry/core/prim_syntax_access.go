@@ -129,7 +129,10 @@ func PrimErSyntax(cc machine.CallContext) error {
 		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "%%er-syntax: template-id must be an identifier, got %s", mc.Arg(0).SchemeString())
 	}
 	sctx := templateID.SourceContext()
-	keep := &schemeutil.Kept{Spine: syntax.InputSpineOf(mc.Arg(1)), Ctx: sctx, AsDatumToSyntax: true}
+	if values.IsVoid(mc.Arg(2)) {
+		return werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "er-macro-transformer: transformer produced no result")
+	}
+	keep := &schemeutil.Kept{Spine: syntax.InputSpineOf(mc.Arg(1)), Ctx: sctx}
 	ectx := mc.ExpanderContext()
 	if ectx != nil {
 		keep.Rebuilt = ectx.NotePassThrough
