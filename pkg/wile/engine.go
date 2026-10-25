@@ -71,9 +71,7 @@ type Engine struct {
 	closed                  bool
 	maxCallDepth            int
 	maxParseDepth           int
-	maxExpandDepth          int
 	maxStackSize            uint64
-	inlineThreshold         int
 	lossyConversionsAllowed bool // captured into FFI closures at RegisterFunc time
 	coverageCollector       *coverage.Collector
 
@@ -586,19 +584,17 @@ func applyConfigDefaults(cfg *engineConfig) {
 func finishEngine(ctx context.Context, cfg *engineConfig, ns *environment.Namespace, reg *registry.PrimitiveRegistry, snapshots []extSnapshot, closers []registry.CloseFunc) (*Engine, error) {
 	env := ns.Runtime()
 
-	// Forward the resolved inline threshold onto the shared EngineServices so that
-	// runtime-triggered library compilation (import / (environment …)) honors
-	// WithInlineThreshold — the top-level compile path passes it explicitly, but
-	// the library load path reaches the compiler through the namespace, not a
-	// parameter. cfg.inlineThreshold is already defaulted above; an explicit 0
-	// (inlining disabled) is preserved by SetInlineThreshold's set-flag.
+	// Forward the resolved inline threshold onto the shared EngineServices. It is
+	// the only place WithInlineThreshold lands: every compile, the engine's
+	// top-level path and runtime-triggered library compilation (import /
+	// (environment …)) alike, reads it from the namespace. cfg.inlineThreshold is
+	// already defaulted above; an explicit 0 (inlining disabled) is preserved by
+	// SetInlineThreshold's set-flag.
 	ns.SetInlineThreshold(cfg.inlineThreshold)
 
-	// Forward the resolved expansion-depth bound too, for the same reason: the
-	// library load path reaches the expander through the namespace, not a
-	// parameter, so without this an imported library ignores WithMaxExpandDepth
-	// and expands at the default bound. cfg.maxExpandDepth is already defaulted
-	// above; an explicit 0 (unlimited) is preserved by the set-flag.
+	// Forward the resolved expansion-depth bound too, for the same reason: without
+	// this no expansion honors WithMaxExpandDepth. cfg.maxExpandDepth is already
+	// defaulted above; an explicit 0 (unlimited) is preserved by the set-flag.
 	ns.SetMaxExpandDepth(cfg.maxExpandDepth)
 
 	// Set the default file resolver for runtime include/load operations.
@@ -622,9 +618,7 @@ func finishEngine(ctx context.Context, cfg *engineConfig, ns *environment.Namesp
 		closers:                 closers,
 		maxCallDepth:            cfg.maxCallDepth,
 		maxParseDepth:           cfg.maxParseDepth,
-		maxExpandDepth:          cfg.maxExpandDepth,
 		maxStackSize:            cfg.maxStackSize,
-		inlineThreshold:         cfg.inlineThreshold,
 		lossyConversionsAllowed: cfg.lossyConversionsAllowed,
 		coverageCollector:       cfg.coverageCollector,
 	}
@@ -848,7 +842,7 @@ func (p *Engine) EvalIn(ctx context.Context, expr *Expression, ns *environment.N
 	}
 	env := ns.Runtime()
 
-	tpl, err := expandAndCompileOptimized(ctx, env, expr.stx, nil, p.inlineThreshold, p.maxExpandDepth)
+	tpl, err := expandAndCompileOptimized(ctx, env, expr.stx)
 	if err != nil {
 		return nil, wrapCompilationError("expand/compile error", err)
 	}
@@ -1440,7 +1434,7 @@ func applyBaseEnvironment(ctx context.Context, env *environment.EnvironmentFrame
 // expandAndCompileOptimized runs the expand → compile → optimize pipeline for a
 // single syntax value. Thin wrapper around compilation.ExpandAndCompileOptimized
 // that adds the public Engine API's panic containment.
-func expandAndCompileOptimized(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver compilation.FileResolver, inlineThreshold int, maxExpandDepth int) (q *machine.NativeTemplate, rerr error) {
+func expandAndCompileOptimized(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue) (q *machine.NativeTemplate, rerr error) {
 	// Containment boundary for the compile verb. This is the single funnel for Eval,
 	// EvalMultiple, and Compile, and the peephole optimizer runs inside it, so it
 	// is covered too.
@@ -1462,7 +1456,7 @@ func expandAndCompileOptimized(ctx context.Context, env *environment.Environment
 		rerr = wrapCompilationError("compile error", werr.RecoverAsError(r, werr.ErrInternal, "compile"))
 	}()
 
-	q, rerr = compilation.ExpandAndCompileOptimized(ctx, env, stx, resolver, inlineThreshold, maxExpandDepth)
+	q, rerr = compilation.ExpandAndCompileOptimized(ctx, env, stx)
 	return q, controlSignalEscapedExpansion(rerr)
 }
 
@@ -1511,7 +1505,7 @@ func controlSignalEscapedExpansion(err error) error {
 // compileExpr compiles a single syntax value into a CompiledCode, returning a wrapped CompilationError on failure. It
 // runs the expand → compile → optimize pipeline and tracks the template tree for coverage collection.
 func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*CompiledCode, error) {
-	tpl, err := expandAndCompileOptimized(ctx, p.env, stx, nil, p.inlineThreshold, p.maxExpandDepth)
+	tpl, err := expandAndCompileOptimized(ctx, p.env, stx)
 	if err != nil {
 		return nil, wrapCompilationError("expand/compile error", err)
 	}

@@ -104,7 +104,7 @@ func compileUnoptimized(ctx context.Context, eng *Engine, code, source string) (
 	if err != nil {
 		return nil, err
 	}
-	return compilation.ExpandAndCompile(ctx, eng.env, expr.stx, nil, eng.inlineThreshold, eng.maxExpandDepth)
+	return compilation.ExpandAndCompile(ctx, eng.env, expr.stx)
 }
 
 // coverageSpans returns the set of coverage-relevant source spans referenced by

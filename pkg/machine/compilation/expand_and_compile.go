@@ -27,8 +27,7 @@ import (
 // bound as seen from env, else DefaultMaxExpandDepth. Nil-safe: frames with no
 // namespace exist (test fixtures), and a namespace not built by an Engine reports
 // unset. An explicit 0 (unlimited) is returned as 0. This is the reader for every
-// site without an explicit bound; the engine's top-level path passes the same
-// forwarded value as an argument.
+// site except the bootstrap pass (runBootstrapStx), which uses the default.
 func NamespaceMaxExpandDepth(env *environment.EnvironmentFrame) int {
 	ns := env.Namespace()
 	if ns == nil {
@@ -58,30 +57,30 @@ func NamespaceInlineThreshold(env *environment.EnvironmentFrame) int {
 // ExpandAndCompile runs the expand+compile pipeline on a single syntax value,
 // returning a ready-to-execute template.
 //
-// A single MacroEvaluator is shared across both phases. If resolver is non-nil,
-// it is set on the compiler for include/load file resolution. inlineThreshold
-// controls procedure inlining (0 disables). maxExpandDepth bounds expander
-// recursion to prevent a fatal Go stack overflow on deeply nested syntax
-// (0 disables the bound; pass NamespaceMaxExpandDepth(env) for the engine's value).
+// A single MacroEvaluator is shared across both phases. Configuration is read
+// from env's namespace, as at every nested site: include/load resolve through
+// env.FileResolver(), inlining follows NamespaceInlineThreshold (0 disables), and
+// expander recursion is bounded by NamespaceMaxExpandDepth (0 disables), which
+// prevents a fatal Go stack overflow on deeply nested syntax.
 // Errors are wrapped with phase context ("expansion" or "compilation"); callers
 // may add site-specific context on top.
 //
 // The returned template is NOT peephole-optimized; closure bodies inside it are.
 // See ExpandAndCompileOptimized for when the top-level pass pays.
-func ExpandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver FileResolver, inlineThreshold int, maxExpandDepth int) (*machine.NativeTemplate, error) {
-	return expandAndCompileScoped(ctx, env, stx, resolver, inlineThreshold, maxExpandDepth, nil)
+func ExpandAndCompile(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue) (*machine.NativeTemplate, error) {
+	return expandAndCompileScoped(ctx, env, stx, nil, NamespaceInlineThreshold(env), NamespaceMaxExpandDepth(env), nil)
 }
 
 // ExpandAndCompileOptimized is ExpandAndCompile followed by the peephole pass on
 // the top-level template. Closure bodies are already optimized as they compile,
 // so the pass only buys the top-level template's own fusions. Callers: the
 // Engine's compile funnel (shared by Eval and Compile, whose CompiledCode can be
-// Run repeatedly), bootstrap loading, and the compile primitive, whose thunk
-// runs the template on every call. The eval and load primitives run each
-// template once and discard it, so they use ExpandAndCompile and skip the pass's
-// allocations.
-func ExpandAndCompileOptimized(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver FileResolver, inlineThreshold int, maxExpandDepth int) (*machine.NativeTemplate, error) {
-	tpl, err := ExpandAndCompile(ctx, env, stx, resolver, inlineThreshold, maxExpandDepth)
+// Run repeatedly) and the compile primitive, whose thunk runs the template on
+// every call; bootstrap loading takes the same pass through runBootstrapStx. The
+// eval and load primitives run each template once and discard it, so they use
+// ExpandAndCompile and skip the pass's allocations.
+func ExpandAndCompileOptimized(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue) (*machine.NativeTemplate, error) {
+	tpl, err := ExpandAndCompile(ctx, env, stx)
 	if err != nil {
 		return nil, err
 	}
@@ -94,6 +93,12 @@ func ExpandAndCompileOptimized(ctx context.Context, env *environment.Environment
 // define-library body needs it: the expander threads it to nested define-syntax
 // (expander_body.go) and the compiler to CompileSyntaxRulesExpr and, from P0.3,
 // CompileQuoteSyntax. nil is the ordinary top-level case.
+//
+// resolver, inlineThreshold and maxExpandDepth exist for the bootstrap pass
+// alone: it compiles core sources through an embed resolver of their own and at
+// the package defaults, without touching env's namespace, which a library env
+// shares with the running engine. A nil resolver leaves the compiler on
+// env.FileResolver(); every other caller passes the namespace readers.
 func expandAndCompileScoped(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver FileResolver, inlineThreshold int, maxExpandDepth int, libraryScope *syntax.Scope) (*machine.NativeTemplate, error) {
 	evaluator := machine.NewVMMacroEvaluator()
 
@@ -110,7 +115,7 @@ func expandAndCompileScoped(ctx context.Context, env *environment.EnvironmentFra
 	compiler := NewCompileTimeContinuation(tpl, env, evaluator)
 	compiler.libraryScope = libraryScope
 	if resolver != nil {
-		compiler.SetFileResolver(resolver)
+		compiler.fileResolver = resolver
 	}
 	compiler.SetInlineThreshold(inlineThreshold)
 	err = compiler.CompileExpression(cctx, expanded)

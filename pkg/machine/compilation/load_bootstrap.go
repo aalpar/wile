@@ -67,11 +67,15 @@ func runBootstrapStx(ctx context.Context, env *environment.EnvironmentFrame, stx
 	// Deliberately the package constants for the expander of this top-level pass,
 	// not the namespace readers. Everything nested (transformer compiles, the
 	// compiler's quasiquote guard) reads the namespace, so on a bootstrap run after
-	// the engine forwarded its configuration those sites follow the engine.
-	tpl, err := ExpandAndCompileOptimized(ctx, env, stx, resolver, DefaultInlineThreshold, DefaultMaxExpandDepth)
+	// the engine forwarded its configuration those sites follow the engine. The
+	// resolver goes to this pass's compiler rather than onto env: a library env
+	// shares the engine's namespace, and its bootstrap runs while user code may be
+	// resolving includes through it.
+	tpl, err := expandAndCompileScoped(ctx, env, stx, resolver, DefaultInlineThreshold, DefaultMaxExpandDepth, nil)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "error expanding/compiling bootstrap %s", kind)
 	}
+	tpl.Optimize()
 
 	mc := machine.AcquireTopLevelContext(ctx, tpl, env)
 	defer machine.ReleaseTopLevelContext(mc)

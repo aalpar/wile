@@ -249,18 +249,6 @@ func NewCompileTimeContinuation(tpl *machine.NativeTemplate, env *environment.En
 	return q
 }
 
-// SetFileResolver overrides the file resolver used by include/load.
-// Nil resets to the environment's resolver (or OSFileResolver as fallback).
-func (p *CompileTimeContinuation) SetFileResolver(r FileResolver) {
-	if r == nil {
-		r = p.env.FileResolver()
-		if r == nil {
-			r = NewOSFileResolver(p.env)
-		}
-	}
-	p.fileResolver = r
-}
-
 // DefaultInlineThreshold is the default maximum body length for procedure
 // inlining. A lambda body with more expressions than this is not inlined.
 const DefaultInlineThreshold = 5

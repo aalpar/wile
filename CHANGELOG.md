@@ -754,6 +754,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **BREAKING (Go API): `compilation.ExpandAndCompile` and
+  `ExpandAndCompileOptimized` take `(ctx, env, stx)`.** The `resolver`,
+  `inlineThreshold` and `maxExpandDepth` parameters are gone: every compile
+  reads them from `env`'s namespace, as nested transformer compiles and the
+  other expander sites already did, so an argument that differed from the
+  namespace reached only the outermost pass. Migrate by installing the resolver
+  with `env.SetFileResolver` and configuring the bounds with `WithInlineThreshold`
+  and `WithMaxExpandDepth` (or `Namespace.SetInlineThreshold` /
+  `SetMaxExpandDepth`); a namespace no Engine configured compiles at
+  `DefaultInlineThreshold` and `DefaultMaxExpandDepth`. One observable shift:
+  `Engine.EvalIn` on a namespace that does not share the calling engine's
+  services (another engine's, or one no engine built) now compiles its top-level
+  form at that namespace's configuration rather than the calling engine's, which
+  is what its nested compiles already used. No caller in `wile-goast` or
+  `wile-extension-example`.
+
+- **CI runs the standalone lint passes.** `make -C tools lint`
+  (singlelinefunclint, typeswitchlint, nestinglint) was reachable only through
+  `make lint`, which CI skips in favour of the golangci-lint action; it is now
+  its own step.
+
 - **BREAKING (Go API, behavior): the `er-macro-transformer` contract is one
   contract on both syntax-forms layers.** `compilation.NewERMacroTransformer`,
   `NewERRenameClosure` and `NewERCompareClosure` each gain a parameter (the
@@ -1137,6 +1158,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- **BREAKING (Go API): `CompileTimeContinuation.SetFileResolver`.** Its only
+  caller was `ExpandAndCompile`'s `resolver` parameter (see Changed); the
+  compiler takes `env.FileResolver()`, else an `OSFileResolver`, at
+  construction. The bootstrap pass still compiles core sources through their
+  embed resolver, internally and without installing it on the namespace, which
+  a library env shares with the running engine.
+- **`tools/cmd/configconstlint`.** It kept `DefaultMaxExpandDepth` and
+  `DefaultInlineThreshold` out of call arguments so that no caller overwrote the
+  engine's configured bound through `ExpandAndCompile`; with the parameters gone
+  there is no exported site to guard.
 - **BREAKING (Go API): `machine.OperationSaveContMark`, `machine.OperationRestoreContMark`
   and their constructors.** The compiler stopped emitting them when a non-tail
   `with-continuation-mark` began pushing a continuation frame (see Fixed); no other
