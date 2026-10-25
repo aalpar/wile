@@ -239,8 +239,9 @@ func (p *MachineContext) supersedingTimerInterrupt(err error) error {
 // mutex-lock!, which raise their SRFI-18 conditions in place (RaiseInPlace)
 // instead of returning a failure, ask this first and return the failure when it is
 // claimed, so no handler between them and the timer's owner sees it, as for a
-// returned failure. raise, raise-continuable and error raise in place without
-// asking.
+// returned failure. raise, raise-continuable and a well-formed error raise in
+// place without asking: they are the program's own raises. error's own argument
+// failure is returned.
 func (p *MachineContext) FailureClaimedByTimer(err error) bool {
 	if p.supersedingTimerInterrupt(err) != nil {
 		return true

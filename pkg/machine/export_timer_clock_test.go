@@ -54,3 +54,27 @@ func (p *opCountContext) Done() <-chan struct{} {
 	}
 	return p.Context.Done()
 }
+
+// WithTimerFiringOnCue returns ctx with a timerClock under which a with-timeout
+// fires when the returned fire function is called, whatever its duration, as if
+// its wall-clock deadline passed at that moment: a primitive that calls fire is a
+// primitive that outlived the timer. Calling fire before any with-timeout is
+// armed, or a second time, does nothing. Meant for one with-timeout per run.
+func WithTimerFiringOnCue(ctx context.Context) (context.Context, func()) {
+	var expire func()
+	clock := timerClock(func(_ *MachineContext, parent context.Context, _ time.Duration, cause error) (context.Context, context.CancelFunc) {
+		inner, cancel := context.WithCancelCause(parent)
+		expire = func() {
+			cancel(cause)
+		}
+		return inner, func() {
+			cancel(context.Canceled)
+		}
+	})
+	fire := func() {
+		if expire != nil {
+			expire()
+		}
+	}
+	return context.WithValue(ctx, timerClockKey{}, clock), fire
+}
