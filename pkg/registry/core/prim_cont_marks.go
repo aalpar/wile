@@ -89,9 +89,12 @@ func requireMarkSetOrCurrent(cc machine.CallContext, name string, tag *machine.P
 // tag, which a caller named explicitly: with no such prompt on the
 // continuation Racket raises, where the collector alone would silently walk the
 // whole chain. Same refusal and sentinel as call-with-composable-continuation's.
+// The default tag is exempt: Racket gives every continuation a default prompt
+// at its root, and an eval or load sub-context has no prompt frame for
+// FindPrompt to see.
 func collectMarksUpToPrompt(mc *machine.MachineContext, tag *machine.PromptTag, name string) (*machine.ContinuationMarkSet, error) {
 	_, found := mc.FindPrompt(tag)
-	if !found {
+	if !found && tag != machine.DefaultPromptTag {
 		return nil, werr.WrapForeignErrorf(werr.ErrNotAPromptTag, "%s: no prompt found for tag %s", name, tag.SchemeString())
 	}
 	return mc.CollectContinuationMarks(tag), nil

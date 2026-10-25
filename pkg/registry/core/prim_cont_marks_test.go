@@ -682,6 +682,9 @@ func TestContinuationMarksRacketArguments(t *testing.T) {
 		{"->list with a tag stops at the prompt", tagged(`(at-inner (lambda () (continuation-mark-set->list #f 'a tag)))`), "(2)"},
 		{"->list* with a tag", tagged(`(at-inner (lambda () (continuation-mark-set->list* #f '(a) #f tag)))`), "(#(2))"},
 		{"first with a tag stops at the prompt", tagged(`(with-continuation-mark 'a 1 (call-with-continuation-prompt (lambda () (continuation-mark-set-first #f 'a 'none tag)) tag (lambda a a)))`), "none"},
+		// eval runs in a sub-context with no prompt frame; the default tag must
+		// still be accepted there (Racket's default prompt is at every root).
+		{"default tag inside eval", `(eval '(with-continuation-mark 'a 1 (continuation-mark-set->list #f 'a (default-continuation-prompt-tag))) (interaction-environment))`, "(1)"},
 		{"control: ->list without a tag sees past the prompt", tagged(`(at-inner (lambda () (continuation-mark-set->list #f 'a)))`), "(2 1)"},
 	}
 	for name, run := range markShapeRunners() {
