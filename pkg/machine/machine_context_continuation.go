@@ -217,6 +217,11 @@ func (p *MachineContext) CallDepth() int {
 // When the prompt is on the context itself (not a continuation frame), returns
 // nil and true — the caller should treat this as "prompt at the boundary of
 // this sub-context" and slice the entire continuation chain.
+//
+// The answer is this context's own: it never hops parentMC. The drivers route an
+// abort, timer, break or resume to the frame it returns, and call/cc slices at it,
+// so a frame on another context's chain would be claimed by the wrong driver. A
+// pure lookup that must see past an eval or load boundary uses PromptOwner.
 func (p *MachineContext) FindPrompt(tag *PromptTag) (*MachineContinuation, bool) {
 	for frame := p.cont; frame != nil; frame = frame.parent {
 		if frame.promptTag == tag {
@@ -227,6 +232,36 @@ func (p *MachineContext) FindPrompt(tag *PromptTag) (*MachineContinuation, bool)
 		return nil, true
 	}
 	return nil, false
+}
+
+// PromptOwner returns the context whose chain or boundary holds the nearest
+// prompt tagged tag on p's dynamic continuation, or nil when there is none. It
+// starts at p and follows parentMC, so code an eval or load runs in a sub-context
+// sees its caller's prompts, as in Racket. p itself is the answer exactly when
+// FindPrompt finds the prompt.
+//
+// The walk stops where parentMC is not the code's continuation (crossesToParent):
+// at a dynamic-wind thunk's sub-context, whose parent is the unwinder, and at a
+// call/cc continuation resumed anywhere but the boundary it was delimited at. A
+// thread root has no parentMC, so a thread never sees its starter's prompts.
+func (p *MachineContext) PromptOwner(tag *PromptTag) *MachineContext {
+	for mc := p; mc != nil; mc = mc.parentMC {
+		_, found := mc.FindPrompt(tag)
+		if found {
+			return mc
+		}
+		if !mc.crossesToParent() {
+			return nil
+		}
+	}
+	return nil
+}
+
+// crossesToParent reports whether parentMC continues the continuation running on
+// p, for the prompt and mark-set walks: always, unless p is isolated
+// (isolatedMarks) without outerIntact.
+func (p *MachineContext) crossesToParent() bool {
+	return !p.isolatedMarks || p.outerIntact
 }
 
 // SliceContinuationAt deep-copies the continuation chain segment from p.cont
