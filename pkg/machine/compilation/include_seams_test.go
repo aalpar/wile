@@ -105,8 +105,8 @@ func TestReadIncludedForms(t *testing.T) {
 
 // Pin: include resolves through the resolver the pass was handed. ExpandAndCompile
 // takes it from env.FileResolver(); the bootstrap pass (expandAndCompileScoped)
-// hands its own to the compiler and leaves env without one. The file exists only
-// in the virtual FS, so reading it proves which resolver was used.
+// hands its own to the compiler, with env holding none. The file exists only in
+// the virtual FS, so reading it proves which resolver was used.
 func TestExpandAndCompile_IncludeResolvesThroughTheGivenResolver(t *testing.T) {
 	tcs := []struct {
 		name    string
@@ -124,9 +124,6 @@ func TestExpandAndCompile_IncludeResolvesThroughTheGivenResolver(t *testing.T) {
 			name: "the bootstrap pass hands its resolver to the compiler",
 			compile: func(env *environment.EnvironmentFrame, r FileResolver, stx syntax.SyntaxValue) error {
 				_, err := expandAndCompileScoped(context.Background(), env, stx, r, 0, 0, nil)
-				if env.FileResolver() != nil {
-					t.Errorf("the bootstrap pass installed a resolver on env")
-				}
 				return err
 			},
 		},
@@ -144,6 +141,38 @@ func TestExpandAndCompile_IncludeResolvesThroughTheGivenResolver(t *testing.T) {
 			err = tc.compile(env, r, stx)
 
 			qt.Assert(t, err, qt.IsNil)
+		})
+	}
+}
+
+// Pin: LoadBootstrapSources leaves env's resolver as it found it. The resolver
+// lives on the root namespace, which a library env shares with the running
+// engine and bootstraps into at import time, so installing the bootstrap's
+// resolver there would redirect every concurrent include engine-wide.
+func TestLoadBootstrapSources_LeavesTheNamespaceResolver(t *testing.T) {
+	tcs := []struct {
+		name    string
+		initial bool
+	}{
+		{name: "env has no resolver", initial: false},
+		{name: "env has its own resolver", initial: true},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newNamespace(environment.NewNamespace().Runtime())
+			err := RegisterSyntaxCompilers(env)
+			qt.Assert(t, err, qt.IsNil)
+			var want FileResolver
+			if tc.initial {
+				want = NewFSFileResolver(fstest.MapFS{}, env)
+				env.SetFileResolver(want)
+			}
+			bootstrapResolver := NewFSFileResolver(fstest.MapFS{}, env)
+
+			err = LoadBootstrapSources(context.Background(), env, []string{"(define zz 1)"}, bootstrapResolver, "procedure")
+
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, env.FileResolver(), qt.Equals, want)
 		})
 	}
 }

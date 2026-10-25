@@ -42,8 +42,9 @@ jobs:
           version: v2.13.1
           args: -v ./...
 
-      # The standalone lint passes (tools/cmd/*lint) are the half of `make lint`
-      # the golangci-lint action above does not run, and SKIP_LINT=1 below skips.
+      # The tools/Makefile lint passes (singlelinefunclint, typeswitchlint,
+      # nestinglint) are the half of `make lint` the golangci-lint action above
+      # does not run, and SKIP_LINT=1 below skips.
       - name: Lint (standalone passes)
         run: make -C tools lint
 
