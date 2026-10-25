@@ -198,6 +198,34 @@ func TestControlInACompileTimeBody(t *testing.T) {
 			want: "((in (r k) (r from-macro) out) (p-in p-out))",
 		},
 		{
+			// The abort form of the row above. The abort carries the winding at its
+			// origin, the transformer root's, which started empty; reconciled from it
+			// at the runtime prompt, the extent around the eval was never left (in,
+			// without out).
+			name: "an abort passed up from a transformer reconciles the runtime's extents, not the transformer's",
+			src: `(import (for-syntax (scheme base) (scheme cxr)))
+			      (begin-for-syntax (define plog '()))
+			      (define-syntax m (lambda (stx)
+			        (let ((d (syntax->datum stx)))
+			          (dynamic-wind (lambda () (set! plog (cons 'p-in plog)))
+			                        (lambda () ((caddr d) (cadr d) 'from-macro))
+			                        (lambda () (set! plog (cons 'p-out plog)))))))
+			      (define-syntax get-plog (er-macro-transformer (lambda (f r c) (list 'quote (reverse plog)))))
+			      (define tag (make-continuation-prompt-tag 'p))
+			      (define st (vector '()))
+			      (define (note x) (vector-set! st 0 (cons x (vector-ref st 0))))
+			      (define r
+			        (call-with-continuation-prompt
+			          (lambda ()
+			            (dynamic-wind (lambda () (note 'in))
+			                          (lambda () (eval (list 'm tag abort-current-continuation) (interaction-environment)))
+			                          (lambda () (note 'out))))
+			          tag
+			          (lambda (v) (list 'handled v))))
+			      (list r (reverse (vector-ref st 0)) (eval '(get-plog) (interaction-environment)))`,
+			want: "((handled from-macro) (in out) (p-in p-out))",
+		},
+		{
 			name: "a stale runtime continuation passed up from a transformer leaves the extent the eval sat in",
 			src: `(import (for-syntax (scheme base)))
 			      (define-syntax m (lambda (stx) (let ((k (cadr (syntax->datum stx)))) (k 'from-macro)) #''ok))
