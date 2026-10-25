@@ -78,6 +78,41 @@ func TestReader_InvalidUTF8IsLocatedError(t *testing.T) {
 	}
 }
 
+// TestReader_EmptyGraphicCharIsLocatedError pins the empty-graphic-char crasher
+// (#5): "#\0" reads as the character 0, then the trailing NUL — which starts no
+// token at all — previously inherited the PREVIOUS token's CharGraphic type from
+// the tokenizer's un-reset state field, producing a rune-less character literal
+// that indexed rs[0] out of range. The tokenizer now resets its state per token,
+// so the NUL is rejected as an unknown token rather than mis-typed; the property
+// this test exists for is unchanged — a located *ParserError, never a panic and
+// never acceptance. It surfaces on the datum AFTER "#\0", so a one-datum read
+// would miss it — this reads to the first error like the fuzz target does.
+// Found by FuzzReadSyntax.
+func TestReader_EmptyGraphicCharIsLocatedError(t *testing.T) {
+	env := environment.NewNamespace().Runtime()
+	p := NewParser(env, true, strings.NewReader("#\\0\x00"))
+	var got error
+	for range 4 {
+		_, err := p.ReadSyntax(context.TODO())
+		if err != nil {
+			got = err
+			break
+		}
+	}
+	var perr *ParserError
+	if !errors.As(got, &perr) {
+		t.Fatalf("got %T, want a located *ParserError: %v", got, got)
+	}
+	if !errors.Is(got, ErrUnknownTokenType) {
+		t.Errorf("got %v; want errors.Is ErrUnknownTokenType", got)
+	}
+}
+
+// readCatching parses the first datum from src, recovering any panic so that a
+// reader crash on malformed input registers as a test failure instead of
+// aborting the whole test binary. The reader is on the runtime path via
+// (read ...), which accepts untrusted input (R7RS §6.13.2), so a malformed
+// datum must surface as a located error — never a Go panic.
 func readCatching(src string) (recovered any, err error) {
 	return readCatchingFrom(strings.NewReader(src))
 }

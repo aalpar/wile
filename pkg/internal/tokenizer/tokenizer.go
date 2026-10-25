@@ -27,7 +27,6 @@ import (
 
 // Error messages returned by the tokenizer.
 const (
-	MessageRuneError                             = "rune error"
 	MessageReaderFailed                          = "reader failed"
 	MessageExpectingNumber                       = "expecting number"
 	MessageExpectingDelimiterAfterNumber         = "expecting delimiter after radix-prefixed number"
@@ -640,8 +639,8 @@ func (p *Tokenizer) term() {
 }
 
 // readNextRune reads the next rune from the reader and updates position tracking.
-// Sets p.cur to utf8.RuneError and p.err appropriately on EOF, encoding error
-// or reader fault.
+// Sets p.cur to utf8.RuneError and p.err on EOF or a reader fault; a byte that
+// does not decode reads as U+FFFD with no error.
 func (p *Tokenizer) readNextRune() {
 	n := 0
 	// The rune being replaced, kept to recognise the '\n' of a CRLF pair, which

@@ -674,7 +674,7 @@ Group related message constants:
 
 ```go
 const (
-    MessageRuneError       = "rune error"
+    MessageReaderFailed    = "reader failed"
     MessageExpectingNumber = "expecting number"
     MessageExpectingToken  = "expecting token"
 )

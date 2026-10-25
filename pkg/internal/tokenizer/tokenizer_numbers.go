@@ -548,7 +548,7 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 		p.signed = true
 		// The token type is assigned by whichever arm reaches its point of no
 		// return, never before: this used to say TokenizerStateSymbol here, so a
-		// rune error one character into a numeral was stamped `symbol` in the
+		// fault one character into a numeral was stamped `symbol` in the
 		// diagnostic. mark() leaves the state at TokenizerStateFailed, which is
 		// the honest answer while the run is still undecided.
 		p.next()

@@ -332,7 +332,7 @@ func (p *Parser) preferCutShortFault(err error) error {
 }
 
 // locateReaderErr lifts any lower-layer error escaping a read — a lexical
-// "rune error" from invalid UTF-8, a strconv failure parsing a datum-label
+// error from the tokenizer, a strconv failure parsing a datum-label
 // number, and so on — into a located *ParserError, so ReadSyntax presents
 // callers a single error surface: a value, io.EOF, or a *ParserError. Wrapping
 // specific error types is whack-a-mole (the reader bottoms out in tokenizer,
