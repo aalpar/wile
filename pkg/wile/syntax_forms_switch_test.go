@@ -306,6 +306,30 @@ func TestP2_ERPassThroughKeepsScopes(t *testing.T) {
 	}
 }
 
+// TestP2_ERPassThroughPairKeepsResolution: a pair an ER macro hands back is
+// rebuilt with its own position but not its own scopes. A compound node's
+// scopes are not kept up to date as scopes are added and flipped, and
+// datum->syntax with that pair as its template resolves by them, so taking
+// them from the input node rebinds tmp to the global (racket: 1 and 2).
+func TestP2_ERPassThroughPairKeepsResolution(t *testing.T) {
+	const defs = `(define tmp 'global)
+(define-syntax er-id (er-macro-transformer (lambda (f r c) (car (cdr f)))))
+(define-syntax ref (lambda (stx) (syntax-case stx () ((_ form) (datum->syntax #'form 'tmp)))))
+(define-syntax via (syntax-rules () ((_) (let ((tmp 1)) (er-id (ref (a)))))))
+`
+	tcs := []struct{ name, use, want string }{
+		{"pair inside a syntax-rules template", "(via)", "1"},
+		{"pair written at the use site", "(let ((tmp 2)) (er-id (ref (a))))", "2"},
+	}
+	for _, tc := range tcs {
+		for _, l := range syntaxLayers {
+			t.Run(tc.name+"/"+l.name, func(t *testing.T) {
+				qt.Assert(t, evalSyntaxForms(t, defs+tc.use, l.opt), qt.Equals, tc.want)
+			})
+		}
+	}
+}
+
 // TestP2_ERUseSitePrunedBinder: a binder that reaches an ER define through a
 // syntax-rules macro wears that macro's use-site scope, and the ER boundary
 // prunes it as every other transformer boundary does. Unpruned, zz is unbound.

@@ -239,6 +239,8 @@ func TestPassThroughKeepsItsOwnPosition(t *testing.T) {
 		{"er-macro-transformer", `(er-macro-transformer (lambda (f r c) (car (cdr f))))`, `(pass (let ((x)) x))`, ":2:12: "},
 		{"er-macro-transformer vector element", `(er-macro-transformer (lambda (f r c) (vector-ref (car (cdr f)) 0)))`,
 			`(pass #((let ((x)) x)))`, ":2:14: "},
+		{"er-macro-transformer box element", `(er-macro-transformer (lambda (f r c) (unbox (car (cdr f)))))`,
+			`(pass #&(let ((x)) x))`, ":2:14: "},
 	}
 	for _, tc := range tcs {
 		for _, l := range syntaxLayers {
@@ -248,6 +250,24 @@ func TestPassThroughKeepsItsOwnPosition(t *testing.T) {
 				qt.Assert(t, err.Error(), qt.Contains, tc.at+"let binding must be (name init) in let form")
 			})
 		}
+	}
+}
+
+// TestPassThroughWithoutPositionTakesTheKeywords: a pass-through form whose
+// own node has no position (here made by datum->syntax #f) falls back to the
+// ER keyword's, so the diagnostic still has a location (:2:86 is the er-id
+// that w's output names).
+func TestPassThroughWithoutPositionTakesTheKeywords(t *testing.T) {
+	t.Parallel()
+
+	src := "(define-syntax er-id (er-macro-transformer (lambda (f r c) (car (cdr f)))))\n" +
+		"(define-syntax w (lambda (stx) (syntax-case stx () ((_) (datum->syntax #'here (list #'er-id (datum->syntax #f '(let ((x)) x))))))))\n(w)"
+	for _, l := range syntaxLayers {
+		t.Run(l.name, func(t *testing.T) {
+			err := evalSyntaxFormsErr(t, src, l.opt)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, err.Error(), qt.Contains, ":2:86: let binding must be (name init) in let form")
+		})
 	}
 }
 

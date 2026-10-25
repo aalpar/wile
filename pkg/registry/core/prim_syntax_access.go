@@ -147,7 +147,7 @@ func PrimErSyntax(cc machine.CallContext) error {
 	if values.IsVoid(mc.Arg(2)) {
 		return werr.WrapForeignErrorf(werr.ErrUnexpectedNil, "er-macro-transformer: transformer produced no result")
 	}
-	keep := &schemeutil.Kept{Spine: spine}
+	keep := &schemeutil.Kept{Spine: spine, Ctx: sctx}
 	ectx := mc.ExpanderContext()
 	if ectx != nil {
 		keep.Rebuilt = ectx.NotePassThrough

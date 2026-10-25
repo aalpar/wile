@@ -562,9 +562,10 @@ func TestP05_Accessors(t *testing.T) {
 		{"syntax-cdr keeps syntax", `(list (syntax-pair? (syntax-cdr #'(a b))) (syntax->datum (syntax-cdr #'(a . b))))`, "(#t b)"},
 		{"syntax-vector?", `(list (syntax-vector? #'#(1 2)) (syntax-vector? #'(1 2)))`, "(#t #f)"},
 		{"syntax-vector->list is a syntax list", `(let ((l (syntax-vector->list #'#(a 2)))) (list (syntax-pair? l) (identifier? (syntax-car l)) (syntax->datum l)))`, "(#t #t (a 2))"},
-		{"%syntax-spine: pairs and vectors unwrapped, identifiers kept", spineOf + `(let ((s (spine #'(a (b . 1) #(c) 2))))
+		{"%syntax-spine: pairs, vectors and boxes unwrapped, identifiers kept", spineOf + `(let ((s (spine #'(a (b . 1) #(c) 2 #&d))))
   (list (pair? s) (identifier? (car s)) (pair? (cadr s)) (identifier? (car (cadr s))) (cdr (cadr s))
-        (vector? (caddr s)) (identifier? (vector-ref (caddr s) 0)) (cadddr s)))`, "(#t #t #t #t 1 #t #t 2)"},
+        (vector? (caddr s)) (identifier? (vector-ref (caddr s) 0)) (cadddr s)
+        (box? (list-ref s 4)) (identifier? (unbox (list-ref s 4)))))`, "(#t #t #t #t 1 #t #t 2 #t #t)"},
 		{"%syntax-spine: empty and improper tails", spineOf + `(let ((s (spine #'(a . b)))) (list (identifier? (car s)) (identifier? (cdr s)) (null? (spine #'()))))`, "(#t #t #t)"},
 	}
 	for _, tc := range tests {

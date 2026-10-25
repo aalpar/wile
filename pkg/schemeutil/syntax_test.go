@@ -343,10 +343,11 @@ func (p *DatumToSyntaxValueSuite) TestLengthIsNotBounded(c *qt.C) {
 
 func TestDatumToSyntaxValueKeeping(t *testing.T) {
 	stamped := &syntax.SourceContext{Text: "stamped"}
-	ctxOf := func(text string) *syntax.SourceContext {
-		return &syntax.SourceContext{Text: text}
+	plain := &syntax.SourceContext{Text: "plain"}
+	ctxOf := func(text string, col int) *syntax.SourceContext {
+		return syntax.NewSourceContext(text, "f.scm", syntax.NewSourceIndexes(0, 1, col), syntax.NewSourceIndexes(0, 1, col+1))
 	}
-	innerCtx, innerCdrCtx, vecCtx, boxCtx := ctxOf("inner"), ctxOf("inner-cdr"), ctxOf("vec"), ctxOf("box")
+	innerCtx, innerCdrCtx, vecCtx, boxCtx := ctxOf("inner", 1), ctxOf("inner-cdr", 2), ctxOf("vec", 3), ctxOf("box", 4)
 	int1 := func(n int64) syntax.SyntaxValue {
 		return syntax.NewSyntaxObject(values.NewInteger(n), nil)
 	}
@@ -369,7 +370,7 @@ func TestDatumToSyntaxValueKeeping(t *testing.T) {
 
 	build := func(c *qt.C) (syntax.SyntaxValue, []syntax.SyntaxValue) {
 		var rebuilt []syntax.SyntaxValue
-		keep := &Kept{Spine: spine, Rebuilt: func(n syntax.SyntaxValue) { rebuilt = append(rebuilt, n) }}
+		keep := &Kept{Spine: spine, Ctx: plain, Rebuilt: func(n syntax.SyntaxValue) { rebuilt = append(rebuilt, n) }}
 		got, err := DatumToSyntaxValueKeeping(context.Background(), stamped, result, keep)
 		c.Assert(err, qt.IsNil)
 		return got, rebuilt
@@ -405,8 +406,24 @@ func TestDatumToSyntaxValueKeeping(t *testing.T) {
 		c.Assert(got.SourceContext(), qt.Equals, stamped)
 	})
 	c.Run("a member without a Rebuilt hook is fine", func(c *qt.C) {
-		got, err := DatumToSyntaxValueKeeping(context.Background(), stamped, inner, &Kept{Spine: spine})
+		got, err := DatumToSyntaxValueKeeping(context.Background(), stamped, inner, &Kept{Spine: spine, Ctx: plain})
 		c.Assert(err, qt.IsNil)
 		c.Assert(got.SourceContext(), qt.Equals, innerCtx)
+	})
+	c.Run("a member takes Ctx's scopes, keeping its position", func(c *qt.C) {
+		scoped := plain.WithScope(syntax.NewScope())
+		got, err := DatumToSyntaxValueKeeping(context.Background(), stamped, inner, &Kept{Spine: spine, Ctx: scoped})
+		c.Assert(err, qt.IsNil)
+		gctx := got.SourceContext()
+		c.Assert(gctx.Scopes, qt.Equals, scoped.Scopes)
+		c.Assert(gctx.Location(), qt.Equals, innerCtx.Location())
+		c.Assert(innerCtx.Scopes.IsEmpty(), qt.IsTrue, qt.Commentf("the origin is not mutated"))
+	})
+	c.Run("a member without a position takes Ctx", func(c *qt.C) {
+		bare := syntax.NewSyntaxCons(int1(5), syntax.SyntaxEmptyList, &syntax.SourceContext{Text: "bare"})
+		raw, spine := syntax.UnwrapSpine(bare)
+		got, err := DatumToSyntaxValueKeeping(context.Background(), stamped, raw, &Kept{Spine: spine, Ctx: plain})
+		c.Assert(err, qt.IsNil)
+		c.Assert(got.SourceContext(), qt.Equals, plain)
 	})
 }

@@ -945,15 +945,17 @@ func (p *ExpanderTimeContinuation) invokeERTransformer(
 	// constructed from raw data. A node it hands back already wrapped keeps the
 	// context it arrived with, so a rename or a spine identifier is not
 	// stamped. The raw pairs, vectors and boxes of the input spine are the
-	// user's own form handed back; each is rebuilt with the context of the node
-	// it was unwrapped from, so the chain does not blame the macro for syntax it
-	// merely returned and a diagnostic on it points at the user's subform.
+	// user's own form handed back; each is rebuilt with the position of the node
+	// it was unwrapped from and the scopes of the keyword's unstamped context,
+	// so the chain does not blame the macro for syntax it merely returned and a
+	// diagnostic on it points at the user's subform (see schemeutil.Kept.ctxFor
+	// for why the scopes are not the origin's).
 	keywordCtx := sym.SourceContext()
 	wrapped, err := schemeutil.DatumToSyntaxValueKeeping(
 		p.ctx,
 		keywordCtx.WithOrigin(pushOrigin(sym.Key(), keywordCtx, pairCtx)),
 		result,
-		&schemeutil.Kept{Spine: spine},
+		&schemeutil.Kept{Spine: spine, Ctx: keywordCtx},
 	)
 	if err != nil {
 		return nil, wrapSourcedError(sym.SourceContext(), err)
