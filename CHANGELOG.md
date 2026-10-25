@@ -646,8 +646,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **`values.HashtableKind` is opaque (Go API, breaking).** It was `uint8` with
   `const` kinds, so `values.NewHashtable(values.HashtableKind(7))` compiled and
-  built a table that stored as an `equal?` table while `hashtable-hash-function`
-  and `hashtable-equivalence-function` refused it. It is now a struct with an
+  built a table that stored as an `equal?` table while
+  `hashtable-equivalence-function` refused it and `hashtable-hash-function`
+  answered `#f`. It is now a struct with an
   unexported field; `values.HashtableEqual` (the zero value), `HashtableEq` and
   `HashtableEqv` are its only values, and they are package variables, not
   constants. `HashtableKind(n)`, `uint8(kind)` and a kind in a `const`
