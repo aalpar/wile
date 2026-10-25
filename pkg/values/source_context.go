@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"unicode"
+	"unicode/utf8"
 )
 
 var _ Value = (*SourceContext)(nil)
@@ -82,15 +82,27 @@ func (p *SourceContext) Clone() *SourceContext {
 }
 
 // DisplayFileName renders a file name for a "file:line:col" diagnostic. A name
-// holding a control character (a newline, a tab, an escape) is Go-quoted, so
-// program data cannot break the diagnostic line or forge a second one; any
-// other name prints as is. The escape is applied at render time only: the
-// stored name stays the real path, which include resolution reads.
+// that is not valid UTF-8, holds a non-printable character (a newline, a tab,
+// an escape, U+2028, a bidi override), or begins with a double quote is
+// Go-quoted, so the file name cannot break the diagnostic line, forge a second
+// one, or pass for another name; any other name, colons, spaces and non-ASCII
+// letters included, prints as is. The escape is applied at render time only:
+// the stored name stays the real path, which include resolution reads. A
+// caller that parses a rendered location (error-object-location, the Source
+// fields of wile.CompilationError and wile.RuntimeError) unquotes a name that
+// starts with a double quote.
 func DisplayFileName(name string) string {
-	if strings.IndexFunc(name, unicode.IsControl) < 0 {
+	plain := utf8.ValidString(name) && !strings.HasPrefix(name, `"`) &&
+		strings.IndexFunc(name, isNonPrintable) < 0
+	if plain {
 		return name
 	}
 	return strconv.Quote(name)
+}
+
+// isNonPrintable reports whether r is outside strconv.IsPrint's set.
+func isNonPrintable(r rune) bool {
+	return !strconv.IsPrint(r)
 }
 
 // Location returns the source location formatted as "file:line:col".
@@ -116,7 +128,7 @@ func (p *SourceContext) Location() string {
 
 // SchemeString returns the Scheme representation of the source context.
 func (p *SourceContext) SchemeString() string {
-	return fmt.Sprintf("<source-context %s:%s-%s>", p.File, p.Start, p.End)
+	return fmt.Sprintf("<source-context %s:%s-%s>", DisplayFileName(p.File), p.Start, p.End)
 }
 
 // IsVoid returns true if the source context is nil.

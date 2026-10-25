@@ -37,6 +37,11 @@ func TestSourceContextLocationEscapesFileName(t *testing.T) {
 		{"newline is quoted", "a\nb.scm", `"a\nb.scm":5:3`},
 		{"tab is quoted", "a\tb.scm", `"a\tb.scm":5:3`},
 		{"escape is quoted", "a\x1b[31mb.scm", `"a\x1b[31mb.scm":5:3`},
+		{"line separator is quoted", "a\u2028b.scm", `"a\u2028b.scm":5:3`},
+		{"bidi override is quoted", "a\u202eb.scm", `"a\u202eb.scm":5:3`},
+		{"invalid UTF-8 is quoted", "a\x9bb.scm", `"a\x9bb.scm":5:3`},
+		{"a leading quote is quoted", `"a.scm`, `"\"a.scm":5:3`},
+		{"non-ASCII letters unchanged", "données.scm", "données.scm:5:3"},
 		{"nameless keeps the bare position", "", ":5:3"},
 	}
 	for _, tc := range tcs {

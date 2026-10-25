@@ -176,7 +176,7 @@ func (p *DebugContext) cmdBreak(args []string, out io.Writer) {
 	}
 
 	id := p.debugger.SetBreakpoint(file, line, col)
-	fmt.Fprintf(out, "Breakpoint %d set at %s:%d", id, file, line)
+	fmt.Fprintf(out, "Breakpoint %d set at %s:%d", id, values.DisplayFileName(file), line)
 	if col > 0 {
 		fmt.Fprintf(out, ":%d", col)
 	}
@@ -227,7 +227,7 @@ func (p *DebugContext) cmdList(_ []string, out io.Writer) {
 		if !bp.Enabled {
 			status = "disabled"
 		}
-		location := fmt.Sprintf("%s:%d", bp.File, bp.Line)
+		location := fmt.Sprintf("%s:%d", values.DisplayFileName(bp.File), bp.Line)
 		if bp.Column > 0 {
 			location = fmt.Sprintf("%s:%d", location, bp.Column)
 		}

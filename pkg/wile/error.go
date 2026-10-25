@@ -41,7 +41,7 @@ import (
 // values instead of parsing them back out of Error().
 type CompilationError struct {
 	Message   string
-	Source    string // formatted source location ("file:line:col"), empty if unavailable
+	Source    string // formatted source location ("file:line:col"; see values.DisplayFileName), empty if unavailable
 	Cause     error
 	Condition Value // the condition Scheme would see; nil when there is no cause
 
@@ -97,7 +97,7 @@ type RuntimeError struct {
 	Message    string
 	Cause      error
 	Condition  Value  // non-nil when Scheme raise produced the error; nil for VM/primitive errors
-	Source     string // formatted source location ("file:line:col"), empty if unavailable
+	Source     string // formatted source location ("file:line:col"; see values.DisplayFileName), empty if unavailable
 	StackTrace string // formatted VM stack trace, empty if unavailable
 
 	// structured is true when Message/Source/StackTrace were already extracted

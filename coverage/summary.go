@@ -20,6 +20,8 @@ import (
 	"io"
 	"maps"
 	"slices"
+
+	"github.com/aalpar/wile/pkg/values"
 )
 
 // lineStat aggregates per-line coverage.
@@ -92,7 +94,7 @@ func writeSummary(w io.Writer, c *Collector, includeStdlib bool) error {
 		totalCovered += s.covered
 		totalAll += s.total
 		_, err := fmt.Fprintf(w, "%s:%d  %d/%d covered  max_col_reached=%d\n",
-			s.file, s.line, s.covered, s.total, s.maxColReached)
+			values.DisplayFileName(s.file), s.line, s.covered, s.total, s.maxColReached)
 		if err != nil {
 			return err
 		}
