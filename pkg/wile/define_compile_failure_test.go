@@ -21,6 +21,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
@@ -50,9 +51,11 @@ func TestFailedUnitLeavesNoSlotBehind(t *testing.T) {
 		{"macro-produced define, sibling fails", `(begin (define-values (bar) (values 1)) (if))`, `bar`},
 		{"define compiled, sibling fails to expand", `(begin (define x 1) (if))`, `x`},
 		{"define compiled, sibling fails to compile", `(begin (define x 1) zzz-unbound)`, `x`},
+		// The eval-when runtime half expands with its own expander, which must
+		// log into this unit.
+		{"eval-when body define, sibling fails to compile", `(begin (eval-when (eval) (define evf 1)) zzz-unbound)`, `evf`},
 		// The right-hand side commits a phase-1 unit while this one is still
 		// expanding; a commit at another phase must not block the retraction.
-		{"eval-when body define, sibling fails to compile", `(begin (eval-when (eval) (define evf 1)) zzz-unbound)`, `evf`},
 		{"define-syntax in the failing unit", `(begin (define-syntax m (syntax-rules () ((_) 1))) (define (f p) zzz-unbound))`, `(f 1)`},
 	}
 	for _, row := range rows {
@@ -153,25 +156,8 @@ func TestFailedUnitKeepsASlotCommittedCodeHolds(t *testing.T) {
 	t.Parallel()
 	c := qt.New(t)
 	ctx := context.Background()
-	eng, err := wile.NewEngine(ctx,
-		wile.WithProfile(wile.KitchenSink),
-		wile.WithSourceFS(stdlib.FS),
-		wile.WithLibraryPaths("."),
-	)
-	c.Assert(err, qt.IsNil)
-	t.Cleanup(func() {
-		_ = eng.Close()
-	})
-	_, err = eng.EvalMultiple(ctx, `
-(import (scheme base) (scheme eval) (scheme repl)
-        (for-syntax (scheme base) (scheme eval) (scheme repl)))
-(define-syntax probe
-  (er-macro-transformer
-    (lambda (x r c)
-      (eval '(define (k) f) (interaction-environment))
-      ''ok)))`)
-	c.Assert(err, qt.IsNil)
-	_, err = eng.EvalMultiple(ctx, `(begin (define (f) 1) (probe) (if))`)
+	eng := probeEngine(t, `(define (k) f)`)
+	_, err := eng.EvalMultiple(ctx, `(begin (define (f) 1) (probe) (if))`)
 	c.Assert(err, qt.IsNotNil)
 	got, err := eng.EvalMultiple(ctx, `(define (f) 2) ((k))`)
 	c.Assert(err, qt.IsNil)
@@ -212,4 +198,76 @@ func TestFailedUnitRetractsAnIncludedDefine(t *testing.T) {
 	got, err := eng.EvalMultiple(ctx, `(begin (include "a.scm") (incf 1))`)
 	c.Assert(err, qt.IsNil)
 	c.Assert(got.SchemeString(), qt.Equals, "1")
+}
+
+// probeEngine returns an engine defining a macro, probe, whose transformer
+// evaluates form into the interaction environment: a unit that commits while
+// the unit expanding (probe) is still in flight.
+func probeEngine(t *testing.T, form string) *wile.Engine {
+	t.Helper()
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx,
+		wile.WithProfile(wile.KitchenSink),
+		wile.WithSourceFS(stdlib.FS),
+		wile.WithLibraryPaths("."),
+	)
+	qt.Assert(t, err, qt.IsNil)
+	t.Cleanup(func() {
+		_ = eng.Close()
+	})
+	_, err = eng.EvalMultiple(ctx, `
+(import (scheme base) (scheme eval) (scheme repl)
+        (for-syntax (scheme base) (scheme eval) (scheme repl)))
+(define-syntax probe
+  (er-macro-transformer
+    (lambda (x r c)
+      (eval '`+form+` (interaction-environment))
+      ''ok)))`)
+	qt.Assert(t, err, qt.IsNil)
+	return eng
+}
+
+// TestKeptSlotDoesNotLockTheName pins the other half of a refused retraction.
+// The commit in the window is unrelated to f, but the slot is kept anyway, and
+// the failed define had stamped it Stable before its value compiled. Kept as
+// is, the immutable top level would refuse every later define of f; the kept
+// slot is reverted to a placeholder instead, so the later define binds it.
+func TestKeptSlotDoesNotLockTheName(t *testing.T) {
+	t.Parallel()
+	c := qt.New(t)
+	ctx := context.Background()
+	eng := probeEngine(t, `(define zz-other 0)`)
+	_, err := eng.EvalMultiple(ctx, `(begin (define (f) 1) (probe) zzz-unbound)`)
+	c.Assert(err, qt.IsNotNil)
+	got, err := eng.EvalMultiple(ctx, `(define (f) 2) (f)`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.SchemeString(), qt.Equals, "2")
+}
+
+// TestFailedUnitKeepsSlotsWhileAnotherUnitIsInFlight pins the concurrent case
+// deterministically: a unit in flight at the same phase (here registered by
+// hand, as another SRFI-18 thread's compile would be) may already have
+// resolved and cached the failing unit's slot, so the slot is kept, as a
+// placeholder a later define binds. Once that unit ends, a failure retracts.
+func TestFailedUnitKeepsSlotsWhileAnotherUnitIsInFlight(t *testing.T) {
+	t.Parallel()
+	c := qt.New(t)
+	ctx := context.Background()
+	eng := newEngine(t)
+	store := eng.Environment().Namespace().Store()
+
+	store.BeginUnit(environment.PhaseRuntime)
+	_, err := eng.EvalMultiple(ctx, `(define (f p) zzz-unbound)`)
+	c.Assert(err, qt.IsNotNil)
+	_, err = eng.EvalMultiple(ctx, `f`)
+	c.Assert(err, qt.IsNil, qt.Commentf("the slot is kept while another unit is in flight"))
+	got, err := eng.EvalMultiple(ctx, `(define (f p) p) (f 1)`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.SchemeString(), qt.Equals, "1")
+	store.EndUnit(environment.PhaseRuntime, false)
+
+	_, err = eng.EvalMultiple(ctx, `(define (g p) zzz-unbound)`)
+	c.Assert(err, qt.IsNotNil)
+	_, err = eng.EvalMultiple(ctx, `g`)
+	c.Assert(err, qt.ErrorIs, werr.ErrNoSuchBinding)
 }

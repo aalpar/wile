@@ -105,15 +105,20 @@ func ExpandAndCompileOptimized(ctx context.Context, env *environment.Environment
 // for a name it defines (the expander's predeclaration, the define's own
 // declaration) is logged in one unitMints, and a unit that does not return its
 // template retracts them, so a failed define leaves the name unbound rather
-// than bound to #<void>. The deferred call covers a panic unwinding through
-// here as well as an error return.
+// than bound to #<void>. The unit is registered with the store for its whole
+// span (BeginUnit/EndUnit), which is what lets a failing unit tell whether
+// anyone else can hold its slots. The deferred call covers a panic unwinding
+// through here as well as an error return, and retracts before EndUnit so the
+// failing unit still counts itself in flight.
 func expandAndCompileScoped(ctx context.Context, env *environment.EnvironmentFrame, stx syntax.SyntaxValue, resolver FileResolver, inlineThreshold int, maxExpandDepth int, libraryScope *syntax.Scope) (q *machine.NativeTemplate, rerr error) {
 	evaluator := machine.NewVMMacroEvaluator()
-	mints := &unitMints{store: env.GlobalEnvironment()}
+	mints := &unitMints{store: env.GlobalEnvironment(), phase: env.PhaseLevel()}
+	mints.store.BeginUnit(mints.phase)
 	defer func() {
 		if q == nil {
 			mints.retract()
 		}
+		mints.store.EndUnit(mints.phase, q != nil)
 	}()
 
 	expander := NewExpanderTimeContinuation(ctx, env, evaluator)
@@ -139,7 +144,6 @@ func expandAndCompileScoped(ctx context.Context, env *environment.EnvironmentFra
 		return nil, wrapSourcedError(stx.SourceContext(), werr.WrapForeignErrorf(err, "compilation"))
 	}
 
-	mints.store.NoteUnitCommit(env.PhaseLevel())
 	return tpl, nil
 }
 
@@ -148,39 +152,32 @@ func expandAndCompileScoped(ctx context.Context, env *environment.EnvironmentFra
 //
 // Which slots it may retract is decided by structure, not by inspecting
 // compiled code. A slot belongs here only if this unit's own create answered
-// created == true in the unit's own store, so it did not exist before the unit
-// began; a redefinition reuses the old slot and is never logged, which is what
-// keeps a failed redefine's old value. Code that loads such a slot can only
-// have been compiled after it was minted. Code compiled by this unit lives in
-// the template the failing unit never returns, so it never runs. Code compiled
-// by ANOTHER unit in the window can hold it: a transformer that evaluates into
-// the same environment commits a template while this unit is still expanding,
-// and that template may cache the *Binding (OpLoadCachedBinding), which a
-// retraction would orphan at #<void> while a later define of the name lands on
-// a fresh slot. So each entry records the store's commit count at its slot's
-// phase when it was minted, and is retracted only if no unit has committed at
-// that phase since. Phases are hermetic for resolution, so a commit at another
-// phase (every define-syntax right-hand side is one, at phase+1) cannot hold
-// it and does not block. A by-index load cannot be orphaned: it misses, or
-// heals onto a later slot (RetractGlobalBinding).
-//
-// Not covered: a unit compiling concurrently on another SRFI-18 thread that
-// resolves the slot during the window and commits after this unit has
-// retracted it. A cached load there reads the orphan's #<void>; a define of the
-// same name there reuses the slot without logging it (created == false), and
-// its pinned store then finds nothing at those coordinates and fails at run
-// time with ErrBindingNotFound. Closing it needs the check and the delete to be
-// one step against every resolver, which the store does not offer.
+// created == true in the unit's own store at the unit's own phase, so it did
+// not exist before the unit began; a redefinition reuses the old slot and is
+// never logged, which is what keeps a failed redefine's old value. Code that
+// loads such a slot can only have been compiled after it was minted. Code
+// compiled by this unit lives in the template the failing unit never returns,
+// so it never runs. Code compiled by ANOTHER unit at the same phase can hold
+// it: one that committed in the window (a transformer that evaluates into the
+// same environment commits while this unit is still expanding), or one still
+// in flight on another SRFI-18 thread. Each entry records the store's commit
+// count when it was minted, and RetractGlobalBinding removes the slot only if
+// that count is unchanged and this unit is the only one in flight, checked
+// under the same lock hold as the removal; otherwise it keeps the slot as a
+// placeholder. Phases are hermetic for resolution, so a unit at another phase
+// (every define-syntax right-hand side is one, at phase+1) cannot hold it and
+// does not block.
 //
 // nil is a valid log that records nothing: every compiler and expander outside
 // a unit (library bodies, compile-time halves) carries one.
 type unitMints struct {
 	store *environment.GlobalEnvironmentFrame
+	phase environment.Phase
 	slots []mintedSlot
 }
 
 // mintedSlot is one unitMints entry: the pin and binding the create returned,
-// and the store's commit count at the slot's phase at that moment.
+// and the store's commit count at the unit's phase at that moment.
 type mintedSlot struct {
 	gi      *environment.GlobalIndex
 	binding *environment.Binding
@@ -188,25 +185,24 @@ type mintedSlot struct {
 }
 
 // note logs gi when created reports that the call creating it minted it here.
-// A slot in another store (a library body's own) is not this unit's.
+// A slot in another store (a library body's own) or at another phase is not
+// this unit's: the in-flight and commit counts that guard it are kept per
+// phase, and this unit is counted only at its own.
 func (p *unitMints) note(gi *environment.GlobalIndex, created bool) {
-	if p == nil || !created || gi == nil || gi.Env != p.store {
+	if p == nil || !created || gi == nil || gi.Env != p.store || gi.Phase() != p.phase {
 		return
 	}
 	b := p.store.GetOwnGlobalBinding(gi)
 	if b == nil {
 		return
 	}
-	p.slots = append(p.slots, mintedSlot{gi: gi, binding: b, commits: p.store.UnitCommits(gi.Phase())})
+	p.slots = append(p.slots, mintedSlot{gi: gi, binding: b, commits: p.store.UnitCommits(p.phase)})
 }
 
-// retract removes every logged slot no other unit can be holding, newest
-// first.
+// retract removes every logged slot no other unit can be holding, and reverts
+// the rest to placeholders, newest first.
 func (p *unitMints) retract() {
 	for _, s := range slices.Backward(p.slots) {
-		if p.store.UnitCommits(s.gi.Phase()) != s.commits {
-			continue
-		}
-		p.store.RetractGlobalBinding(s.gi, s.binding)
+		p.store.RetractGlobalBinding(s.gi, s.binding, s.commits)
 	}
 }
