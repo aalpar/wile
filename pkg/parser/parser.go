@@ -260,8 +260,14 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 		// stops at the 9) arrives looking valid with the fault still pending. The
 		// fault is the rune, not the token: clearing p.cur lets the error locate
 		// at the stamped rune. A clean end of input is not a fault.
+		//
+		// A fault stamped intertoken is past a token that was already complete
+		// (a reader failing just after "(x)"), so the datum is whole and this
+		// read returns it, as racket's does; the fault stays pending in the
+		// tokenizer and the next read reports it. A comment is no datum: the
+		// loop below reaches the fault in this read.
 		pending := p.toks.Err()
-		if pending != nil && !errors.Is(pending, io.EOF) {
+		if pending != nil && !errors.Is(pending, io.EOF) && !pastCompleteToken(pending) {
 			p.cur = nil
 			return nil, p.die(pending)
 		}
@@ -279,6 +285,15 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 			return q, nil
 		}
 	}
+}
+
+// pastCompleteToken reports whether err is a fault stamped on the rune after a
+// token whose extent was already fixed: the tokenizer stamps such a fault
+// intertoken (TokenizerStateFailed), and one that cut a token short with that
+// token's state.
+func pastCompleteToken(err error) bool {
+	var terr *tokenizer.TokenizerError
+	return errors.As(err, &terr) && terr.State() == tokenizer.TokenizerStateFailed
 }
 
 // ReleaseLookahead returns the rune the tokenizer has read past the end of the

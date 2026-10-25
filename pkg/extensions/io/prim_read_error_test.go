@@ -340,23 +340,37 @@ func TestReadRecoversFromATransientReaderFault(t *testing.T) {
 }
 
 // TestReadFaultPastACloseParenIsIntertoken pins the port-level shape of B39's
-// gate: a fault just past a ")", here a reader failing after "(x)". The fault
-// is in no token, and was stamped "close-paren" because the ")" read past
-// itself under its own state. Which of the two reads reports it is not pinned.
+// gate: a fault just past a ")", here a reader failing once after "(x)". The
+// fault is in no token, so it is stamped failed (between datums). The read
+// that completed (x) returns it, the next read on the port reports the fault,
+// and the port then reads on, as racket does ((x), the fault, y, eof). The
+// port's cached parser keeps the fault for that next read rather than being
+// rebuilt over the reader, which would have read past the transient failure.
 func TestReadFaultPastACloseParenIsIntertoken(t *testing.T) {
-	for _, op := range []string{"read", "read-syntax"} {
-		t.Run(op, func(t *testing.T) {
+	tcs := []struct {
+		op, datum string
+	}{
+		{"read", "d"},
+		{"read-syntax", "(syntax->datum d)"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.op, func(t *testing.T) {
 			c := qt.New(t)
-			datum := "(x)"
-			rdr := &transientReader{chunks: []*string{&datum, nil}}
+			datum, rest := "(x)", "y"
+			rdr := &transientReader{chunks: []*string{&datum, nil, &rest}}
 			engine := newEngineWithIOTest(t)
 			err := engine.Define("p", wile.WrapValue(values.NewCharacterInputPortFromReader(rdr)))
 			c.Assert(err, qt.IsNil)
-			_, err = engine.EvalMultiple(context.Background(), `(`+op+` p) (`+op+` p)`)
+			step := `(let ((d (` + tc.op + ` p))) (if (eof-object? d) 'eof ` + tc.datum + `))`
+			first := eval(t, engine, step)
+			c.Check(first.Internal().SchemeString(), qt.Equals, "(x)")
+			_, err = engine.EvalMultiple(context.Background(), step)
 			c.Assert(err, qt.IsNotNil)
 			c.Check(errors.Is(err, os.ErrDeadlineExceeded), qt.IsTrue, qt.Commentf("got: %v", err))
 			c.Check(strings.Contains(err.Error(), "(at index 3, line 1, column 3,"), qt.IsTrue, qt.Commentf("got: %v", err))
 			c.Check(strings.Contains(err.Error(), "tokenizer state failed)"), qt.IsTrue, qt.Commentf("got: %v", err))
+			tail := eval(t, engine, `(let* ((a `+step+`) (b `+step+`)) (list a b))`)
+			c.Check(tail.Internal().SchemeString(), qt.Equals, "(y eof)")
 		})
 	}
 }

@@ -16,8 +16,12 @@ package wile_test
 
 import (
 	"context"
+	"errors"
+	"io"
+	"os"
 	"strings"
 	"testing"
+	"testing/iotest"
 
 	"github.com/aalpar/wile/pkg/wile"
 
@@ -130,6 +134,40 @@ func TestReadExpressions(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestReadExpressionsReportAFaultPastTheLastDatum pins both entries on a
+// reader that fails right after a complete datum. The read that completes it
+// returns it (racket's model), so the one-datum entry returns '(x) and never
+// sees the fault; the multi-form entry reads on and reports the fault after
+// the datum, rather than failing the read that returned it.
+func TestReadExpressionsReportAFaultPastTheLastDatum(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	eng, err := wile.NewEngine(ctx)
+	qt.Assert(t, err, qt.IsNil)
+	failing := func() io.Reader {
+		return io.MultiReader(strings.NewReader("'(x)"), iotest.ErrReader(os.ErrDeadlineExceeded))
+	}
+	value := func(expr *wile.Expression) string {
+		cc, err := eng.Compile(ctx, expr)
+		qt.Assert(t, err, qt.IsNil)
+		val, err := eng.Run(ctx, cc)
+		qt.Assert(t, err, qt.IsNil)
+		return val.SchemeString()
+	}
+
+	expr, err := eng.ReadExpression(ctx, failing())
+	qt.Assert(t, err, qt.IsNil)
+	qt.Check(t, value(expr), qt.Equals, "(x)")
+
+	exprs, err := eng.ReadExpressions(ctx, failing())
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Check(t, errors.Is(err, os.ErrDeadlineExceeded), qt.IsTrue, qt.Commentf("got: %v", err))
+	qt.Check(t, wile.IsIncompleteInput(err), qt.IsFalse)
+	qt.Assert(t, len(exprs), qt.Equals, 1)
+	qt.Check(t, value(exprs[0]), qt.Equals, "(x)")
 }
 
 // TestReadExpressions_ForwardReferenceBoundary pins the one semantic where the

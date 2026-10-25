@@ -314,7 +314,15 @@ func NewTokenizerAt(rdr io.RuneReader, ci bool, origin syntax.SourceIndexes, pre
 // moving it would drop the rune, so SeekTo then does nothing and reports false.
 // The caller must treat false as "this tokenizer's positions are stale" and
 // discard it.
+//
+// A pending scanner diagnosis, which ReleaseLookahead keeps, reports true
+// without moving: the next Next reports it and reads nothing, and discarding
+// the tokenizer would lose the fault and read on past it.
 func (p *Tokenizer) SeekTo(origin syntax.SourceIndexes, prev rune) bool {
+	var terr *TokenizerError
+	if errors.As(p.err, &terr) {
+		return true
+	}
 	if !p.released {
 		return false
 	}
