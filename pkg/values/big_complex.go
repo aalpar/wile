@@ -621,7 +621,13 @@ func (p *BigComplex) ImagPart() Number {
 
 // Magnitude returns the absolute value (modulus) of the complex number.
 // |a+bi| = sqrt(a² + b²)
+//
+// A NaN part reads as a zero under the nan flag, so it is answered up front: NaN,
+// except beside an infinite part, where the magnitude is +Inf as IEEE hypot has it.
 func (p *BigComplex) Magnitude() *BigFloat {
+	if p.IsNaN() && !isInfinitePart(p.real) && !isInfinitePart(p.imag) {
+		return NewBigFloatNaN()
+	}
 	a := toBigFloat(p.real)
 	b := toBigFloat(p.imag)
 	aa := new(big.Float).Mul(a.value, a.value)
@@ -631,11 +637,19 @@ func (p *BigComplex) Magnitude() *BigFloat {
 	return &BigFloat{value: result}
 }
 
+// isInfinitePart reports whether a BigComplex part is ±Inf (not finite, not NaN).
+func isInfinitePart(n Number) bool {
+	return !n.IsFinite() && !n.IsNaN()
+}
+
 // Phase returns the phase (argument) of the complex number in radians.
 // Uses atan2(imag, real) at big.Float precision, so components beyond the
 // float64 range (~1.8e308) with a finite ratio keep their true angle instead of
 // both saturating to +Inf and collapsing to atan2(+Inf,+Inf)=π/4.
 func (p *BigComplex) Phase() *BigFloat {
+	if p.IsNaN() {
+		return NewBigFloatNaN()
+	}
 	r := toBigFloat(p.real).value
 	i := toBigFloat(p.imag).value
 	return &BigFloat{value: BigAtan2(i, r, DefaultBigFloatPrecision)}
@@ -649,6 +663,9 @@ func (p *BigComplex) Phase() *BigFloat {
 // with big.Float instead of truncating to complex128 keeps components beyond
 // the float64 range (~1.8e308) from overflowing the result to +inf.
 func (p *BigComplex) Sqrt() *BigComplex {
+	if p.IsNaN() {
+		return NewBigComplexFromBigFloats(NewBigFloatNaN(), NewBigFloatNaN())
+	}
 	prec := uint(DefaultBigFloatPrecision)
 	a := new(big.Float).SetPrec(prec).Set(toBigFloat(p.real).value)
 	b := new(big.Float).SetPrec(prec).Set(toBigFloat(p.imag).value)

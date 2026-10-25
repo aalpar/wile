@@ -307,3 +307,36 @@ func TestBigComplexAtan_HugeNoOverflow(t *testing.T) {
 		t.Fatalf("Im(atan(1e400+1e400i)) = %v, want ≈ 0", f64(imB))
 	}
 }
+
+// TestBigLog_NearOneIsAccurate pins logAt's mantissa centring. With MantExp's
+// [0.5,1) mantissa, ln(1) was computed as ln(0.5) + ln(2) and the cancellation
+// left 9.2e-92, which (log x 1) then divided by.
+func TestBigLog_NearOneIsAccurate(t *testing.T) {
+	got := BigLog(big.NewFloat(1), DefaultBigFloatPrecision)
+	if got.Sign() != 0 {
+		t.Fatalf("BigLog(1) = %s, want exactly 0", got.Text('g', 20))
+	}
+	// ln(1 + 2^-100) = 2^-100 - 2^-201 + ...: relative error, not absolute, is the test.
+	// SetMantExp takes mant's precision, so widen before adding 1.
+	want := new(big.Float).SetMantExp(big.NewFloat(1), -100)
+	x := new(big.Float).SetPrec(DefaultBigFloatPrecision).Add(want, big.NewFloat(1))
+	if !closeWithin(BigLog(x, DefaultBigFloatPrecision), want, -195) {
+		t.Fatalf("BigLog(1+2^-100) = %s, want 2^-100 to within 2^-195",
+			BigLog(x, DefaultBigFloatPrecision).Text('g', 40))
+	}
+}
+
+// TestBigAtan2_BothInfinite pins the IEEE 754 answers for two infinite
+// operands, where y/x is Inf/Inf and big.Float.Quo panics.
+func TestBigAtan2_BothInfinite(t *testing.T) {
+	inf := func(neg bool) *big.Float {
+		return new(big.Float).SetInf(neg)
+	}
+	for _, c := range []struct{ yNeg, xNeg bool }{{false, false}, {true, false}, {false, true}, {true, true}} {
+		got := f64(BigAtan2(inf(c.yNeg), inf(c.xNeg), DefaultBigFloatPrecision))
+		want := math.Atan2(math.Inf(map[bool]int{false: 1, true: -1}[c.yNeg]), math.Inf(map[bool]int{false: 1, true: -1}[c.xNeg]))
+		if got != want {
+			t.Errorf("BigAtan2(%v Inf, %v Inf) = %v, want %v", c.yNeg, c.xNeg, got, want)
+		}
+	}
+}

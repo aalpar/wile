@@ -372,6 +372,77 @@ func TestSqrtBigFloat(t *testing.T) {
 	}
 }
 
+// TestTranscendentalNonFiniteBigFloat pins the transcendentals at a NaN or
+// infinite BigFloat operand, which the big kernels cannot reduce. Before the
+// fix exp/sin/cos/tan of an infinity dereferenced a nil integer part, log of
+// one panicked with big.ErrNaN, and a NaN read as the zero under its flag
+// ((exp nan) was 1.0l0, (atan nan) 0.0l0). The answers are the IEEE ones
+// racket and petite give for the Float operand; the eqv? rows also pin the
+// BigFloat kind, as TestSqrtBigFloat does for sqrt.
+func TestTranscendentalNonFiniteBigFloat(t *testing.T) {
+	engine := newEngine(t)
+	const inf, ninf, nan = "(/ #m1 #m0)", "(/ #m-1 #m0)", "(/ #m0 #m0)"
+	tcs := []struct{ name, code string }{
+		{"exp +inf", "(eqv? (exp " + inf + ") " + inf + ")"},
+		{"exp -inf", "(eqv? (exp " + ninf + ") #m0)"},
+		{"sin +inf", "(eqv? (sin " + inf + ") " + nan + ")"},
+		{"cos -inf", "(eqv? (cos " + ninf + ") " + nan + ")"},
+		{"tan +inf", "(eqv? (tan " + inf + ") " + nan + ")"},
+		{"log +inf", "(eqv? (log " + inf + ") " + inf + ")"},
+		{"log +inf base 2", "(eqv? (log " + inf + " 2) " + inf + ")"},
+		{"log 8 base +inf", "(eqv? (log #m8 " + inf + ") #m0)"},
+		{"atan +inf keeps full precision", "(eqv? (atan " + inf + ") (* 2 (atan #m1)))"},
+		{"exp nan", "(eqv? (exp " + nan + ") " + nan + ")"},
+		{"sin nan", "(eqv? (sin " + nan + ") " + nan + ")"},
+		{"cos nan", "(eqv? (cos " + nan + ") " + nan + ")"},
+		{"asin nan", "(eqv? (asin " + nan + ") " + nan + ")"},
+		{"acos nan", "(eqv? (acos " + nan + ") " + nan + ")"},
+		{"atan nan", "(eqv? (atan " + nan + ") " + nan + ")"},
+		{"log nan", "(nan? (log " + nan + "))"},
+		{"atan2 nan y", "(eqv? (atan " + nan + " #m1) " + nan + ")"},
+		{"atan2 Float nan x", "(eqv? (atan #m1 +nan.0) " + nan + ")"},
+		{"atan2 Float +inf x", "(eqv? (atan #m1 +inf.0) #m0)"},
+		{"atan2 both infinite", "(eqv? (atan " + inf + " " + ninf + ") (* 3 (atan #m1)))"},
+		{"magnitude nan part", "(eqv? (magnitude (make-rectangular " + nan + " #m4)) " + nan + ")"},
+		{"magnitude nan beside inf is inf", "(eqv? (magnitude (make-rectangular " + nan + " " + inf + ")) " + inf + ")"},
+		{"angle nan part", "(eqv? (angle (make-rectangular " + nan + " #m4)) " + nan + ")"},
+		{"angle both infinite", "(eqv? (angle (make-rectangular " + inf + " " + inf + ")) (atan #m1))"},
+		{"sqrt nan part", "(let ((r (sqrt (make-rectangular " + nan + " #m4)))) (and (nan? (real-part r)) (nan? (imag-part r))))"},
+		{"sin of a complex with a nan part is not rescued", "(nan? (sin (make-rectangular " + nan + " #m4)))"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			c.Assert(eval(t, engine, tc.code).Internal(), qt.Equals, values.TrueValue, qt.Commentf("%s", tc.code))
+		})
+	}
+}
+
+// TestLogTwoArgumentEdges pins two-argument log where a logarithm is zero or
+// infinite. Go's complex division answers Inf/x and x/0 with a NaN imaginary
+// part, so (log 8 1) was +inf.0+nan.0i; on the big path ln(1) was 9.2e-92
+// rather than 0, so (log #m8 #m1) was a finite 2.26e91 and (log #m1 #m1) 1.0l0.
+func TestLogTwoArgumentEdges(t *testing.T) {
+	engine := newEngine(t)
+	tcs := []struct{ code, want string }{
+		{"(log 8 1)", "+inf.0"},
+		{"(log 0 2)", "-inf.0"},
+		{"(log 8 2)", "3.0"},
+		{"(log 1 1)", "+nan.0"},
+		{"(log #m1)", "0.0l0"},
+		{"(log #m8 #m1)", "+inf.0"},
+		{"(log #m1 #m1)", "+nan.0"},
+		{"(log #m8 #m2)", "3.0l0"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.code, func(t *testing.T) {
+			c := qt.New(t)
+			code := `(string=? (number->string ` + tc.code + `) "` + tc.want + `")`
+			c.Assert(eval(t, engine, code).Internal(), qt.Equals, values.TrueValue, qt.Commentf("%s", tc.code))
+		})
+	}
+}
+
 // TestSqrtBigInteger verifies sqrt behavior on BigInteger inputs.
 func TestSqrtBigInteger(t *testing.T) {
 	c := qt.New(t)

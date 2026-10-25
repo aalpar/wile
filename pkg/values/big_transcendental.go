@@ -1,6 +1,7 @@
 package values
 
 import (
+	"math"
 	"math/big"
 	"sync"
 )
@@ -175,6 +176,16 @@ func atan2At(y, x *big.Float, wp uint) *big.Float {
 		return copySignBig(new(big.Float).SetPrec(wp), y, wp)
 	}
 
+	// Both infinite: y/x is Inf/Inf, which big.Float.Quo panics on. IEEE 754
+	// gives ±π/4 for x = +Inf and ±3π/4 for x = -Inf, the sign of y.
+	if y.IsInf() && x.IsInf() {
+		q := new(big.Float).SetPrec(wp).Quo(pi, new(big.Float).SetPrec(wp).SetInt64(4))
+		if x.Sign() < 0 {
+			q.Mul(q, new(big.Float).SetPrec(wp).SetInt64(3))
+		}
+		return copySignBig(q, y, wp)
+	}
+
 	switch {
 	case x.Sign() > 0:
 		return atanAt(new(big.Float).SetPrec(wp).Quo(y, x), wp)
@@ -269,8 +280,10 @@ func BigE(prec uint) *big.Float {
 }
 
 // logAt computes the natural logarithm of x at precision wp. It splits
-// x = mant·2ᵉ (mant ∈ [0.5,1)) so ln(x) = ln(mant) + e·ln(2), with ln(mant)
-// from the atanh series on (mant−1)/(mant+1) (|t| ≤ 1/3, fast convergence).
+// x = mant·2ᵉ with mant ∈ [√½, √2) so ln(x) = ln(mant) + e·ln(2), with ln(mant)
+// from the atanh series on (mant−1)/(mant+1) (|t| ≤ 0.172, fast convergence).
+// Centring mant on 1 is what keeps x near 1 accurate: with MantExp's [0.5,1)
+// the answer for x = 1 was ln(0.5) + ln(2), whose cancellation left 9.2e-92.
 // x ≤ 0 yields −∞ — the only reachable case is x = 0, the atan(±i) pole.
 func logAt(x *big.Float, wp uint) *big.Float {
 	if x.Sign() <= 0 {
@@ -278,6 +291,10 @@ func logAt(x *big.Float, wp uint) *big.Float {
 	}
 	mant := new(big.Float).SetPrec(wp)
 	e := x.MantExp(mant)
+	if mant.Cmp(big.NewFloat(math.Sqrt2/2)) < 0 {
+		mant.SetMantExp(mant, 1)
+		e--
+	}
 	one := new(big.Float).SetPrec(wp).SetInt64(1)
 	num := new(big.Float).SetPrec(wp).Sub(mant, one)
 	den := new(big.Float).SetPrec(wp).Add(mant, one)

@@ -40,6 +40,9 @@ func cmplxNonFinite(c complex128) bool {
 func complexComponents(v values.Value) (re, im *big.Float, ok bool) {
 	switch c := v.(type) {
 	case *values.BigComplex:
+		if c.IsNaN() {
+			return nil, nil, false
+		}
 		re = new(big.Float).Set(c.RealAsBigFloat().BigFloatValue())
 		im = new(big.Float).Set(c.ImagAsBigFloat().BigFloatValue())
 	case *values.Complex:
@@ -97,9 +100,15 @@ func rescueBigComplex(mc machine.CallContext, arg values.Value, result complex12
 func makeComplexPrimitive(name string, fn func(complex128) complex128, bigRealFn func(*big.Float, uint) *big.Float, bigCplxFn bigComplexFn) machine.ForeignFunction {
 	return func(mc machine.CallContext) error {
 		arg := mc.Arg(0)
-		if bigRealFn != nil && isUnboundedReal(arg) {
+		special, ok := bigFloatSpecial(arg, fn)
+		if ok {
+			mc.SetValue(special)
+			return nil
+		}
+		bf := numberToBigFloat(arg)
+		if bigRealFn != nil && isUnboundedReal(arg) && bf != nil && !bf.IsInf() {
 			// A nil return declines (e.g. asin/acos of |x|>1 is complex); fall through.
-			q := bigRealFn(numberToBigFloat(arg), values.DefaultBigFloatPrecision)
+			q := bigRealFn(bf, values.DefaultBigFloatPrecision)
 			if q != nil {
 				mc.SetValue(values.NewBigFloat(q))
 				return nil
@@ -135,6 +144,11 @@ var (
 // 1.97e434 is representable as a bignum even though math.Exp returns +Inf).
 func PrimExp(mc machine.CallContext) error {
 	arg := mc.Arg(0)
+	special, ok := bigFloatSpecial(arg, cmplx.Exp)
+	if ok {
+		mc.SetValue(special)
+		return nil
+	}
 	if isUnboundedReal(arg) {
 		mc.SetValue(values.NewBigFloat(values.BigExp(numberToBigFloat(arg), values.DefaultBigFloatPrecision)))
 		return nil
@@ -168,6 +182,11 @@ func PrimLog(mc machine.CallContext) error {
 	rest := mc.Arg(1)
 
 	if values.IsEmptyList(rest) {
+		special, ok := bigFloatSpecial(o, cmplx.Log)
+		if ok {
+			mc.SetValue(special)
+			return nil
+		}
 		if isUnboundedReal(o) {
 			ob := numberToBigFloat(o)
 			if ob.Sign() > 0 {
@@ -199,11 +218,15 @@ func PrimLog(mc machine.CallContext) error {
 	if isUnboundedReal(o) {
 		ob := numberToBigFloat(o)
 		bb := numberToBigFloat(baseVal)
-		if ob.Sign() > 0 && bb != nil && bb.Sign() > 0 {
-			q := new(big.Float).SetPrec(values.DefaultBigFloatPrecision).Quo(
-				values.BigLog(ob, values.DefaultBigFloatPrecision),
-				values.BigLog(bb, values.DefaultBigFloatPrecision))
-			mc.SetValue(values.NewBigFloat(q))
+		if ob != nil && ob.Sign() > 0 && !ob.IsInf() && bb != nil && bb.Sign() > 0 && !bb.IsInf() {
+			lo := values.BigLog(ob, values.DefaultBigFloatPrecision)
+			lb := values.BigLog(bb, values.DefaultBigFloatPrecision)
+			if lo.Sign() == 0 && lb.Sign() == 0 {
+				// (log 1 1): 0/0, which big.Float.Quo panics on.
+				mc.SetValue(values.NewBigFloatNaN())
+				return nil
+			}
+			mc.SetValue(values.NewBigFloat(new(big.Float).SetPrec(values.DefaultBigFloatPrecision).Quo(lo, lb)))
 			return nil
 		}
 	}
@@ -215,7 +238,20 @@ func PrimLog(mc machine.CallContext) error {
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "log: %v", err)
 	}
-	mc.SetValue(helpers.ComplexOrFloat(cmplx.Log(z) / cmplx.Log(base)))
+	lz, lb := cmplx.Log(z), cmplx.Log(base)
+	result := lz / lb
+	if imag(lz) == 0 && imag(lb) == 0 {
+		// Go's complex division answers Inf/x and x/0 with a NaN imaginary part.
+		result = complex(real(lz)/real(lb), 0)
+	}
+	if isBigFloat(o) || isBigFloat(baseVal) {
+		special, ok := realBigFloat(result)
+		if ok {
+			mc.SetValue(special)
+			return nil
+		}
+	}
+	mc.SetValue(helpers.ComplexOrFloat(result))
 	return nil
 }
 
@@ -228,7 +264,12 @@ func PrimAtan(mc machine.CallContext) error {
 		// Big-tier real operands keep big precision via values.BigAtan; an
 		// out-of-float64-range BigComplex uses values.BigComplexAtan (see below).
 		if isUnboundedReal(o) {
-			mc.SetValue(values.NewBigFloat(values.BigAtan(numberToBigFloat(o), values.DefaultBigFloatPrecision)))
+			bf := numberToBigFloat(o)
+			if bf == nil { // a NaN BigFloat; BigAtan handles ±Inf itself
+				mc.SetValue(values.NewBigFloatNaN())
+				return nil
+			}
+			mc.SetValue(values.NewBigFloat(values.BigAtan(bf, values.DefaultBigFloatPrecision)))
 			return nil
 		}
 		bc, isBigComplex := o.(*values.BigComplex)
@@ -269,14 +310,15 @@ func PrimAtan(mc machine.CallContext) error {
 	// An unbounded-range/precision operand on either side takes the big-precision
 	// atan2 path, so large-magnitude operands with a finite ratio keep their true
 	// angle instead of both saturating to ±Inf under float64 truncation.
+	// A NaN on either side (nil here) takes the float64 path, which answers NaN
+	// or raises for a non-real operand.
 	if isUnboundedReal(o) || isUnboundedReal(xVal) {
 		y := numberToBigFloat(o)
 		x := numberToBigFloat(xVal)
-		if y == nil || x == nil {
-			return werr.WrapForeignErrorf(werr.ErrNotANumber, "atan: expected real arguments")
+		if y != nil && x != nil {
+			mc.SetValue(values.NewBigFloat(values.BigAtan2(y, x, values.DefaultBigFloatPrecision)))
+			return nil
 		}
-		mc.SetValue(values.NewBigFloat(values.BigAtan2(y, x, values.DefaultBigFloatPrecision)))
-		return nil
 	}
 
 	// Bounded operands (Integer, Float) cannot overflow float64, so atan2 runs on
@@ -290,8 +332,44 @@ func PrimAtan(mc machine.CallContext) error {
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "atan: %v", err)
 	}
+	if isBigFloat(o) || isBigFloat(xVal) {
+		mc.SetValue(values.NewBigFloatFromFloat64(math.Atan2(y, x)))
+		return nil
+	}
 	mc.SetValue(values.NewFloat(math.Atan2(y, x)))
 	return nil
+}
+
+// bigFloatSpecial answers fn at a NaN or infinite *BigFloat operand, which the
+// big kernels cannot reduce (BigExp and the trig range reduction dereference a
+// nil integer part; BigLog panics on Inf/Inf): fn's IEEE result, boxed as a
+// BigFloat so the result keeps the operand's tier, as sqrt's does. ok is false
+// for any other operand, and for a complex result (asin of +inf.0), which the
+// caller's complex path answers.
+func bigFloatSpecial(arg values.Value, fn func(complex128) complex128) (values.Value, bool) {
+	bf, isBig := arg.(*values.BigFloat)
+	if !isBig || bf.IsFinite() {
+		return nil, false
+	}
+	return realBigFloat(fn(complex(bf.Float64Truncated(), 0)))
+}
+
+// realBigFloat boxes a real-valued complex128 result as a BigFloat. "Real" is
+// ComplexOrFloat's rule: a zero imaginary part, or NaN in both parts.
+func realBigFloat(r complex128) (values.Value, bool) {
+	re, im := real(r), imag(r)
+	bothNaN := math.IsNaN(re) && math.IsNaN(im)
+	if im != 0 && !bothNaN {
+		return nil, false
+	}
+	return values.NewBigFloatFromFloat64(re), true
+}
+
+// isBigFloat reports whether v is a *BigFloat, the operand that puts a real
+// result in the BigFloat tier.
+func isBigFloat(v values.Value) bool {
+	_, ok := v.(*values.BigFloat)
+	return ok
 }
 
 // isUnboundedReal reports whether v is a real number whose range or precision
@@ -311,11 +389,16 @@ func isUnboundedReal(v values.Value) bool {
 
 // numberToBigFloat converts a real numeric value to *big.Float: at default
 // precision, except a *BigFloat which keeps its own. Returns nil for non-numeric
-// or complex values, and for a NaN/±Inf float, which math/big cannot represent.
+// or complex values, for a NaN (Float or BigFloat), which math/big cannot
+// represent, and for a ±Inf Float. An infinite BigFloat passes through; callers
+// whose kernel cannot reduce an infinity test IsInf and take the float64 arm.
 func numberToBigFloat(v values.Value) *big.Float {
 	prec := uint(values.DefaultBigFloatPrecision)
 	switch n := v.(type) {
 	case *values.BigFloat:
+		if n.IsNaN() {
+			return nil // a NaN BigFloat's value is a zero under the nan flag
+		}
 		return new(big.Float).Set(n.BigFloatValue())
 	case *values.BigInteger:
 		return new(big.Float).SetPrec(prec).SetInt(n.BigInt())
