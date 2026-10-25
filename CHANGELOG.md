@@ -29,11 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- **A thread started inside a `with-timeout` thunk outlives the thunk.** The
-  thunk's normal return, or an escape from it, cancelled the thread, which then
-  died with "context canceled" wherever it was. Only the timer's expiry (or an
-  enclosing timer's) cancels it now, with the expiry as the cause; the host's
-  ctx, `thread-terminate!` and `Engine.Close` still end it.
+- **A thread or child process started inside a `with-timeout` thunk outlives
+  the thunk.** The thunk's normal return, or an escape from it, cancelled a
+  thread it started, which then died with "context canceled" wherever it was,
+  and killed a `process-spawn` child. Only the timer's expiry (or an enclosing
+  timer's) ends them now; the host's ctx, `thread-terminate!` and `Engine.Close`
+  still do, with the same `context.DeadlineExceeded` / `context.Canceled` class
+  as before.
 
 - **`exit` in a thread is documented: it ends the process.** The other threads
   stop and their `dynamic-wind` after thunks do not run, as in Racket

@@ -51,8 +51,8 @@ func (p *MachineContext) RunBodyUnderTimer(d time.Duration, thunk values.Value, 
 	// The cause names the timer (timerExpiry), so an expiry is answered by the
 	// with-timeout whose timer fired, on whichever context arms it.
 	timerCtx, cancel := p.newTimerContext(parentCtx, d, &timerExpiry{timer: timer})
-	// The marker lets a thread started anywhere under this ctx, on whichever
-	// context, find the timer (ThreadParentContext).
+	// The marker lets work started anywhere under this ctx, on whichever
+	// context, find the timer (SpawnContext).
 	timerCtx = context.WithValue(timerCtx, timerCtxKey{}, timer)
 	timer.cancel = cancel
 	timer.ctx = timerCtx
@@ -105,8 +105,20 @@ type timerClockKey struct{}
 type timerClock func(p *MachineContext, parent context.Context, d time.Duration, cause error) (context.Context, context.CancelFunc)
 
 // newTimerContext returns the ctx of a with-timeout timer armed on p for d: the
-// wall clock's, unless parent carries a timerClock.
+// wall clock's, unless parent carries a timerClock. Its cancel, which leaving the
+// extent calls, ends it with errTimerLeft as the cause, so a ctx derived from it
+// tells that ending from any other (SpawnContext).
 func (p *MachineContext) newTimerContext(parent context.Context, d time.Duration, cause error) (context.Context, context.CancelFunc) {
+	left, leave := context.WithCancelCause(parent)
+	q, cancel := p.newTimerClockContext(left, d, cause)
+	return q, func() {
+		leave(errTimerLeft)
+		cancel()
+	}
+}
+
+// newTimerClockContext is newTimerContext's timer ctx, before the leaving cause.
+func (p *MachineContext) newTimerClockContext(parent context.Context, d time.Duration, cause error) (context.Context, context.CancelFunc) {
 	clock, ok := parent.Value(timerClockKey{}).(timerClock)
 	if ok {
 		return clock(p, parent, d, cause)
@@ -114,46 +126,22 @@ func (p *MachineContext) newTimerContext(parent context.Context, d time.Duration
 	return context.WithTimeoutCause(parent, d, cause)
 }
 
+// timerLeft is the cause a with-timeout's ctx ends with when the extent is left
+// (a normal return, an escape), not expired. It reads and matches as
+// context.Canceled, the cause it replaces.
+type timerLeft struct{}
+
+func (timerLeft) Error() string {
+	return context.Canceled.Error()
+}
+
+func (timerLeft) Unwrap() error {
+	return context.Canceled
+}
+
+// errTimerLeft is the one timerLeft value.
+var errTimerLeft error = timerLeft{}
+
 // timerCtxKey keys the *timerState a with-timeout's ctx carries, so every ctx
 // derived from it (a sub-context's, an Engine.Call root's) leads back to it.
 type timerCtxKey struct{}
-
-// ThreadParentContext returns the ctx a thread started under ctx is to run
-// beneath. A with-timeout bounds its thunk's computation, not a thread the thunk
-// starts: the thread outlives the thunk's normal return and any escape from it,
-// and is cancelled when one of the timers armed around its start expires, with
-// that expiry as the cause, or when the ctx below them all ends (the engine's,
-// the host's, a starting thread's own). The values of ctx are kept. With no timer
-// armed, ctx is returned unchanged.
-//
-// Deriving the thread from ctx itself let the finalizer's cancel of a normal
-// return kill the thread with a plain context.Canceled.
-func ThreadParentContext(ctx context.Context) context.Context {
-	var timers []context.Context
-	base := ctx
-	for {
-		t, ok := base.Value(timerCtxKey{}).(*timerState)
-		if !ok {
-			break
-		}
-		timers = append(timers, t.ctx)
-		base = t.savedCtx
-	}
-	if len(timers) == 0 {
-		return ctx
-	}
-	q, cancel := context.WithCancelCause(context.WithoutCancel(ctx))
-	context.AfterFunc(base, func() {
-		cancel(context.Cause(base))
-	})
-	for _, tc := range timers {
-		// An outer expiry reaches an inner timer's ctx with its own cause, so
-		// each check sees whichever expiry ended that timer.
-		context.AfterFunc(tc, func() {
-			if expiredTimer(tc) != nil {
-				cancel(context.Cause(tc))
-			}
-		})
-	}
-	return q
-}

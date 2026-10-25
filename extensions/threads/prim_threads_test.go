@@ -3320,10 +3320,11 @@ func TestWithTimeoutInterruptsParkedThreadSleep(t *testing.T) {
 	}
 }
 
-// TestThreadStartedInATimedThunkStillEndsWithItsEngine pins the two ends that
-// still reach a thread a with-timeout thunk started after the thunk returned (its
-// timer's expiry being the third, pinned in pkg/machine): the host cancelling the
-// ctx below the timer, and Engine.Close. The thread parks on a mutex the main
+// TestThreadStartedInATimedThunkStillEndsWithItsEngine pins the ends that still
+// reach a thread a with-timeout thunk started after the thunk returned (its
+// timer's expiry being another, pinned in pkg/machine): the host cancelling the
+// ctx below the timer, the host cancelling a ctx it layered above the timer for a
+// callback the thread was started in, and Engine.Close. The thread parks on a mutex the main
 // thread never releases, so nothing else ends it. The timer's 60 s never elapses
 // before its thunk returns, and if it did the thread would be cancelled anyway.
 func TestThreadStartedInATimedThunkStillEndsWithItsEngine(t *testing.T) {
@@ -3349,6 +3350,59 @@ t`
 		c.Assert(err, qt.IsNil)
 		cancel()
 		result, err := evalWithWatchdog(t, engine, `
+(guard (e ((uncaught-exception? e) 'uncaught-exception)
+          ((error-object? e) 'error-object))
+  (thread-join! t))`, 5*time.Second)
+		c.Assert(err, qt.IsNil)
+		c.Assert(result.SchemeString(), qt.Equals, "uncaught-exception")
+	})
+	t.Run("the host cancels a ctx it layered above the timer", func(t *testing.T) {
+		c := qt.New(t)
+		engine := newEngine(t)
+		defer func() {
+			_ = engine.Close()
+		}()
+		// call-in-layer runs its thunk through Engine.Call under a ctx the host
+		// layers above the caller's, the timer's; cancel-layer! ends that layer,
+		// while the timer is still armed (once the thunk returns, the layer, a
+		// child of the timer's ctx, has ended with it).
+		var cancelLayer context.CancelFunc
+		c.Assert(engine.RegisterPrimitive(wile.PrimitiveSpec{
+			Name:       "call-in-layer",
+			ParamCount: 1,
+			Impl: func(mc wile.CallContext) error {
+				var layer context.Context
+				layer, cancelLayer = context.WithCancel(mc.Context())
+				v, err := engine.Call(layer, wile.WrapValue(mc.Arg(0)))
+				if err != nil {
+					return err
+				}
+				mc.SetValue(v.Internal())
+				return nil
+			},
+		}), qt.IsNil)
+		c.Assert(engine.RegisterPrimitive(wile.PrimitiveSpec{
+			Name:       "cancel-layer!",
+			ParamCount: 0,
+			Impl: func(mc wile.CallContext) error {
+				cancelLayer()
+				mc.SetValue(values.Void)
+				return nil
+			},
+		}), qt.IsNil)
+		result, err := evalWithWatchdog(t, engine, `
+(define m (make-mutex))
+(mutex-lock! m)
+(define rm (make-mutex))
+(define rcv (make-condition-variable))
+(define t (make-thread (lambda ()
+  (mutex-lock! rm) (condition-variable-signal! rcv) (mutex-unlock! rm)
+  (mutex-lock! m))))
+(with-timeout 60000 (lambda (k) 'timed-out)
+  (lambda ()
+    (call-in-layer (lambda () (mutex-lock! rm) (thread-start! t) (mutex-unlock! rm rcv)))
+    (cancel-layer!)
+    'thunk-returned))
 (guard (e ((uncaught-exception? e) 'uncaught-exception)
           ((error-object? e) 'error-object))
   (thread-join! t))`, 5*time.Second)

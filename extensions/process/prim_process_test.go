@@ -566,8 +566,10 @@ func TestProcessWaitCancelledRaisesAndLeavesTheChild(t *testing.T) {
 //     exit code. The wait used to park for the child's 30 s, then the handler's
 //     kill failed on the reaped child.
 //
-// A child spawned inside the thunk would die with the timer's ctx; that contract
-// is the spawn's, and TestProcessSpawnCtxBoundsTheChild pins it without a timer.
+// A child spawned inside the thunk dies by the timer's expiry, not by the thunk's
+// return; that contract is the spawn's, pinned by
+// TestChildSpawnedInATimedThunkEndsOnlyByExpiry (pkg/machine), and
+// TestProcessSpawnCtxBoundsTheChild pins the host's half without a timer.
 func TestProcessWaitUnderWithTimeout(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses Unix commands")
@@ -600,7 +602,9 @@ func TestProcessWaitUnderWithTimeout(t *testing.T) {
 // cancellation contract: the wait does not kill the child, but the ctx the child
 // was spawned under does (exec.CommandContext). A child spawned in a run whose ctx
 // then ends is killed, and a wait on it in a later run under a live ctx answers
-// the killed status.
+// the killed status. Under a with-timeout the spawn ctx is the one below the
+// timer, which the timer's expiry also ends but its thunk's return does not
+// (machine.SpawnContext).
 func TestProcessSpawnCtxBoundsTheChild(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses Unix commands")

@@ -16,6 +16,7 @@ package machine
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
@@ -84,9 +85,13 @@ func WithTimerFiringOnCue(ctx context.Context) (context.Context, func()) {
 // whatever its duration. Firing a timer not yet armed, or one already over, does
 // nothing.
 func WithTimersFiringOnCue(ctx context.Context) (context.Context, func(i int)) {
+	// Timers are armed on whichever thread runs a with-timeout.
+	var mu sync.Mutex
 	var expires []func()
 	clock := timerClock(func(_ *MachineContext, parent context.Context, _ time.Duration, cause error) (context.Context, context.CancelFunc) {
 		inner, cancel := context.WithCancelCause(parent)
+		mu.Lock()
+		defer mu.Unlock()
 		expires = append(expires, func() {
 			cancel(cause)
 		})
@@ -95,9 +100,14 @@ func WithTimersFiringOnCue(ctx context.Context) (context.Context, func(i int)) {
 		}
 	})
 	fire := func(i int) {
-		if i < len(expires) {
-			expires[i]()
+		mu.Lock()
+		if i >= len(expires) {
+			mu.Unlock()
+			return
 		}
+		expire := expires[i]
+		mu.Unlock()
+		expire()
 	}
 	return context.WithValue(ctx, timerClockKey{}, clock), fire
 }

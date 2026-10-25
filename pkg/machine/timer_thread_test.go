@@ -16,6 +16,7 @@ package machine_test
 
 import (
 	"context"
+	"runtime"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
@@ -179,6 +180,130 @@ func TestLeavingATimerEndsItsContext(t *testing.T) {
 			qt.Assert(t, result.SchemeString(), qt.Equals, tc.want)
 			qt.Assert(t, timerCtx, qt.IsNotNil)
 			qt.Assert(t, timerCtx.Err(), qt.ErrorIs, context.Canceled)
+		})
+	}
+}
+
+// meetHelpers define a rendezvous: (start-and-meet! th mx cv) starts th and
+// returns once th has called (meet! mx cv).
+const meetHelpers = `
+  (define (start-and-meet! th mx cv) (mutex-lock! mx) (thread-start! th) (mutex-unlock! mx cv))
+  (define (meet! mx cv) (mutex-lock! mx) (condition-variable-signal! cv) (mutex-unlock! mx))`
+
+// TestThreadStartedByAThreadEndsWithIt pins that a thread B started by a thread A
+// ends when A's ctx does, however A was started. A starts B, both park on m,
+// which the main thread holds, and A is then terminated, or its starter's timer
+// expires. B used to survive A's termination when A had been started in a
+// with-timeout thunk that returned: A's ctx still carried the starter's timer
+// marker, so B's start walked past A's ctx to the ctx below that timer.
+func TestThreadStartedByAThreadEndsWithIt(t *testing.T) {
+	tcs := []struct {
+		name  string
+		start string
+		end   string
+	}{
+		{"A started bare, then terminated", `(start-and-meet! a rm rcv)`, `(thread-terminate! a)`},
+		{"A started in a timed thunk that returned, then terminated",
+			`(with-timeout 1000 (lambda (k) 'timed-out) (lambda () (start-and-meet! a rm rcv) 'returned))`, `(thread-terminate! a)`},
+		{"A started in a timed thunk whose timer expires",
+			`(with-timeout 1000 (lambda (k) 'timed-out) (lambda () (start-and-meet! a rm rcv) (fire! 0) 'unreached))`, `#f`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			env := testhelpers.NewFullRuntimeEnv(t)
+			ctx, fire := machine.WithTimersFiringOnCue(context.Background())
+			defineFire(t, env, fire)
+			result, err := testhelpers.RunSchemeCodeWithEnvAndContext(ctx, t, env, `(begin`+meetHelpers+`
+  (define m (make-mutex))
+  (mutex-lock! m)
+  (define rm (make-mutex))
+  (define rcv (make-condition-variable))
+  (define rm2 (make-mutex))
+  (define rcv2 (make-condition-variable))
+  (define b (make-thread (lambda () (meet! rm2 rcv2) (mutex-lock! m) 'b-value)))
+  (define a (make-thread (lambda () (start-and-meet! b rm2 rcv2) (meet! rm rcv) (mutex-lock! m) 'a-value)))
+  `+tc.start+`
+  `+tc.end+`
+  (guard (e ((uncaught-exception? e) 'b-cancelled))
+    (thread-join! b 30 'b-survived)))`)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result.SchemeString(), qt.Equals, "b-cancelled")
+		})
+	}
+}
+
+// TestSpawnContextIsReleasedWhenTheWorkEnds pins that the ctx SpawnContext made
+// for a thread or a child started in a with-timeout thunk is ended once the
+// thread has ended or the child is reaped, and at once when thread-start! fails.
+// Unreleased, each one stays registered on the host's ctx for as long as that
+// lives, a leak of one per start in a long-lived host (the CLI's signal ctx).
+// The witness is the count of live spawn ctxs, back where it was after the run.
+// No test in this package runs a timed start concurrently with this one.
+func TestSpawnContextIsReleasedWhenTheWorkEnds(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		want string
+		unix bool
+	}{
+		{"a thread, joined", `(let ((t (make-thread (lambda () 'v))))
+  (with-timeout 1000 (lambda (k) 'timed-out) (lambda () (thread-start! t)))
+  (thread-join! t))`, "v", false},
+		{"a second start of a started thread", `(let ((t (make-thread (lambda () 'v))))
+  (thread-start! t)
+  (list (with-timeout 1000 (lambda (k) 'timed-out)
+          (lambda () (guard (e (#t 'refused)) (thread-start! t))))
+        (thread-join! t)))`, "(refused v)", false},
+		{"a child, reaped", `(let ((p (with-timeout 1000 (lambda (k) 'timed-out) (lambda () (process-spawn "true")))))
+  (process-wait p))`, "0", true},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.unix && runtime.GOOS == "windows" {
+				t.Skip("uses Unix commands")
+			}
+			env := testhelpers.NewFullRuntimeEnv(t)
+			ctx, _ := machine.WithTimersFiringOnCue(context.Background())
+			before := machine.LiveSpawnContexts()
+			result, err := testhelpers.RunSchemeCodeWithEnvAndContext(ctx, t, env, tc.code)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result.SchemeString(), qt.Equals, tc.want)
+			qt.Assert(t, machine.LiveSpawnContexts(), qt.Equals, before)
+		})
+	}
+}
+
+// TestChildSpawnedInATimedThunkEndsOnlyByExpiry is the process-spawn half of the
+// thread rule: a child a with-timeout thunk spawned outlives the thunk's normal
+// return (it still echoes what it is sent), and the timer's expiry kills it (its
+// wait answers the killed status). The host's ctx bounding the child is
+// TestProcessSpawnCtxBoundsTheChild's (extensions/process).
+func TestChildSpawnedInATimedThunkEndsOnlyByExpiry(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses Unix commands")
+	}
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"the thunk returns", `(let ((p (with-timeout 1000 (lambda (k) 'timed-out) (lambda () (process-spawn "cat")))))
+  (display "ping" (process-stdin p))
+  (close-output-port (process-stdin p))
+  (let ((line (read-line (process-stdout p))))
+    (list line (process-wait p))))`, `("ping" 0)`},
+		{"the timer expires", `(define p #f)
+(list (with-timeout 1000 (lambda (k) 'timed-out) (lambda () (set! p (process-spawn "sleep" "30")) (fire! 0) 'unreached))
+      (process-wait p))`, `(timed-out -1)`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			env := testhelpers.NewFullRuntimeEnv(t)
+			ctx, fire := machine.WithTimersFiringOnCue(context.Background())
+			defineFire(t, env, fire)
+			result, err := testhelpers.RunSchemeCodeWithEnvAndContext(ctx, t, env, `(begin `+tc.code+`)`)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result.SchemeString(), qt.Equals, tc.want)
 		})
 	}
 }

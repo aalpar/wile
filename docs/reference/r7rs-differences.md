@@ -149,8 +149,8 @@ This document catalogs differences between the current implementation and the R7
     capture. Inside a library the same shapes do read the shadow. Pinned by
     `TestHeadShadowStillDivergentThroughScopes` (`pkg/wile`); closing it is
     P6.6's arc.
-22. `exit` ends the **process** at once, from whichever SRFI-18 thread calls
-    it: the other threads stop where they are and their after thunks do not
+22. `exit` ends the **process** at once (when `process:exit` is authorized),
+    from whichever SRFI-18 thread calls it: the other threads stop where they are and their after thunks do not
     run, as in Racket. Separately, no after thunk runs in the calling thread
     either, a departure from R7RS §6.14 ("runs all outstanding dynamic-wind
     *after* procedures") that holds on the main thread too. See *`exit` Ends
@@ -565,7 +565,8 @@ monotonic elapsed time prefer `current-jiffy` / `jiffies-per-second`.
 **Primitives:** `exit`, `emergency-exit`
 
 Both end the process through `os.Exit` (after the host's exit hook,
-`system.SetExitHook`), on the goroutine of the thread that called them. So
+`system.SetExitHook`), on the goroutine of the thread that called them, once the
+authorizer allows `process:exit`; refused, they raise its error instead. So
 `exit` in a thread started with `thread-start!` ends the program with that
 thread's status, the main thread does not continue past whatever it was doing,
 and nothing unwinds: no `dynamic-wind` after thunk runs, neither the main

@@ -51,6 +51,11 @@ type Process struct {
 	done     chan struct{}
 	waitErr  error
 	reaped   atomic.Bool
+
+	// AfterReap, when set, runs once the reap has completed, before any waiter
+	// returns. It is set by whoever started the child, before the Process is
+	// shared, to drop what was held for the child's life (its spawn ctx).
+	AfterReap func()
 }
 
 // NewProcess creates a Process value. The cmd may be nil for testing.
@@ -130,6 +135,9 @@ func (p *Process) WaitContext(ctx context.Context) (bool, error) {
 // reap makes the process's one cmd.Wait and publishes its outcome.
 func (p *Process) reap() {
 	p.waitErr = p.cmd.Wait()
+	if p.AfterReap != nil {
+		p.AfterReap()
+	}
 	p.reaped.Store(true)
 	close(p.done)
 }
