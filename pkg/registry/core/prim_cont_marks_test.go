@@ -20,6 +20,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
 	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/values"
@@ -653,4 +654,82 @@ func TestContinuationMarkSetToContextStaysStrict(t *testing.T) {
 			qt.Assert(t, result.SchemeString(), qt.Equals, tc.expected)
 		})
 	}
+}
+
+// TestContinuationMarksRacketArguments pins two Racket argument forms the
+// mark primitives refused: (continuation-marks #f) is the EMPTY mark set (not
+// the current marks #f means to the accessors), and the accessors take
+// Racket's optional trailing prompt tag, which with #f bounds the current marks
+// at that tag's prompt. Expected values measured on racket.
+func TestContinuationMarksRacketArguments(t *testing.T) {
+	t.Parallel()
+
+	// One expression: the unoptimized runner evaluates a single form.
+	tagged := func(body string) string {
+		return `(let ()
+(define tag (make-continuation-prompt-tag 't))
+(define (at-inner f) (with-continuation-mark 'a 1 (call-with-continuation-prompt (lambda () (with-continuation-mark 'a 2 (f))) tag (lambda a a))))
+` + body + `)`
+	}
+	tcs := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{"continuation-marks of #f is empty", `(continuation-mark-set->list (continuation-marks #f) 'a)`, "()"},
+		{"continuation-marks of #f is a mark set", `(continuation-mark-set? (continuation-marks #f))`, "#t"},
+		{"first with a tag", tagged(`(at-inner (lambda () (continuation-mark-set-first #f 'a #f tag)))`), "2"},
+		{"->list with a tag stops at the prompt", tagged(`(at-inner (lambda () (continuation-mark-set->list #f 'a tag)))`), "(2)"},
+		{"->list* with a tag", tagged(`(at-inner (lambda () (continuation-mark-set->list* #f '(a) #f tag)))`), "(#(2))"},
+		{"control: ->list without a tag sees past the prompt", tagged(`(at-inner (lambda () (continuation-mark-set->list #f 'a)))`), "(2 1)"},
+	}
+	for name, run := range markShapeRunners() {
+		for _, tc := range tcs {
+			t.Run(name+"/"+tc.name, func(t *testing.T) {
+				got, err := run(t, tc.code)
+				qt.Assert(t, err, qt.IsNil)
+				qt.Assert(t, got, qt.Equals, tc.expected)
+			})
+		}
+	}
+}
+
+// TestContinuationMarksRacketArgumentRefusals: a non-continuation other than
+// #f stays a type error, a bad tag is ErrNotAPromptTag, and a tag with an
+// explicit mark set is refused (a Wile mark set records no prompt boundaries,
+// so it cannot truncate as Racket does).
+func TestContinuationMarksRacketArgumentRefusals(t *testing.T) {
+	t.Parallel()
+
+	tcs := []struct {
+		name string
+		code string
+		want error
+	}{
+		{"continuation-marks of a number", `(continuation-marks 5)`, werr.ErrNotAContinuation},
+		{"bad tag", `(continuation-mark-set->list #f 'a 5)`, werr.ErrNotAPromptTag},
+		{"tag with an explicit mark set", `(continuation-mark-set->list (current-continuation-marks) 'a (make-continuation-prompt-tag 'x))`, werr.ErrNotImplemented},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := testhelpers.RunSchemeCode(t, tc.code)
+			qt.Assert(t, err, qt.ErrorIs, tc.want)
+		})
+	}
+}
+
+// TestErrorContextMarksWithoutSnapshotIsEmptySet: an ErrorContext built with
+// no marks (only a Go caller can make one) answers the empty set, not #f, which
+// the accessors would read as the handler site's own marks.
+func TestErrorContextMarksWithoutSnapshotIsEmptySet(t *testing.T) {
+	t.Parallel()
+
+	c := qt.New(t)
+	engine, err := wile.NewEngine(context.Background())
+	c.Assert(err, qt.IsNil)
+	c.Assert(engine.Define("ctx", wile.WrapValue(machine.NewErrorContext(nil, nil, nil))), qt.IsNil)
+	result, err := engine.EvalMultiple(context.Background(),
+		`(with-continuation-mark 'k 'handler-site (list (continuation-mark-set? (error-context-marks ctx)) (continuation-mark-set-first (error-context-marks ctx) 'k 'none)))`)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "(#t none)")
 }
