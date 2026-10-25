@@ -45,12 +45,18 @@ func (p *OriginInfo) Depth() int {
 
 // SourceContext holds source location and hygiene information for a syntax object.
 type SourceContext struct {
-	Text   string
-	File   string
-	Start  SourceIndexes
-	End    SourceIndexes
-	Scopes Scopes      // Scopes associated with this source location
-	Origin *OriginInfo // Macro expansion origin chain (nil if not from macro)
+	Text string
+	File string
+	// FileIsPath reports that File is a location the reader opened (a resolved
+	// include, load or library path, or a file port's name), not a caller's
+	// diagnostic label (EvalProgram's name argument). Include resolution steers
+	// by File only when it is a path (lexicalIncludeContext); the zero value is
+	// a label, so a context built without it never overrides a live load stack.
+	FileIsPath bool
+	Start      SourceIndexes
+	End        SourceIndexes
+	Scopes     Scopes      // Scopes associated with this source location
+	Origin     *OriginInfo // Macro expansion origin chain (nil if not from macro)
 }
 
 // NewSourceContext creates a new source context with the given location info.
@@ -89,7 +95,8 @@ func (p *SourceContext) Clone() *SourceContext {
 // forge a second one, or pass for another name; any other name, colons,
 // Unicode spaces (macOS's U+202F in screenshot names) and non-ASCII letters
 // included, prints as is. The escape is applied at render time only: the stored
-// name stays the real path, which include resolution reads. Nothing in the
+// name stays as given, which include resolution reads when it is a path
+// (FileIsPath). Nothing in the
 // tree parses a rendered location; a caller that does (error-object-source,
 // the Source fields of wile.CompilationError and wile.RuntimeError) must
 // unquote a name that starts with a double quote.
@@ -160,7 +167,8 @@ func (p *SourceContext) EqualTo(value Value) bool {
 	if p.End != v.End {
 		return false
 	}
-	// Note: Not comparing scopes as they are for hygiene, not equality
+	// Note: Not comparing scopes as they are for hygiene, not equality, nor
+	// FileIsPath, which says how File may be used, not where the text is.
 	return true
 }
 

@@ -16,6 +16,7 @@ package values
 
 import (
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -29,20 +30,39 @@ import (
 // it in the exhaustiveness set tools/cmd/typeswitchlint derives from this package,
 // which enumerates the types a Scheme datum can be.
 //
-// The three int fields make it comparable, so == is the equality operator;
-// there is no EqualTo.
+// The three fields make it comparable, so == is the equality operator; there
+// is no EqualTo.
+//
+// column and line are int32 so a SourceContext, which carries two of these,
+// stays in the 96-byte allocation class (TestSourceContextFitsItsSizeClass).
+// The accessors still speak int. A column or line past 2^31-1 saturates at
+// math.MaxInt32 (a position that far out is still "far out", never negative),
+// except AdvanceIndexes' per-rune column step (see there); index stays int
+// because a long-lived port stream can pass 2 GiB.
 type SourceIndexes struct {
 	index  int
-	column int
-	line   int
+	column int32
+	line   int32
+}
+
+// saturate32 narrows n to int32, clamping at the int32 bounds instead of
+// wrapping.
+func saturate32(n int) int32 {
+	if n > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	if n < math.MinInt32 {
+		return math.MinInt32
+	}
+	return int32(n)
 }
 
 // NewSourceIndexes creates a new SourceIndexes with the given position.
 func NewSourceIndexes(index, column, line int) SourceIndexes {
 	q := SourceIndexes{
 		index:  index,
-		column: column,
-		line:   line,
+		column: saturate32(column),
+		line:   saturate32(line),
 	}
 	return q
 }
@@ -54,18 +74,18 @@ func (p SourceIndexes) Index() int {
 
 // Column returns the column number within the current line (0-based).
 func (p SourceIndexes) Column() int {
-	return p.column
+	return int(p.column)
 }
 
 // Line returns the line number (1-based).
 func (p SourceIndexes) Line() int {
-	return p.line
+	return int(p.line)
 }
 
 // Inc advances the position by n characters on the same line.
 func (p *SourceIndexes) Inc(n int) int {
 	p.index += n
-	p.column += n
+	p.column = saturate32(int(p.column) + n)
 	return p.index
 }
 
@@ -73,7 +93,9 @@ func (p *SourceIndexes) Inc(n int) int {
 // The index should already have been advanced by Inc(n) before calling this.
 func (p *SourceIndexes) NewLine() int {
 	p.column = 0
-	p.line++
+	if p.line < math.MaxInt32 {
+		p.line++
+	}
 	return p.index
 }
 
@@ -84,7 +106,7 @@ func (p *SourceIndexes) NewLine() int {
 // lands on a column congruent to 7 mod 8. See tabStop in this file, which computes
 // the stop itself rather than using this method.
 func (p *SourceIndexes) Tab() int {
-	p.column += 8 - (p.column % 8)
+	p.column = saturate32(int(p.column) + 8 - int(p.column%8))
 	return p.index
 }
 
@@ -115,7 +137,9 @@ func AdvanceIndexes(si SourceIndexes, prev, cur rune, n int) SourceIndexes {
 	// Every rune above '\r' is an ordinary character: one byte-width and one
 	// column. Keeping that case this small lets the compiler inline it into the
 	// per-rune loops (the tokenizer's scan and every port read); the line-ending
-	// and tab rules live out of line in advanceControl.
+	// and tab rules live out of line in advanceControl. The column increment here
+	// does not saturate: the check costs the inline budget (83 > 80), so only a
+	// single line longer than 2^31-1 characters wraps, and only through this path.
 	if cur > '\r' {
 		si.index += n
 		si.column++

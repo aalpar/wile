@@ -57,12 +57,15 @@ type portBase struct {
 	datum  any
 	// srcName labels where the port's data comes from. For a file port it is
 	// the engine-resolved absolute path, because the reader stamps it into
-	// SourceContext.File and include resolution treats File as a real path
-	// (lexicalIncludeContext). For a host stream or a process pipe it is a
-	// display label with no path separator ("<stdin>", "echo stdout"); it is
-	// never a path to open. "" means the port has no name to give (string
-	// and bytevector ports, in-memory buffers).
+	// SourceContext.File and, the port being marked (srcIsPath), include
+	// resolution steers by it (lexicalIncludeContext). For a host stream or a
+	// process pipe it is a display label with no path separator ("<stdin>",
+	// "echo stdout"); it is never a path to open. "" means the port has no
+	// name to give (string and bytevector ports, in-memory buffers).
 	srcName string
+	// srcIsPath is set (SetPortNameIsPath) when srcName is the path of the file
+	// the port reads, so the reader may mark SourceContext.FileIsPath.
+	srcIsPath bool
 	// pos is where the port's next rune stands, counted by the port's guarded
 	// rune reader (guardedRuneReader) as it yields runes, so it already includes
 	// what the tokenizer itself consumed and excludes the lookahead it handed

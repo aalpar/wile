@@ -203,6 +203,15 @@ func getRequiredBinaryOutputPort(o values.Value, name string) (*values.PortObjec
 	return p, tuple, nil
 }
 
+// newPortParser builds the reader for port, naming what it reads with the
+// port's name. A file port's name is the path it reads (PortNameIsPath), so the
+// syntax it yields may steer an include; any other name is a label.
+func newPortParser(mc machine.CallContext, rr io.RuneReader, port *values.PortObject) *parser.Parser {
+	q := parser.NewParserWithFile(mc.EnvironmentFrame(), true, rr, port.PortName())
+	q.SetFileIsPath(port.PortNameIsPath())
+	return q
+}
+
 // PrimRead implements the (read) primitive.
 // Reads a Scheme datum from port.
 // Reads from the current input port if no port is specified.
@@ -218,7 +227,7 @@ func PrimRead(mc machine.CallContext) error {
 	}
 
 	mkParser := func() *parser.Parser {
-		return parser.NewParserWithFile(mc.EnvironmentFrame(), true, rr, port.PortName())
+		return newPortParser(mc, rr, port)
 	}
 	syn, err := st.readSyntaxCached(mc.Context(), port, mkParser)
 	if err != nil {
@@ -252,7 +261,7 @@ func PrimReadSyntax(mc machine.CallContext) error {
 	}
 
 	mkParser := func() *parser.Parser {
-		return parser.NewParserWithFile(mc.EnvironmentFrame(), true, rr, port.PortName())
+		return newPortParser(mc, rr, port)
 	}
 	q, err := st.readSyntaxCached(mc.Context(), port, mkParser)
 	if err != nil {

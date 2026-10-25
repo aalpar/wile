@@ -57,6 +57,7 @@ type Parser struct {
 	skipComment bool
 	foldCase    bool   // R7RS §2.1: #!fold-case mode for identifiers
 	file        string // source file name for error reporting
+	fileIsPath  bool   // file is a location being read, not a label (SetFileIsPath)
 	// origin and originPrev say where the reader's next rune stands and which
 	// rune preceded it, for the tokenizer built lazily on the first read. A
 	// parser over a stream that has already been partly consumed (a port read
@@ -131,6 +132,14 @@ func (p *Parser) SetMaxDepth(n int) {
 // #!fold-case / #!no-fold-case directive still toggles the mode mid-stream.
 func (p *Parser) SetFoldCase(on bool) {
 	p.foldCase = on
+}
+
+// SetFileIsPath records that the parser's file name is a location it is reading
+// (a resolver's path, a file port's name) rather than a caller's label, and
+// stamps that on every SourceContext it builds (SourceContext.FileIsPath).
+// Include resolution trusts the file's directory only when it is set.
+func (p *Parser) SetFileIsPath(isPath bool) {
+	p.fileIsPath = isPath
 }
 
 func (p *Parser) curr() tokenizer.Token {

@@ -123,6 +123,29 @@ func (p *PortObject) PortName() string {
 	return p.srcName
 }
 
+// SetPortNameIsPath records whether the port's name is the path of the file
+// it reads (a file port) rather than a display label. The reader marks what it
+// reads from a port so named with SourceContext.FileIsPath, which lets an
+// include inside a form read from the port resolve against that file's
+// directory. Call it before the port escapes its constructor's caller.
+// Nil-safe: a nil port has no name to mark.
+func (p *PortObject) SetPortNameIsPath(isPath bool) {
+	if p == nil {
+		return
+	}
+	p.srcIsPath = isPath
+}
+
+// PortNameIsPath reports whether PortName is the path of the file the port
+// reads (SetPortNameIsPath) rather than a display label or "". Nil-safe: a nil
+// port has no name.
+func (p *PortObject) PortNameIsPath() bool {
+	if p == nil {
+		return false
+	}
+	return p.srcIsPath
+}
+
 // ReadPosition returns where the port's next rune stands (index in bytes, column
 // in characters, line from 1) and the rune consumed just before it (0 when none).
 // The port's rune reader counts as it yields runes, so every consumer that reads

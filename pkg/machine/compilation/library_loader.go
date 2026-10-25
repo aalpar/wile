@@ -289,6 +289,7 @@ func loadLibraryFromReader(ctx context.Context, r io.Reader, filePath string, ex
 
 	reader := bufio.NewReader(r)
 	p := parser.NewParserWithFile(libEnv, true, reader, filePath)
+	p.SetFileIsPath(true)
 
 	stx, err := p.ReadSyntax(ctx)
 	if err != nil {

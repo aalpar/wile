@@ -266,16 +266,16 @@ func absSearchDirs(ns *environment.Namespace, dirs []string) []string {
 //
 // Both OS arms go through here, so the absolute path and the search-relative
 // candidate cannot end up labelled differently for the same failure.
-func openConfined(auth security.Authorizer, absPath string) (fs.File, error) {
-	f, err := confinedOpenFile(auth, absPath)
+func openConfined(auth security.Authorizer, absPath string) (fs.File, string, error) {
+	f, opened, err := confinedOpenFile(auth, absPath)
 	if err == nil {
-		return f, nil
+		return f, opened, nil
 	}
 	sentinel := werr.ErrFileOpen
 	if errors.Is(err, os.ErrNotExist) {
 		sentinel = werr.ErrFileNotFound
 	}
-	return nil, werr.WrapForeignErrorWithCause(sentinel, err, "open %s", absPath)
+	return nil, "", werr.WrapForeignErrorWithCause(sentinel, err, "open %s", absPath)
 }
 
 // openAuthorized performs security authorization then opens absPath on the OS
@@ -290,11 +290,31 @@ func openAuthorized(auth security.Authorizer, absPath string) (fs.File, string, 
 	if err != nil {
 		return nil, "", err
 	}
-	f, err := openConfined(auth, absPath)
+	f, opened, err := openConfined(auth, absPath)
 	if err != nil {
 		return nil, "", err
 	}
-	return f, absPath, nil
+	return f, openedName(absPath, opened), nil
+}
+
+// openedName is the name an absolute operand's file is reported and pushed on
+// the load stack under: written as the program spelled it, unless it has a ".."
+// element, then the name of the file the open actually reached (opened). Every
+// reader of the name takes its directory lexically (LoadStack.CurrentDir,
+// lexicalIncludeContext), and "/a/link/../x.scm" can reach a file whose
+// directory is not the lexical "/a": an unconfined open follows the link to the
+// x.scm beside its target's parent, so an include nested in x.scm read
+// /a/inc.scm. The name comes from the open, not a second resolution, so it
+// cannot name a different file than the one read (a confined open cleans
+// lexically; a resolution racing the open could see another link). Any other
+// name is kept, so an ordinary path is reported as spelled. The cost is
+// portNameFor's (extensions/files): a resolved name can show a location the
+// written one hid.
+func openedName(written, opened string) string {
+	if !slices.Contains(strings.Split(filepath.ToSlash(written), "/"), "..") {
+		return written
+	}
+	return opened
 }
 
 // WalkOSSchemeFiles walks baseDir on the OS filesystem, calling fn with the

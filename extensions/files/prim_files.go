@@ -32,11 +32,12 @@ import (
 // against the engine's current directory, checks security,
 // opens the file (race-free via os.Root when the authorizer confines file
 // access; see confined.go), and wraps it in a port via makePort, which is
-// handed the resolved path as the port's name: the reader stamps it into
-// SourceContext.File, which include resolution treats as a real path.
+// handed the resolved path as the port's name. The port is marked as named by
+// a path (SetPortNameIsPath): the reader stamps the name into SourceContext.File
+// with FileIsPath set, so include resolution steers by it.
 func openFilePort(
 	mc machine.CallContext, name string, action string,
-	makePort func(file *os.File, name string) values.Value,
+	makePort func(file *os.File, name string) *values.PortObject,
 ) error {
 	filename, err := helpers.RequireArg[*values.String](mc, 0, werr.ErrNotAString, name)
 	if err != nil {
@@ -58,7 +59,9 @@ func openFilePort(
 	if err != nil {
 		return werr.WrapForeignFileError(err, name, filename.Value)
 	}
-	mc.SetValue(makePort(file, portNameFor(abs)))
+	port := makePort(file, portNameFor(abs))
+	port.SetPortNameIsPath(true)
+	mc.SetValue(port)
 	return nil
 }
 
@@ -85,7 +88,7 @@ func portNameFor(abs string) string {
 // PrimOpenInputFile implements the open-input-file primitive.
 // Opens a file for reading and returns an input port.
 func PrimOpenInputFile(mc machine.CallContext) error {
-	return openFilePort(mc, "open-input-file", security.ActionRead, func(f *os.File, name string) values.Value {
+	return openFilePort(mc, "open-input-file", security.ActionRead, func(f *os.File, name string) *values.PortObject {
 		return values.NewCharacterInputPortFromReaderWithName(f, name)
 	})
 }
@@ -93,7 +96,7 @@ func PrimOpenInputFile(mc machine.CallContext) error {
 // PrimOpenOutputFile implements the open-output-file primitive.
 // Opens a file for writing and returns an output port.
 func PrimOpenOutputFile(mc machine.CallContext) error {
-	return openFilePort(mc, "open-output-file", security.ActionWrite, func(f *os.File, name string) values.Value {
+	return openFilePort(mc, "open-output-file", security.ActionWrite, func(f *os.File, name string) *values.PortObject {
 		return values.NewCharacterOutputPortFromWriterWithName(f, name)
 	})
 }
@@ -101,7 +104,7 @@ func PrimOpenOutputFile(mc machine.CallContext) error {
 // PrimOpenBinaryInputFile implements the open-binary-input-file primitive (R7RS).
 // Opens a file for binary reading and returns a binary input port.
 func PrimOpenBinaryInputFile(mc machine.CallContext) error {
-	return openFilePort(mc, "open-binary-input-file", security.ActionRead, func(f *os.File, name string) values.Value {
+	return openFilePort(mc, "open-binary-input-file", security.ActionRead, func(f *os.File, name string) *values.PortObject {
 		return values.NewBinaryInputPortFromReaderWithName(f, name)
 	})
 }
@@ -109,7 +112,7 @@ func PrimOpenBinaryInputFile(mc machine.CallContext) error {
 // PrimOpenBinaryOutputFile implements the open-binary-output-file primitive (R7RS).
 // Opens a file for binary writing and returns a binary output port.
 func PrimOpenBinaryOutputFile(mc machine.CallContext) error {
-	return openFilePort(mc, "open-binary-output-file", security.ActionWrite, func(f *os.File, name string) values.Value {
+	return openFilePort(mc, "open-binary-output-file", security.ActionWrite, func(f *os.File, name string) *values.PortObject {
 		return values.NewBinaryOutputPortFromWriterWithName(f, name)
 	})
 }
@@ -228,7 +231,7 @@ func callWithFile(
 	mc *machine.MachineContext,
 	name string,
 	action string,
-	portCreator func(file *os.File, name string) values.Value,
+	portCreator func(file *os.File, name string) *values.PortObject,
 ) error {
 	filename, err := helpers.RequireType[*values.String](mc.Arg(0), werr.ErrNotAString, name)
 	if err != nil {
@@ -260,6 +263,7 @@ func callWithFile(
 	defer file.Close() //nolint:errcheck
 
 	port := portCreator(file, portNameFor(abs))
+	port.SetPortNameIsPath(true)
 
 	sub := mc.NewSubContext()
 	defer machine.ReleaseSubContext(sub)
@@ -283,7 +287,7 @@ func PrimCallWithInputFile(cc machine.CallContext) error {
 		return err
 	}
 	return callWithFile(mc, "call-with-input-file", security.ActionRead,
-		func(f *os.File, name string) values.Value {
+		func(f *os.File, name string) *values.PortObject {
 			return values.NewCharacterInputPortFromReaderWithName(f, name)
 		})
 }
@@ -295,7 +299,7 @@ func PrimCallWithOutputFile(cc machine.CallContext) error {
 		return err
 	}
 	return callWithFile(mc, "call-with-output-file", security.ActionWrite,
-		func(f *os.File, name string) values.Value {
+		func(f *os.File, name string) *values.PortObject {
 			return values.NewCharacterOutputPortFromWriterWithName(f, name)
 		})
 }

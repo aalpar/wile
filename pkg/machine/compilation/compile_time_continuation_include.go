@@ -80,17 +80,13 @@ func includeAuthorizerContext(ctx context.Context, env *environment.EnvironmentF
 //     bare name with no directory: the load stack (or, with none, the search
 //     paths) is the better authority there, and it is what a top-level include
 //     has always had;
-//   - ctx already carries a non-empty load stack and the file is a RELATIVE
-//     path. A relative SourceContext.File is often a caller's diagnostic label
-//     (EvalProgram, EvalMultipleWithSource, CheckProgram, ParseWithSource), not a
-//     location on disk; an absolute one names a real file. A live stack is the
-//     authority an embedder set (Engine.ContextWithLoadPath) or a load chain
-//     built, and a label must not override it.
-//
-// KNOWN LIMITATION: with a virtual-FS resolver (relative paths are real there),
-// a live stack AND a form compiled after its file was popped, the stack rule
-// still applies and a relative include nested under eval-when resolves
-// against the stack's top.
+//   - ctx already carries a non-empty load stack and the file is a caller's
+//     diagnostic label (EvalProgram, EvalMultipleWithSource, CheckProgram,
+//     ParseWithSource), not a location the reader opened. The reader says which
+//     (SourceContext.FileIsPath), whatever the name's shape: a virtual-FS path
+//     is relative and real, a label may be absolute and name nothing. A live
+//     stack is the authority an embedder set (Engine.ContextWithLoadPath) or a
+//     load chain built, and a label must not override it.
 //
 // The derived stack is a copy, so no push escapes into ctx.
 func lexicalIncludeContext(ctx context.Context, src *syntax.SourceContext) context.Context {
@@ -102,7 +98,7 @@ func lexicalIncludeContext(ctx context.Context, src *syntax.SourceContext) conte
 		return ctx
 	}
 	existing := resolver.SelectLoadStack(ctx)
-	if existing != nil && existing.Depth() > 0 && !filepath.IsAbs(src.File) {
+	if existing != nil && existing.Depth() > 0 && !src.FileIsPath {
 		return ctx
 	}
 	stack := sourceload.NewLoadStack()
@@ -135,6 +131,7 @@ func readIncludedForms(ctx context.Context, env *environment.EnvironmentFrame, r
 	defer file.Close() //nolint:errcheck
 
 	fileParser := parser.NewParserWithFile(env, true, bufio.NewReader(file), filePath)
+	fileParser.SetFileIsPath(true)
 	// include-ci reads the file case-insensitively (R7RS §2.1 fold-case),
 	// folding identifiers to lowercase as they are read.
 	fileParser.SetFoldCase(foldCase)
