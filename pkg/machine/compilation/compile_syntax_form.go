@@ -70,44 +70,45 @@ func (p *CompileTimeContinuation) CompileSyntax(ctctx CompileTimeCallContext, ex
 func templateContainsEllipsis(stx syntax.SyntaxValue) bool {
 	switch v := stx.(type) {
 	case *syntax.SyntaxSymbol:
-		sym, ok := v.Unwrap().(*values.Symbol)
-		if ok {
-			return sym.Key == "..."
-		}
-		return false
+		return isEllipsisSymbol(v)
 
 	case *syntax.SyntaxPair:
 		if v.IsEmptyList() {
 			return false
 		}
-
-		// Check for escape form (... <template>)
-		// An escape form requires BOTH the ellipsis AND a template after it
-		car := v.SyntaxCar()
-		if isEllipsisSymbol(car) {
-			cdr := v.SyntaxCdr()
-			cdrPair, ok := cdr.(*syntax.SyntaxPair)
+		// The escape form (... <template>) is recognised only for a pair that is
+		// a template in its own right (the root, or an element of a spine). It
+		// needs both the ellipsis and a template after it; (...) alone is an
+		// unescaped ellipsis.
+		if isEllipsisSymbol(v.SyntaxCar()) {
+			cdrPair, ok := v.SyntaxCdr().(*syntax.SyntaxPair)
 			if ok && !cdrPair.IsEmptyList() {
-				// This is a valid escape form (... <template> ...)
-				// The escaped template (car of cdr) doesn't count as containing ellipsis
-				// But we need to check the rest of the list (cdr of cdr)
-				rest := cdrPair.SyntaxCdr()
-				return templateContainsEllipsis(rest)
+				return spineContainsEllipsis(cdrPair.SyntaxCdr())
 			}
-			// Just (...) with no template - this is NOT an escape form
-			// The ellipsis itself is unescaped
 			return true
 		}
-
-		// Not an escape form - check car and cdr normally
-		if templateContainsEllipsis(car) {
-			return true
-		}
-		cdr := v.SyntaxCdr()
-		return templateContainsEllipsis(cdr)
+		return spineContainsEllipsis(v)
 
 	default:
 		return false
+	}
+}
+
+// spineContainsEllipsis walks a list spine element by element. Each element
+// is a template of its own, where an escape form may start; an `...` element
+// anywhere in the spine is an unescaped ellipsis. Re-dispatching on a cdr
+// instead misread the spine tail (... 9) of (b ... 9) as an escape form.
+func spineContainsEllipsis(stx syntax.SyntaxValue) bool {
+	for {
+		pair, ok := stx.(*syntax.SyntaxPair)
+		if !ok || pair.IsEmptyList() {
+			return templateContainsEllipsis(stx) // an improper tail is a template too
+		}
+		car := pair.SyntaxCar()
+		if isEllipsisSymbol(car) || templateContainsEllipsis(car) {
+			return true
+		}
+		stx = pair.SyntaxCdr()
 	}
 }
 
