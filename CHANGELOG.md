@@ -134,8 +134,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   now applies the compiler's rule: a use after the define, in the same file or
   `begin`, is a call (racket and petite agree), and the define's own head and a
   use before it still mean the form. A define a macro produces
-  (`define-values`) binds for the forms after it the same way. A lambda body or
-  a macro argument reaching a top-level shadow still reads the form.
+  (`define-values`) binds for the forms after it the same way. At the program's
+  top level, a lambda body or a macro argument reaching the shadow still reads
+  the form; inside a library it reads the shadow, as `if` already did.
 
 - **A BigFloat result carries its operands' precision, not a fixed 256 bits.**
   `exp`, `log`, the trigonometric family, `atan` (both forms), `angle`,

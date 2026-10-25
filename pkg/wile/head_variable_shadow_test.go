@@ -19,6 +19,9 @@ import (
 	"testing/fstest"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/pkg/stdlib"
+	"github.com/aalpar/wile/pkg/wile"
 )
 
 // shadowFS is the file the include rows read: a form that would answer 5 if the
@@ -32,21 +35,56 @@ var shadowFS = fstest.MapFS{"v.scm": &fstest.MapFile{Data: []byte(`5`)}}
 // sit in one begin: the expander predeclares both before either compiles, and
 // the use still reads the variable because its define has already expanded.
 //
-// Racket and Petite Chez answer mine for every row. Red on master for include,
-// include-ci (5) and cond-expand, define-for-syntax, eval-when, let-syntax,
-// letrec-syntax, import, syntax-error, with-binding-scope (an expansion error).
+// Racket and Petite Chez answer mine for every row. The changed rows are red on
+// master: include and include-ci answered 5, the rest an expansion error. The
+// controls were already mine on master: their expanders hand the form on to the
+// compiler (unchanged, or with only its operands expanded, or bailing on the
+// malformed shape), and the validator already read the top-level variable as a
+// call.
 func TestTopLevelVariableShadowsExpanderForm(t *testing.T) {
-	names := []string{
-		"include", "include-ci", "cond-expand", "define-syntax", "define-for-syntax",
-		"begin-for-syntax", "eval-when", "let-syntax", "letrec-syntax", "import",
-		"syntax-error", "with-syntax", "syntax-case", "quasisyntax", "with-binding-scope",
+	changed := []string{
+		"include", "include-ci", "cond-expand", "define-for-syntax", "eval-when",
+		"let-syntax", "letrec-syntax", "import", "syntax-error", "with-binding-scope",
+	}
+	controls := []string{
+		"define-syntax", "begin-for-syntax", "with-syntax", "syntax-case", "quasisyntax",
 		"begin", "if", "quasiquote",
 	}
-	for _, name := range names {
+	for _, table := range []struct {
+		label string
+		names []string
+	}{{"changed", changed}, {"control", controls}} {
+		for _, name := range table.names {
+			t.Run(table.label+"/"+name, func(t *testing.T) {
+				got, err := evalIncludeProgram(t, shadowFS, `(define `+name+` (lambda args 'mine)) (`+name+` "v.scm")`)
+				qt.Assert(t, err, qt.IsNil)
+				qt.Assert(t, got, qt.Equals, "mine")
+			})
+		}
+	}
+}
+
+// TestLibraryVariableShadowsExpanderForm pins the library half: a library-body
+// define of cond-expand shadows it at the library's top level and in a lambda
+// body too. A library identifier carries the library's scope, which
+// referenceReachesBinderDirectly follows to the binder, so the body-position
+// exception of TestHeadShadowStillDivergentThroughScopes is top-level only. The
+// if row is the control: the compiler-dispatched form already answered lib on
+// master. Racket (a module) answers (lib lib); Petite Chez refuses redefining an
+// import, and Wile accepting that is filed separately.
+func TestLibraryVariableShadowsExpanderForm(t *testing.T) {
+	for _, name := range []string{"cond-expand", "if"} {
 		t.Run(name, func(t *testing.T) {
-			got, err := evalIncludeProgram(t, shadowFS, `(define `+name+` (lambda args 'mine)) (`+name+` "v.scm")`)
+			fsys := fstest.MapFS{
+				"lsh.sld": &fstest.MapFile{Data: []byte(`(define-library (lsh) (export top body) (import (scheme base))
+  (begin (define (` + name + ` . a) 'lib)
+         (define (top) (` + name + `))
+         (define (body) ((lambda () (` + name + `))))))`)},
+			}
+			got, err := evalIncludeProgram(t, fsys, `(import (lsh)) (list (top) (body))`,
+				wile.WithSourceFS(stdlib.FS), wile.WithLibraryPaths("."))
 			qt.Assert(t, err, qt.IsNil)
-			qt.Assert(t, got, qt.Equals, "mine")
+			qt.Assert(t, got, qt.Equals, "(lib lib)")
 		})
 	}
 }
@@ -96,7 +134,8 @@ func TestHeadShadowFollowsDefinitionOrder(t *testing.T) {
 // body, a macro argument) still reads the form, because
 // validate.referenceReachesBinderDirectly cannot tell that widening from a
 // template identifier's. Racket and Petite Chez answer mine for both; these rows
-// flip when that guard is relaxed.
+// flip when that guard is relaxed. Top level only: inside a library the same
+// shapes read the shadow (TestLibraryVariableShadowsExpanderForm).
 func TestHeadShadowStillDivergentThroughScopes(t *testing.T) {
 	tcs := []struct {
 		name string
