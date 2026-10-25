@@ -42,6 +42,7 @@ func TestSourceContextLocationEscapesFileName(t *testing.T) {
 		{"invalid UTF-8 is quoted", "a\x9bb.scm", `"a\x9bb.scm":5:3`},
 		{"a leading quote is quoted", `"a.scm`, `"\"a.scm":5:3`},
 		{"non-ASCII letters unchanged", "données.scm", "données.scm:5:3"},
+		{"Unicode spaces unchanged", "shot 10.00\u202fAM\u00a0x.scm", "shot 10.00\u202fAM\u00a0x.scm:5:3"},
 		{"nameless keeps the bare position", "", ":5:3"},
 	}
 	for _, tc := range tcs {
