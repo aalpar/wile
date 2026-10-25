@@ -891,3 +891,31 @@ func TestProperListPatternStillRejectsDottedInput(t *testing.T) {
 		t.Errorf("got %s, want %s", got, want)
 	}
 }
+
+// A syntax-case template element after an ellipsis. templateContainsEllipsis
+// re-dispatched on every cdr, so the spine tail (... 9) of (b ... 9) read as an
+// escape form, the template went down the non-ellipsis compile path, and `...`
+// compiled as a variable reference. Racket and petite give (1 2 9).
+func TestSyntaxCaseTemplateElementAfterEllipsis(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name, template, want string
+	}{
+		{"element after the ellipsis", `#'(list b ... 9)`, "(1 2 9)"},
+		{"control: two ellipses in one spine", `#'(list b ... b ...)`, "(1 2 1 2)"},
+		{"control: escape then a further element", `#'(list '(... ...) 9)`, "(... 9)"},
+		{"control: element before the ellipsis", `#'(list 0 b ...)`, "(0 1 2)"},
+		{"control: escape beside an ellipsis", `#'(list '(... ...) b ...)`, "(... 1 2)"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			src := `(begin (define-syntax m (lambda (stx) (syntax-case stx () ((_ b ...) ` + tc.template + `)))) (m 1 2))`
+			got := mustEvalScheme(t, src)
+			if got != tc.want {
+				t.Errorf("got %s, want %s", got, tc.want)
+			}
+		})
+	}
+}

@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/aalpar/wile/pkg/machine"
+	"github.com/aalpar/wile/pkg/values"
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
@@ -230,4 +231,34 @@ func TestCompileSyntax_NonEscapeEllipsisUsesRuntimeExpansion(t *testing.T) {
 	}
 	c.Assert(hasTemplateExpand, qt.IsTrue,
 		qt.Commentf("non-escape ellipsis should generate OperationSyntaxTemplateExpand"))
+}
+
+// TestTemplateContainsEllipsis_SpineTail pins the spine walk: an ellipsis
+// followed by a further element ((b ... 9)) is an ellipsis, and the escape form
+// (... <template>) is recognised only where a template starts, not on a spine
+// tail.
+func TestTemplateContainsEllipsis_SpineTail(t *testing.T) {
+	sym := func(name string) syntax.SyntaxValue {
+		return syntax.NewSyntaxSymbol(name, nil)
+	}
+	list := func(xs ...syntax.SyntaxValue) syntax.SyntaxValue {
+		return syntax.SyntaxList(nil, xs...)
+	}
+	nine := syntax.NewSyntaxObject(values.NewInteger(9), nil)
+	tcs := []struct {
+		name string
+		stx  syntax.SyntaxValue
+		want bool
+	}{
+		{"(b ... 9)", list(sym("b"), sym("..."), nine), true},
+		{"(list b ... 9)", list(sym("list"), sym("b"), sym("..."), nine), true},
+		{"(list (... ...) 9) escape only", list(sym("list"), list(sym("..."), sym("...")), nine), false},
+		{"(... ...) escape at the root", list(sym("..."), sym("...")), false},
+		{"(... b) ... after an escape at the root", list(sym("..."), sym("b"), sym("...")), true},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			qt.New(t).Assert(templateContainsEllipsis(tc.stx), qt.Equals, tc.want)
+		})
+	}
 }
