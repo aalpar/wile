@@ -64,6 +64,12 @@ func TestHeadShadowFollowsDefinitionOrder(t *testing.T) {
 		{name: "cond-expand in an explicit begin", code: `(begin (define cond-expand (lambda args 'mine)) (cond-expand))`, want: "mine"},
 		{name: "include in an explicit begin", code: `(begin (define include (lambda args 'mine)) (include "v.scm"))`, want: "mine"},
 		{name: "define in a nested begin is still earlier", code: `(begin (begin (define include (lambda args 'mine))) (include "v.scm"))`, want: "mine"},
+		// A define no pre-scan saw, a macro's output, binds for the forms after
+		// it too: it is predeclared when it expands. Racket and Petite: mine.
+		{name: "define-values", code: `(define-values (include) (values (lambda a 'mine))) (include "v.scm")`, want: "mine"},
+		{name: "a user macro that emits define", code: `(define-syntax def (syntax-rules () ((_ n v) (define n v)))) (def include (lambda a 'mine)) (include "v.scm")`, want: "mine"},
+		{name: "a user macro that emits define, in a body", code: `(define-syntax def (syntax-rules () ((_ n v) (define n v)))) (define (f) (def include (lambda a 'mine)) (include "v.scm")) (f)`, want: "mine"},
+		{name: "define-values in a body", code: `(define (g) (define-values (include) (values (lambda a 'mine))) (include "v.scm")) (g)`, want: "mine"},
 		// Use before define: the define is later, so both readers see the form.
 		// Petite Chez answers 5 too; Racket refuses ("include: undefined").
 		{name: "use before define", code: `(define r (include "v.scm")) (define include 3) r`, want: "5"},

@@ -118,12 +118,23 @@ func (p *expandedDefineLog) ahead(sym *values.Symbol, b *environment.Binding) bo
 // name binds a predeclared top-level slot. Called once the whole define form
 // has expanded, so the define's own head and right-hand side still read the
 // slot as ahead, as the validator does while the define is uncompiled.
+//
+// A define no pre-scan saw (a macro's output, as define-values and any
+// user (define-syntax def ... (define n v)) produce) is predeclared here first,
+// so it binds for the forms after it as a written define does. A local one
+// then needs nothing more: hasLocalVariableBinding finds it.
 func (p *ExpanderTimeContinuation) noteDefineExpanded(name *syntax.SyntaxSymbol) {
-	if p.defines == nil || p.env.LocalEnvironment() != nil {
+	if p.defines == nil {
 		return
 	}
 	sym, ok := name.Unwrap().(*values.Symbol)
 	if !ok {
+		return
+	}
+	if !p.env.HasLocalVariableBinding(sym, syntax.ScopesOf(name.Scopes())) {
+		predeclareBinding(p.env, sym, name.Scopes(), name.SourceContext())
+	}
+	if p.env.LocalEnvironment() != nil {
 		return
 	}
 	gi, tied := p.env.TryGetGlobalIndexWithScopes(sym, syntax.ScopesOf(name.Scopes()))

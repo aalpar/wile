@@ -362,8 +362,8 @@ func (p *ExpanderTimeContinuation) ExpandPrimitiveForm(primName string, sym *syn
 // re-asked because no arm below creates a binding, which is the window
 // CLAUDE.local.md requires for a *Binding to be a valid identity.
 //
-// It is nil when the head does not resolve at the current phase, and a nil head is
-// not ambiguous at the call site: lookupHeadPrimitiveExpander feeds it straight to
+// It is nil when the head does not resolve at the current phase, or when D2 stopped
+// on a Variable pin, and a nil head is not ambiguous at the call site: lookupHeadPrimitiveExpander feeds it straight to
 // environment.DenotedForm, which answers "" for nil and falls through to
 // LookupPrimitiveExpander — exactly what an unresolved head did before.
 //
@@ -671,8 +671,8 @@ func (p *ExpanderTimeContinuation) ExpandSyntaxExpression(sym *syntax.SyntaxSymb
 // so a renamed or prefixed import expands as that form. A binding whose value is
 // the expander itself (a phase-1 row, or an import of one) is used directly;
 // otherwise the expander is looked up under the denoted form's name. A head that
-// denotes no form keeps the spelling lookup, which is the pre-existing behaviour
-// for unbound heads, variables, and phase-2+ code.
+// denotes no form keeps the spelling lookup (unbound heads, phase-2+ code),
+// except that a variable which shadows the form makes the head a call.
 //
 // denoted is a canonical spelling this method synthesizes, never a name the user
 // wrote, so it is looked up directly against the sealed phase-1 row rather than
@@ -706,11 +706,16 @@ func (p *ExpanderTimeContinuation) lookupHeadPrimitiveExpander(
 		// name, and the forms this expander consumes (include, cond-expand,
 		// define-syntax, ...) get no second look from the compiler. The rule's
 		// hygiene guard keeps a body-position reference to a top-level shadow on
-		// the form, as it keeps if there.
+		// the form, as it keeps if there. Asked only when the spelling names an
+		// expander: an ordinary call has nothing to shadow.
+		pe := LookupPrimitiveExpander(p.env, sym, scopes)
+		if pe == nil {
+			return nil
+		}
 		if !validate.HeadDenotesSpecialForm(p.env, sym, scopes, b, p.defines.ahead(sym, b)) {
 			return nil
 		}
-		return LookupPrimitiveExpander(p.env, sym, scopes)
+		return pe
 	}
 	pe, ok := b.Value().(*PrimitiveExpander)
 	if ok {

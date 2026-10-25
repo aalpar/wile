@@ -125,6 +125,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A top-level define of a special-form name shadows the form at head position
+  for every form.** `(define include (lambda args 'mine)) (include "v.scm")`
+  included the file, and the same define of `cond-expand`, `let-syntax`,
+  `letrec-syntax`, `import`, `eval-when`, `define-for-syntax`, `syntax-error`
+  or `with-binding-scope` made the use an expansion error; only the forms the
+  compiler dispatches (`if`, `begin`, `define`, ...) were shadowed. The expander
+  now applies the compiler's rule: a use after the define, in the same file or
+  `begin`, is a call (racket and petite agree), and the define's own head and a
+  use before it still mean the form. A define a macro produces
+  (`define-values`) binds for the forms after it the same way. A lambda body or
+  a macro argument reaching a top-level shadow still reads the form.
+
 - **A BigFloat result carries its operands' precision, not a fixed 256 bits.**
   `exp`, `log`, the trigonometric family, `atan` (both forms), `angle`,
   `magnitude` and a complex `sqrt` computed at 256 bits whatever their BigFloat
