@@ -237,7 +237,7 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 			return nil, p.die(NewParserErrorf(p.cur, "unexpected close %s", p.delimiterString(p.cur.Type())))
 		}
 		if err != nil {
-			return nil, p.die(err)
+			return nil, p.die(p.preferCutShortFault(err))
 		}
 		// Tokenizer.Next reports a token and the fault that ended it on separate
 		// calls, so a datum whose last token a scanner fault cut short ("#b109"
@@ -277,6 +277,37 @@ func (p *Parser) ReleaseLookahead(urr values.RuneUnreader) error {
 		return nil
 	}
 	return p.toks.ReleaseLookahead(urr)
+}
+
+// preferCutShortFault returns the read error to report when parsing a datum
+// failed with err while the tokenizer holds a pending fault.
+//
+// A numeral that must end at a delimiter and does not is cut short at the
+// offending rune, and the shortened token can then fail to parse on its own
+// ("#m1ex" leaves "#m1e", "#z--5" leaves "#z-"). That parse failure is only
+// the cut's consequence, so the stamped delimiter fault wins: it comes first in
+// the join, the error carries no token (Location falls back to the stamped
+// rune), and causeText renders it. err stays in the chain, so its sentinels
+// still match.
+//
+// Only the delimiter faults qualify. Another pending fault diagnoses a token
+// that is complete and wrong ("#\qqq"), which the parser names at least as
+// well, by its text, and which the tokenizer stamps past the token.
+func (p *Parser) preferCutShortFault(err error) error {
+	if p.toks == nil {
+		return err
+	}
+	pending := p.toks.Err()
+	if pending == nil {
+		return err
+	}
+	cut := errors.Is(pending, tokenizer.NewTokenizerError(tokenizer.MessageExpectingDelimiterAfterNumber)) ||
+		errors.Is(pending, tokenizer.NewTokenizerError(tokenizer.MessageExpectingDelimiterAfterBigNumber))
+	if !cut {
+		return err
+	}
+	p.cur = nil
+	return NewParserErrorWithWrap(errors.Join(pending, err), nil, messageReadFailed)
 }
 
 // locateReaderErr lifts any lower-layer error escaping a read — a lexical

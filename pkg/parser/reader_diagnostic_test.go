@@ -17,6 +17,7 @@ package parser
 import (
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
@@ -24,6 +25,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/internal/tokenizer"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // readUntilError reads data from src until a read fails, and returns that
@@ -200,4 +202,84 @@ func TestUnknownTokenKeepsIncompleteInputSignal(t *testing.T) {
 	c.Check(errors.Is(err, tokenizer.NewTokenizerError(
 		tokenizer.MessageUnterminatedString)), qt.IsTrue,
 		qt.Commentf("lost the specific lexical cause: %v", err))
+}
+
+// TestStampedFaultWinsOverTheTokenItCut pins the precedence rule for a token a
+// scanner fault cut short and that then fails to parse in its own right. The
+// fault is the diagnosis; the token's parse failure is only its consequence
+// ("#m1ex" stops at the x, and "#m1e" is not a number). ReadSyntax used to
+// consult the pending fault only after a successful datum, so these reported
+// the truncated token at its start and the stamped rune never appeared.
+//
+// The parser's own error stays in the chain: its sentinel is still matchable.
+// Only a delimiter fault takes precedence; the unknown_character_mnemonic row of
+// TestReadErrorNamesPositionCharacterAndState is the control for the rest.
+func TestStampedFaultWinsOverTheTokenItCut(t *testing.T) {
+	tcs := []struct {
+		name      string
+		src       string
+		wantLoc   string
+		wantMess  string
+		wantText  []string
+		wantCause error
+	}{{
+		name: "bigfloat_exponent_without_digits", src: "#m1ex",
+		wantLoc:   "in.scm:1:4",
+		wantMess:  tokenizer.MessageExpectingDelimiterAfterBigNumber,
+		wantText:  []string{"index 4", `'x'`, "big-float"},
+		wantCause: werr.ErrInvalidFormat,
+	}, {
+		name: "bigint_second_sign", src: "#z--5",
+		wantLoc:  "in.scm:1:3",
+		wantMess: tokenizer.MessageExpectingDelimiterAfterBigNumber,
+		wantText: []string{"index 3", `'-'`, "big-integer"},
+	}, {
+		name: "bigint_fraction_then_letter", src: "#z1.5x",
+		wantLoc:  "in.scm:1:5",
+		wantMess: tokenizer.MessageExpectingDelimiterAfterBigNumber,
+		wantText: []string{"index 5", `'x'`, "big-integer"},
+	}, {
+		name: "radix_sign_then_out_of_radix_digit", src: "#b-2",
+		wantLoc:  "in.scm:1:3",
+		wantMess: tokenizer.MessageExpectingDelimiterAfterNumber,
+		wantText: []string{"index 3", `'2'`},
+	}, {
+		name: "inside_a_list", src: "(1 #m1ex)",
+		wantLoc:  "in.scm:1:7",
+		wantMess: tokenizer.MessageExpectingDelimiterAfterBigNumber,
+		wantText: []string{"index 7", `'x'`},
+	}, {
+		// Control: a token that parses with a fault pending still reports the
+		// fault (the success path, which takes any pending fault).
+		name: "control_code_point_after_a_valid_token", src: `#\x110000`,
+		wantLoc:  "in.scm:1:9",
+		wantMess: tokenizer.MessageCodePointExceedsUnicodeMaximum,
+		wantText: []string{"index 9", "char-hex-escape"},
+	}}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			err := readUntilError(t, tc.src)
+
+			// An error matching io.EOF reads as a clean end, and the fault is lost.
+			c.Assert(errors.Is(err, io.EOF), qt.IsFalse, qt.Commentf("%v", err))
+			var perr *ParserError
+			c.Assert(errors.As(err, &perr), qt.IsTrue,
+				qt.Commentf("reading %q gave %T: %v", tc.src, err, err))
+			c.Check(perr.Location(), qt.Equals, tc.wantLoc)
+			c.Check(errors.Is(err, tokenizer.NewTokenizerError(tc.wantMess)), qt.IsTrue,
+				qt.Commentf("stamped fault not in the chain: %v", err))
+			rendered := err.Error()
+			for _, want := range append([]string{tc.wantMess}, tc.wantText...) {
+				c.Check(strings.Contains(rendered, want), qt.IsTrue,
+					qt.Commentf("rendered %q lacks %q", rendered, want))
+			}
+			if tc.wantCause != nil {
+				c.Check(errors.Is(err, tc.wantCause), qt.IsTrue,
+					qt.Commentf("parser's own cause dropped: %v", err))
+			}
+		})
+	}
 }
