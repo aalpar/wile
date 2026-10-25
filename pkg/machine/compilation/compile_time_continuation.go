@@ -407,7 +407,15 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	// co-introduced by the same template carries the same intro scope as this
 	// reference, so it must shadow the pinned/global fallbacks below (R1 fix —
 	// previously the ResolvedBinding pin short-circuited ahead of this check).
-	li := p.env.GetLocalIndex(sym, syntax.ScopesOf(symbolScopes))
+	//
+	// A tie among incomparable binders is the program's error, refused here with
+	// the identifier's location. The local probe and the global one below are the
+	// first resolver calls of each tier; the later GetBinding asks the same query
+	// of the same chain and store, so it cannot tie once both have answered.
+	li, ambiguous := p.env.TryGetLocalIndex(sym, syntax.ScopesOf(symbolScopes))
+	if ambiguous {
+		return ambiguousReference(expr, "")
+	}
 	if li != nil {
 		// Found a local binding with matching scopes
 		p.emitLocalLoad(li)
@@ -442,7 +450,10 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	// different slot than the one whose scopes the guard below inspects. The
 	// Env != nil guard covers a DEFERRED index (NewGlobalIndex), which
 	// resolveGlobalWith never produces but the type does not forbid.
-	coGI := p.env.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(symbolScopes))
+	coGI, ambiguous := p.env.TryGetGlobalIndexWithScopes(sym, syntax.ScopesOf(symbolScopes))
+	if ambiguous {
+		return ambiguousReference(expr, "")
+	}
 	if coGI != nil && coGI.Env != nil {
 		coBD := coGI.Env.GetOwnGlobalBinding(coGI)
 		if coIntroducedByExpansion(coBD) {
@@ -526,6 +537,17 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	return wrapSourcedError(expr.SourceContext(),
 		werr.WrapForeignErrorf(werr.ErrNoSuchBinding,
 			"no such binding %q with compatible scopes%s", sym.Key, p.unboundSuffix(sym, symbolScopes, true)))
+}
+
+// ambiguousReference refuses a reference to id whose scope set has no maximal
+// binder: two incomparable scope sets of equal size tie (Racket's "identifier's
+// binding is ambiguous"). Located at the identifier, as an unbound reference is.
+// The tie is neither unbound nor a pick: ErrAmbiguousBinding, never
+// ErrNoSuchBinding. suffix names the form, for set!.
+func ambiguousReference(id *syntax.SyntaxSymbol, suffix string) error {
+	return wrapSourcedError(id.SourceContext(),
+		werr.WrapForeignErrorf(werr.ErrAmbiguousBinding,
+			"identifier %q resolves ambiguously among incomparable hygienic scope sets%s", id.Key(), suffix))
 }
 
 // unboundSuffix renders what an unbound-binding diagnostic can say about WHY a

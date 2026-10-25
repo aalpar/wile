@@ -882,21 +882,32 @@ func (p *EnvironmentFrame) MaybeCreateLocalBinding(
 //
 // Panics with a wrapped werr.ErrAmbiguousBinding when two incomparable scope
 // sets tie for the maximal match (Racket's "ambiguous binding"); the tie is
-// refused, never broken by order.
+// refused, never broken by order. TryGetLocalIndex reports that tie instead.
 func (p *EnvironmentFrame) GetLocalIndex(key *values.Symbol, q syntax.ScopeSet) *LocalIndex {
-	if p == nil || !p.hasLocal() {
-		return nil
-	}
-
-	li, _, tied := resolveLocalMaximal(p, key, q, func(_ *Binding, slot int, depth int) *LocalIndex {
-		return NewLocalIndex(slot, depth)
-	})
-	if tied {
+	li, ambiguous := p.TryGetLocalIndex(key, q)
+	if ambiguous {
 		panic(werr.WrapForeignErrorf(werr.ErrAmbiguousBinding,
 			"GetLocalIndex: identifier %q resolves ambiguously among incomparable hygienic scope sets",
 			key.Key))
 	}
 	return li
+}
+
+// TryGetLocalIndex is GetLocalIndex with the incomparable tie REPORTED rather
+// than raised: (nil, true) is "ambiguous", and a resolved index always comes
+// with false. It exists for the compiler resolving a reference, which reports
+// the tie as a located diagnostic of the program instead of a panic.
+func (p *EnvironmentFrame) TryGetLocalIndex(key *values.Symbol, q syntax.ScopeSet) (*LocalIndex, bool) {
+	if p == nil || !p.hasLocal() {
+		return nil, false
+	}
+	li, _, tied := resolveLocalMaximal(p, key, q, func(_ *Binding, slot int, depth int) *LocalIndex {
+		return NewLocalIndex(slot, depth)
+	})
+	if tied {
+		return nil, true
+	}
+	return li, false
 }
 
 // HasLocalVariableBinding reports whether sym has a local variable binding
@@ -1280,6 +1291,16 @@ func (p *EnvironmentFrame) GetGlobalIndexWithScopes(key *values.Symbol, q syntax
 	return resolveGlobalWith(p, *key, q, func(g *GlobalEnvironmentFrame, ref slotRef) *GlobalIndex {
 		return newScopeKeyedGlobalIndex(key, g, ref, q)
 	})
+}
+
+// TryGetGlobalIndexWithScopes is GetGlobalIndexWithScopes with the incomparable
+// tie REPORTED rather than raised: (nil, true) is "ambiguous", and a resolved
+// index always comes with false. See TryGetLocalIndex.
+func (p *EnvironmentFrame) TryGetGlobalIndexWithScopes(key *values.Symbol, q syntax.ScopeSet) (*GlobalIndex, bool) {
+	gi, ambiguity := tryResolveGlobalWith(p, *key, q, func(g *GlobalEnvironmentFrame, ref slotRef) *GlobalIndex {
+		return newScopeKeyedGlobalIndex(key, g, ref, q)
+	})
+	return gi, ambiguity != nil
 }
 
 // GetGlobalBinding returns the binding for the given GlobalIndex, searching global bindings in the current and parent environments.

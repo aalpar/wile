@@ -325,8 +325,13 @@ func CompileValidatedSetBang(p *CompileTimeContinuation, ctctx CompileTimeCallCo
 	}
 	p.AppendOperations(machine.NewOperationPush())
 
-	// Use scope-aware binding resolution for validation
-	binding := p.env.GetBinding(sym, syntax.ScopesOf(symbolScopes))
+	// Use scope-aware binding resolution for validation. A tie is refused here,
+	// located (ambiguousReference); the GetLocalIndex below asks the same query of
+	// the same chain, so it cannot tie once this has answered.
+	binding, ambiguous := p.env.TryGetBinding(sym, syntax.ScopesOf(symbolScopes))
+	if ambiguous {
+		return ambiguousReference(v.Name, " for set!")
+	}
 	if binding == nil {
 		// The set! half of the same defect: stamp the identifier being
 		// assigned, so the reported location is the offending name rather
