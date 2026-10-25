@@ -94,9 +94,9 @@ func FlipScopeInSet(scopes Scopes, target *Scope) Scopes {
 // This is the shared traversal logic used by AddScope and FlipScope. Exported for
 // compilation.CompileQuoteSyntax, which stamps pins on a template's identifiers.
 //
-// It recurses into pairs and vectors only. A SyntaxBox reaches fn whole, through
-// the default arm, so a caller that needs to descend into a box must handle that
-// case itself (SyntaxBox.AddScope does; so does CompileQuoteSyntax).
+// It recurses into pairs, vectors and boxes, so a box's content is reached by
+// every scope operation built on it: FlipScope has to take off whatever
+// AddScope put into a box, or the two are not duals.
 func MapSyntaxTree(stx SyntaxValue, fn func(SyntaxValue) SyntaxValue) SyntaxValue {
 	if stx == nil {
 		return nil
@@ -158,6 +158,16 @@ func MapSyntaxTree(stx SyntaxValue, fn func(SyntaxValue) SyntaxValue) SyntaxValu
 		// Return new vector with transformed elements
 		return NewSyntaxVector(s.SourceContext(), newValues...)
 
+	case *SyntaxBox:
+		if s == nil || s.Value == nil {
+			return s
+		}
+		inner := MapSyntaxTree(s.Value, fn)
+		if inner == s.Value {
+			return s
+		}
+		return NewSyntaxBox(inner, s.SourceContext())
+
 	default:
 		// Other types (SyntaxObject, etc.) - check if they support the transformation
 		// This handles types that might implement the transformation interface
@@ -209,7 +219,8 @@ func flipScopeOnSymbol(sym *SyntaxSymbol, scope *Scope) *SyntaxSymbol {
 
 // AddScopeToSyntax adds a scope to a syntax object.
 // Returns a new syntax object with the scope added.
-// Symbols, pairs, and vectors receive the scope; self-evaluating literals
+// Symbols and the symbols inside pairs, vectors and boxes receive the scope;
+// self-evaluating literals
 // (SyntaxObject) and other types are returned unchanged.
 // Used by the binding-form expanders (let, letrec, lambda, let-syntax,
 // include).
@@ -224,6 +235,8 @@ func AddScopeToSyntax(stx SyntaxValue, scope *Scope) SyntaxValue {
 	case *SyntaxPair:
 		return s.AddScope(scope)
 	case *SyntaxVector:
+		return s.AddScope(scope)
+	case *SyntaxBox:
 		return s.AddScope(scope)
 	default:
 		// SyntaxObject and other types don't need scopes

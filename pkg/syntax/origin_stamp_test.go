@@ -62,8 +62,8 @@ func TestFlipScopeStampOrigin(t *testing.T) {
 		b := rest.Cdr().(*SyntaxPair).Car().(*SyntaxBox)
 		c.Assert(originOf(b), qt.Equals, origin)
 		c.Assert(originOf(b.Value), qt.Equals, origin)
-		// FlipScope does not descend into a box, and neither does the fused walk.
-		c.Assert(hasIntro(b.Value), qt.IsFalse)
+		// The fused walk flips a box's content, as FlipScope does.
+		c.Assert(hasIntro(b.Value), qt.IsTrue)
 		c.Assert(originOf(list), qt.IsNil, qt.Commentf("input is not mutated"))
 	})
 
@@ -133,7 +133,10 @@ func TestFlipScopeStampOrigin(t *testing.T) {
 		rest := out.Cdr().(*SyntaxPair)
 		c.Assert(originOf(rest.Car()), qt.IsNil)
 		c.Assert(originOf(rest.Cdr().(*SyntaxPair).Car()), qt.IsNil)
-		c.Assert(rest.Cdr().(*SyntaxPair).Car(), qt.Equals, values.Value(box))
+		// Flipped like the vector, not returned by identity: its content came in
+		// carrying the intro scope and must leave without it.
+		c.Assert(hasIntro(rest.Car().(*SyntaxVector).Values[0]), qt.IsFalse)
+		c.Assert(hasIntro(rest.Cdr().(*SyntaxPair).Car().(*SyntaxBox).Value), qt.IsFalse)
 	})
 
 	t.Run("a literal of the input passes through", func(t *testing.T) {

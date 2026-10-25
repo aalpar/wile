@@ -385,6 +385,42 @@ func TestBoxInMacroTemplateAndPattern(t *testing.T) {
 	}
 }
 
+// A use-site identifier that passes through a box keeps resolving to the
+// use-site binder. The expander adds the intro scope to a macro's input and
+// flips it on the output; the add side always descended into a box, the flip
+// side did not, so the boxed `y` kept the intro scope, missed the `(let ((y 5))
+// ...)` the inner macro builds from it, and read the global (2). The pair and
+// vector shapes are the controls. Racket and petite give 6 on every row.
+func TestUseSiteIdentifierThroughBoxMeetsItsBinder(t *testing.T) {
+	t.Parallel()
+
+	const prelude = `(define y 1)`
+	cases := []struct {
+		name  string
+		inner string
+		outer string
+		use   string
+	}{
+		{"template box", "((_ #&x b) (let ((x 5)) b))", "((_ v body) (inner #&v body))", "(outer y (+ y 1))"},
+		{"template box in a pair", "((_ (#&x) b) (let ((x 5)) b))", "((_ v body) (inner (#&v) body))", "(outer y (+ y 1))"},
+		{"user-written box", "((_ #&x b) (let ((x 5)) b))", "((_ bx body) (inner bx body))", "(outer #&y (+ y 1))"},
+		{"control: vector", "((_ #(x) b) (let ((x 5)) b))", "((_ v body) (inner #(v) body))", "(outer y (+ y 1))"},
+		{"control: pair", "((_ (x) b) (let ((x 5)) b))", "((_ v body) (inner (v) body))", "(outer y (+ y 1))"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "(begin " + prelude +
+				" (define-syntax inner (syntax-rules () " + tc.inner + "))" +
+				" (define-syntax outer (syntax-rules () " + tc.outer + "))" +
+				" " + tc.use + ")"
+			got := mustEvalScheme(t, src)
+			if got != "6" {
+				t.Errorf("got %s, want 6 (2 means the boxed y kept the intro scope)", got)
+			}
+		})
+	}
+}
+
 // 2.2.14 — a syntax-rules macro defined INSIDE a syntax-case clause body, whose
 // template freely references the enclosing clause's pattern variable, resolved
 // that reference at the USE site.

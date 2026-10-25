@@ -63,19 +63,9 @@ func (p *CompileTimeContinuation) CompileQuoteSyntax(ctctx CompileTimeCallContex
 	if err != nil {
 		return p.wrapCompilationError(err)
 	}
-	var stamp func(node syntax.SyntaxValue) syntax.SyntaxValue
-	stamp = func(node syntax.SyntaxValue) syntax.SyntaxValue {
-		// MapSyntaxTree recurses into pairs and vectors only; its default arm
-		// hands a box to fn whole. Descend, so a #&… template stamps like the
-		// producer's, which recurses (collectFreeIdentifiersWithEllipsis).
-		box, ok := node.(*syntax.SyntaxBox)
-		if ok {
-			inner := syntax.MapSyntaxTree(box.Value, stamp)
-			if inner == box.Value {
-				return box
-			}
-			return syntax.NewSyntaxBox(inner, box.SourceContext())
-		}
+	// MapSyntaxTree descends into boxes, so a #&… template stamps like the
+	// producer's, which recurses (collectFreeIdentifiersWithEllipsis).
+	stamp := func(node syntax.SyntaxValue) syntax.SyntaxValue {
 		sym, ok := node.(*syntax.SyntaxSymbol)
 		if !ok {
 			return node
