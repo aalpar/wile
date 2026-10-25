@@ -59,6 +59,10 @@ type hashtableEntry struct {
 // set keeps the equal?-keyed semantics every table had before kinds existed.
 // Pinned by TestHashtableZeroValueIsEqualKind.
 //
+// The three kinds are package variables because Go has no struct constants; like
+// io.EOF they are fixed by convention, and assigning one would re-key every
+// table of that kind.
+//
 // Do NOT read that as "a bare &Hashtable{} is a usable table". It is not, though
 // an earlier version of this comment claimed otherwise: the mutable field's zero
 // value is false, so a zero Hashtable is an IMMUTABLE equal table that rejects
@@ -91,12 +95,16 @@ const HashtableKindCount = 3
 // and hashtable-equivalence-function hand back procedure objects, not kind names.
 func (p HashtableKind) String() string {
 	switch p {
+	case HashtableEqual:
+		return "equal"
 	case HashtableEq:
 		return "eq"
 	case HashtableEqv:
 		return "eqv"
 	default:
-		return "equal"
+		// Unreachable from outside the package; a code given no row here renders
+		// as "unknown", which TestHashtableKindCodesHaveNames catches.
+		return "unknown"
 	}
 }
 

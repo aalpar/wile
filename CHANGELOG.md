@@ -479,9 +479,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   friends) was constructed with no procedure to remember and still answers from
   the name probe.
 
-  `hashtable-hash-function` now refuses an out-of-range `HashtableKind` instead
-  of answering `#f` for anything that was not the equal kind. Reachable only
-  from Go, via the exported `values.NewHashtable`.
+  `hashtable-hash-function` names the eq and eqv kinds positively instead of
+  answering `#f` for anything that was not the equal kind; an out-of-range kind
+  can no longer be built (see **Changed**: `values.HashtableKind` is opaque).
 
 - **A `(wile <profile>)` environment sees the macro vocabulary at every phase.**
   The language rows (the base at phase 0, the macro vocabulary at every macro
@@ -643,6 +643,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `let` — are affected and all five now report the structural error.
 
 ### Changed
+
+- **`values.HashtableKind` is opaque (Go API, breaking).** It was `uint8` with
+  `const` kinds, so `values.NewHashtable(values.HashtableKind(7))` compiled and
+  built a table that stored as an `equal?` table while `hashtable-hash-function`
+  and `hashtable-equivalence-function` refused it. It is now a struct with an
+  unexported field; `values.HashtableEqual` (the zero value), `HashtableEq` and
+  `HashtableEqv` are its only values, and they are package variables, not
+  constants. `HashtableKind(n)`, `uint8(kind)` and a kind in a `const`
+  declaration no longer compile; compare kinds with `==` or render one with
+  `String()`.
 
 - **BREAKING: `ac-match` / `ac-unify` and `term-compare` read the comparator as
   a boolean (I177).** A protocol whose comparator returns a number, such as the

@@ -336,7 +336,7 @@ func TestHashtableKinds(t *testing.T) {
 // TestHashtableZeroValueIsEqualKind pins the zero-value choice. A bare
 // &Hashtable{} — which NewEmptyHashtable returns and Copy inherits — must keep
 // today's equal? semantics, so HashtableEqual is deliberately the zero value.
-// Reordering the iota silently reinterprets every existing table.
+// Giving HashtableEqual a non-zero code silently reinterprets every existing table.
 func TestHashtableZeroValueIsEqualKind(t *testing.T) {
 	qt.Assert(t, values.NewEmptyHashtable().Kind(), qt.Equals, values.HashtableEqual)
 	qt.Assert(t, values.HashtableEqual, qt.Equals, values.HashtableKind{})
@@ -422,17 +422,15 @@ func TestHashtableNestedKeyTerminates(t *testing.T) {
 
 // TestHashtableKindsAreExhaustive is the site-count ratchet for HashtableKind.
 //
-// hashKey, keyEqual and String all used to route an unlisted kind through a
-// `default:` arm that answered EQUAL, and prim_hashtables.go indexed a
-// 3-element array that PANICKED. So adding a fourth kind compiled clean and the
-// new kind silently inherited equal? key identity — wrong-key collapse, which is
-// data corruption rather than a loud failure.
+// hashKey, keyEqual, equivIdentity and PrimHashtableHashFunction answer the
+// equal kind from their default arms, so a fourth kind added without its rows
+// would silently inherit equal? key identity: wrong-key collapse, which is data
+// corruption rather than a loud failure.
 //
 // This test fails when the count changes, which is the prompt to give the new
-// kind a row in all four. It cannot check the arms directly (they are
-// unexported), so it checks the two things it can see: the count, and that every
-// kind renders a distinct name (String's default arm answers "equal", so a kind
-// without its own row collides with HashtableEqual).
+// kind a row in all five (those four and String). It cannot check the arms
+// directly (they are unexported), so it checks the count and that every kind
+// renders a distinct name; TestHashtableKindCodesHaveNames checks the codes.
 func TestHashtableKindsAreExhaustive(t *testing.T) {
 	qt.Assert(t, values.HashtableKindCount, qt.Equals, 3,
 		qt.Commentf("a kind was added or removed: give it a row in hashKey, keyEqual, String, equivIdentity and PrimHashtableHashFunction"))
