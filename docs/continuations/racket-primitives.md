@@ -237,7 +237,7 @@ object pointer, the mark value is the pre-converted parameter value. The VM's
 | Primitive | Location |
 |-----------|----------|
 | `continuation-mark-set->list*` | `pkg/registry/core/prim_cont_marks.go` + `pkg/machine/continuation_mark_set.go` |
-| `continuation-mark-set->iterator` | `(wile control)` — Scheme closure over `->list*` |
+| `continuation-mark-set->iterator` | `(wile control)` — Scheme closure over `->list*`; Racket's two-value protocol (vector or `#f`, next iterator) |
 | `continuation-mark-set->context` | `(wile control)` — reads `'wile/source-location` key |
 
 **Performance-negative (avoid):**
@@ -664,7 +664,7 @@ and `extensions/eval/`. Derived Scheme forms are in `(wile control)`.
 | `shift` / `reset` and the other `racket/control` operator families | ✅ Done | `(wile control)` — 27 exported bindings, tagged variants included |
 | `continuation-prompt-available?` | ✅ Done | `pkg/registry/core/prim_prompt.go` |
 | `continuation-mark-set->list*` | ✅ Done | `pkg/registry/core/prim_cont_marks.go` |
-| `continuation-mark-set->iterator` | ✅ Done | `(wile control)` — Scheme closure over `->list*` |
+| `continuation-mark-set->iterator` | ✅ Done | `(wile control)` — Scheme closure over `->list*`; two values per call, as Racket |
 | `continuation-mark-set->context` | ✅ Done | `(wile control)` — reads `'wile/source-location` key |
 | `syntax-source` / `syntax-line` / `syntax-column` / `syntax-position` / `syntax-span` | ✅ Done | `pkg/registry/core/prim_syntax_loc.go` |
 | `syntax->list` | ✅ Done | `pkg/registry/core/prim_syntax_loc.go` |
@@ -769,7 +769,7 @@ Not provided: `%`/`fcontrol`, `abort`, `abort/cc`, `call/prompt`, `call/comp`, `
 | `continuation-mark-set->list` | All values for a key, ordered innermost-first | Yes |
 | `continuation-mark-set->list*` | Multi-key variant (returns vectors) | Yes |
 | `continuation-mark-set-first` | Nearest value for a key (amortized O(1)) | Yes |
-| `continuation-mark-set->iterator` | Lazy iterator over marks | `(wile control)` |
+| `continuation-mark-set->iterator` | Iterator over marks: each call answers a frame vector (or `#f`) and the next iterator | `(wile control)` |
 | `continuation-mark-set?` | Predicate | Yes |
 | `continuation-mark-set->context` | Extract stack-trace-style context from marks | `(wile control)` |
 | `continuation-mark-key?` | Predicate for impersonated mark keys | No (needs impersonators) |

@@ -259,19 +259,18 @@
 ;; Continuation mark utilities
 ;; ─────────────────────────────────────────────────
 
-;; continuation-mark-set->iterator returns a procedure that yields one
-;; vector per frame on each call, or #f when exhausted.
-;; Built on continuation-mark-set->list*.
+;; continuation-mark-set->iterator follows Racket's protocol: the returned
+;; procedure answers two values, the next frame's vector (or #f when
+;; exhausted) and the iterator for the rest. Each iterator is pure, so calling
+;; one twice answers the same frame. Built on continuation-mark-set->list*.
 (define (continuation-mark-set->iterator cms keys . args)
-  "Return a stateful iterator over continuation mark set CMS.\nEach call to the returned procedure yields one vector of mark\nvalues for KEYS from the next frame, or #f when exhausted.\nThe optional third argument supplies the value used for frames\nthat lack a given key (defaults to #f).\n\nExamples:\n  (with-continuation-mark 'k 1\n    (let ((it (continuation-mark-set->iterator\n                (current-continuation-marks) '(k))))\n      (it)))  => #(1)\n\nParameters:\n  cms : any\n  keys : list\nReturns: procedure\nCategory: control\n\nSee also: `continuation-mark-set->context', `continuation-mark-set->list*'."
+  "Return an iterator over continuation mark set CMS (or the current\ncontinuation's marks when CMS is #f). Calling the iterator returns two\nvalues: a vector of the mark values for KEYS from the next frame, or #f\nwhen no frame is left, and the iterator for the frames after it. An\niterator holds no state, so calling it again answers the same frame.\nThe optional third argument supplies the value used for frames that\nlack a given key (defaults to #f).\n\nExamples:\n  (with-continuation-mark 'k 1\n    (let ((it (continuation-mark-set->iterator\n                (current-continuation-marks) '(k))))\n      (call-with-values it (lambda (v next) v))))  => #(1)\n\nParameters:\n  cms : any\n  keys : list\nReturns: procedure\nCategory: control\n\nSee also: `continuation-mark-set->context', `continuation-mark-set->list*'."
   (let ((none-v (if (pair? args) (car args) #f)))
-    (let ((remaining (continuation-mark-set->list* cms keys none-v)))
+    (let iterator ((remaining (continuation-mark-set->list* cms keys none-v)))
       (lambda ()
         (if (null? remaining)
-            #f
-            (let ((v (car remaining)))
-              (set! remaining (cdr remaining))
-              v))))))
+            (values #f (iterator remaining))
+            (values (car remaining) (iterator (cdr remaining))))))))
 
 ;; continuation-mark-set->context extracts source-location marks using the
 ;; well-known key 'wile/source-location. Users can install marks with this
