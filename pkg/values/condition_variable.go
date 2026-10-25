@@ -36,7 +36,15 @@ type ConditionVariable struct {
 	specific Value // user data
 
 	mu      sync.Mutex
-	waitChs []chan struct{} // per-waiter notification channels
+	waiters []cvWaiter // FIFO wait set
+}
+
+// cvWaiter is one entry of a condition variable's wait set: the channel Signal or
+// Broadcast closes to wake it, and its ctx's Done channel, so that Signal can pass
+// over a waiter that is giving up.
+type cvWaiter struct {
+	ch   chan struct{}
+	done <-chan struct{}
 }
 
 // NewConditionVariable creates a new condition variable
@@ -75,13 +83,26 @@ func (p *ConditionVariable) SetSpecific(v Value) {
 	p.specific = v
 }
 
-// Signal wakes one waiting thread (FIFO order).
+// Signal wakes one waiting thread (FIFO order), the first whose ctx has not ended.
+//
+// A waiter whose ctx has ended is leaving (thread-terminate! cancels it and returns
+// before the waiter has deregistered), and a wakeup handed to it is lost: the live
+// waiter behind it stays parked. So Signal passes over it and leaves it in the set,
+// where its own removeWaiter still finds it and it reports the cancellation, not a
+// signal. A ctx that ends after this check still takes the wakeup with it; that
+// window is the SRFI-18 sequencer's (plans/2026-08-01-srfi18-sequencer-design.md).
 func (p *ConditionVariable) Signal() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if len(p.waitChs) > 0 {
-		close(p.waitChs[0])
-		p.waitChs = p.waitChs[1:]
+	for i, w := range p.waiters {
+		select {
+		case <-w.done:
+			continue
+		default:
+		}
+		close(w.ch)
+		p.waiters = append(p.waiters[:i], p.waiters[i+1:]...)
+		return
 	}
 }
 
@@ -89,10 +110,10 @@ func (p *ConditionVariable) Signal() {
 func (p *ConditionVariable) Broadcast() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	for _, ch := range p.waitChs {
-		close(ch)
+	for _, w := range p.waiters {
+		close(w.ch)
 	}
-	p.waitChs = nil
+	p.waiters = nil
 }
 
 // Wait waits on the condition variable until signaled or (if timeout is non-nil)
@@ -103,17 +124,18 @@ func (p *ConditionVariable) Broadcast() {
 // the mutex. Wait itself registers and blocks in one step, which is correct only for
 // a caller that holds no mutex.
 func (p *ConditionVariable) Wait(_ *Mutex, timeout *time.Duration) bool {
-	return p.blockOnWaiter(context.Background(), p.registerWaiter(), timeout)
+	ctx := context.Background()
+	return p.blockOnWaiter(ctx, p.registerWaiter(ctx), timeout)
 }
 
-// registerWaiter appends a fresh notification channel to the wait set and returns
-// it. Separating registration from blocking lets Mutex.UnlockContext enqueue the
+// registerWaiter appends a fresh notification channel to the wait set, for a waiter
+// whose wait ctx is ctx, and returns it. Separating registration from blocking lets Mutex.UnlockContext enqueue the
 // waiter BEFORE releasing the mutex, closing the SRFI-18 lost-wakeup window in which
 // a signal could land on an empty wait set.
-func (p *ConditionVariable) registerWaiter() chan struct{} {
+func (p *ConditionVariable) registerWaiter(ctx context.Context) chan struct{} {
 	ch := make(chan struct{})
 	p.mu.Lock()
-	p.waitChs = append(p.waitChs, ch)
+	p.waiters = append(p.waiters, cvWaiter{ch: ch, done: ctx.Done()})
 	p.mu.Unlock()
 	return ch
 }
@@ -150,9 +172,9 @@ func (p *ConditionVariable) blockOnWaiter(ctx context.Context, ch chan struct{},
 func (p *ConditionVariable) removeWaiter(ch chan struct{}) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	for i, c := range p.waitChs {
-		if c == ch {
-			p.waitChs = append(p.waitChs[:i], p.waitChs[i+1:]...)
+	for i, w := range p.waiters {
+		if w.ch == ch {
+			p.waiters = append(p.waiters[:i], p.waiters[i+1:]...)
 			return true
 		}
 	}
@@ -163,7 +185,7 @@ func (p *ConditionVariable) removeWaiter(ch chan struct{}) bool {
 func (p *ConditionVariable) WaiterCount() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return len(p.waitChs)
+	return len(p.waiters)
 }
 
 // buf interface implementation

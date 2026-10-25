@@ -15,6 +15,7 @@
 package values_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -232,4 +233,50 @@ func TestConditionVariable_Wait_ConcurrentWaiters(t *testing.T) {
 	// Most should be signaled (allow some variance for scheduler)
 	c.Assert(signaled > numWaiters/2, qt.IsTrue,
 		qt.Commentf("signaled=%d timedout=%d", signaled, timedout))
+}
+
+// TestConditionVariableSignalPassesOverAnEndedWaiter pins Signal against the
+// terminate-then-signal shape: thread-terminate! cancels a cv waiter's ctx and
+// returns while the waiter is still in the wait set, and a Signal right after it
+// used to wake that dead waiter, leaving the live one behind it parked. Signal now
+// wakes the first waiter whose ctx has not ended and leaves the ended one in the
+// set, for its own deregistration to find.
+func TestConditionVariableSignalPassesOverAnEndedWaiter(t *testing.T) {
+	c := qt.New(t)
+	cv := values.NewConditionVariable("cv")
+	ctxA, cancelA := context.WithCancel(context.Background())
+	a := cv.RegisterWaiter(ctxA)
+	b := cv.RegisterWaiter(context.Background())
+	cancelA()
+
+	cv.Signal()
+
+	c.Assert(isClosed(b), qt.IsTrue, qt.Commentf("the live waiter behind an ended one must be woken"))
+	c.Assert(isClosed(a), qt.IsFalse, qt.Commentf("the ended waiter must not take the wakeup"))
+	c.Assert(cv.WaiterCount(), qt.Equals, 1, qt.Commentf("the ended waiter stays registered until it leaves"))
+}
+
+// TestConditionVariableSignalIsFIFOAmongLiveWaiters pins that passing over ended
+// waiters leaves the order among live ones alone.
+func TestConditionVariableSignalIsFIFOAmongLiveWaiters(t *testing.T) {
+	c := qt.New(t)
+	cv := values.NewConditionVariable("cv")
+	first := cv.RegisterWaiter(context.Background())
+	second := cv.RegisterWaiter(context.Background())
+
+	cv.Signal()
+	c.Assert(isClosed(first), qt.IsTrue)
+	c.Assert(isClosed(second), qt.IsFalse)
+
+	cv.Signal()
+	c.Assert(isClosed(second), qt.IsTrue)
+}
+
+func isClosed(ch <-chan struct{}) bool {
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
 }
