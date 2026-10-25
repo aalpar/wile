@@ -161,16 +161,17 @@ func readIncludedForms(ctx context.Context, env *environment.EnvironmentFrame, r
 // the same file would each find the other's push.
 type includeEntry struct {
 	path string
-	// guard and macroOutput are the expander state the file's forms are
-	// expanded under: the run's depth guard and its macroOutput count at entry.
+	// guard and macroInvocations are the expander state the file's forms are
+	// expanded under: the run's depth guard and its macroInvocations count at
+	// entry.
 	// guard is nil for a file the compiler includes (a declaration-level
 	// include, an include-library-declarations file), whose forms a fresh
 	// expander takes from count zero.
-	guard       *expandDepthGuard
-	macroOutput int
+	guard            *expandDepthGuard
+	macroInvocations int
 	// literal reports that the include that entered this file was written in
-	// the file before it on the chain, not produced or passed through by a
-	// macro.
+	// the file before it on the chain, not produced, passed through or
+	// expanded by a macro.
 	literal bool
 }
 
@@ -187,9 +188,10 @@ func innermostInclude(ctx context.Context) (includeEntry, bool) {
 }
 
 // literalIncludeAt reports whether an include the expander meets under guard
-// was written in the innermost file of ctx's include chain: no macro output has
-// begun since that file was entered, so the include is neither a macro's
-// template nor an argument a macro passed through (which could stop doing so).
+// was written in the innermost file of ctx's include chain: no macro invocation
+// has begun since that file was entered, so the include is neither a macro's
+// template, nor an argument a macro passed through, nor one a transformer
+// expanded with expand (any of which could stop).
 // With no file on the chain there is nothing to cycle through, and the answer
 // does not matter.
 func literalIncludeAt(ctx context.Context, guard *expandDepthGuard) bool {
@@ -198,9 +200,9 @@ func literalIncludeAt(ctx context.Context, guard *expandDepthGuard) bool {
 		return true
 	}
 	if in.guard == nil {
-		return guard.macroOutput == 0
+		return guard.macroInvocations == 0
 	}
-	return in.guard == guard && guard.macroOutput == in.macroOutput
+	return in.guard == guard && guard.macroInvocations == in.macroInvocations
 }
 
 // enterIncludedFile returns ctx recording entry, the file the including form

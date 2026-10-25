@@ -120,10 +120,10 @@ func (p *ExpanderTimeContinuation) expandIncludedFile(sym *syntax.SyntaxSymbol, 
 		return nil, err
 	}
 	ctx, err := enterIncludedFile(p.ctx, sym.Key(), includeEntry{
-		path:        filePath,
-		guard:       p.depthGuard,
-		macroOutput: p.depthGuard.macroOutput,
-		literal:     literalIncludeAt(p.ctx, p.depthGuard),
+		path:             filePath,
+		guard:            p.depthGuard,
+		macroInvocations: p.depthGuard.macroInvocations,
+		literal:          literalIncludeAt(p.ctx, p.depthGuard),
 	})
 	if err != nil {
 		return nil, err

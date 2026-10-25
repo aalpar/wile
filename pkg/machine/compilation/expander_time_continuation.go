@@ -81,12 +81,14 @@ const DefaultMaxExpandDepth int = 50000
 type expandDepthGuard struct {
 	depth int
 	max   int // 0 = unlimited
-	// macroOutput counts the macro outputs being expanded on the current path
-	// (expandMacroOutput). The walk is depth-first on one goroutine, so a shared
-	// counter is per path. The include cycle check reads it: an include met with
-	// the count its file was entered at was written in that file and not
-	// produced or passed through by a macro (enterIncludedFile).
-	macroOutput int
+	// macroInvocations counts the macro invocations in progress on the current
+	// path (expandMacroInvocation): the transformer's run, including any expand
+	// it calls on its input, and the expansion of its output. The walk is
+	// depth-first on one goroutine, so a shared counter is per path. The include
+	// cycle check reads it: an include met with the count its file was entered
+	// at was written in that file and not produced, passed through or expanded
+	// by a macro (enterIncludedFile).
+	macroInvocations int
 }
 
 // enter records one level of recursion and reports whether the bound is now
@@ -745,6 +747,10 @@ func sealedPrimitiveExpander(store *environment.GlobalEnvironmentFrame, canon *v
 // expandMacroInvocation invokes a macro transformer and returns the expanded result.
 // This is called when ExpandSyntaxExpression determines that a symbol is bound to a macro.
 func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue, bnd *environment.Binding, pairCtx *syntax.SourceContext) (syntax.SyntaxValue, error) {
+	p.depthGuard.macroInvocations++
+	defer func() {
+		p.depthGuard.macroInvocations--
+	}()
 	// Check for ER macro transformer first
 	erTransformer, isER := bnd.Value().(*ERMacroTransformer)
 	if isER {
@@ -829,7 +835,7 @@ func (p *ExpanderTimeContinuation) expandMacroInvocation(sym *syntax.SyntaxSymbo
 		stx = syntax.FlipScopeStampOrigin(stx, introScope, pushOrigin(sym.Key(), sym.SourceContext(), pairCtx), expanderCtx.passThroughSet(inputForm))
 		stx = p.pruneUseSiteScopes(stx)
 		// Recursively expand the result to handle nested macro calls
-		return p.expandMacroOutput(stx)
+		return p.ExpandExpression(stx)
 	}
 	return nil, wrapSourcedError(sym.SourceContext(), werr.WrapForeignErrorf(werr.ErrNotASyntaxValue, "syntax transformer returned non-syntax value: %T", result))
 }
@@ -848,17 +854,7 @@ func (p *ExpanderTimeContinuation) expandERMacroInvocation(
 		return nil, wrapSourcedError(sym.SourceContext(), werr.WrapForeignErrorf(err, "expand: er-macro-transformer expansion failed"))
 	}
 	// Recursively expand the result
-	return p.expandMacroOutput(wrapped)
-}
-
-// expandMacroOutput expands a transformer's output, counting it on the depth
-// guard's macroOutput for the extent of the expansion.
-func (p *ExpanderTimeContinuation) expandMacroOutput(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	p.depthGuard.macroOutput++
-	defer func() {
-		p.depthGuard.macroOutput--
-	}()
-	return p.ExpandExpression(stx)
+	return p.ExpandExpression(wrapped)
 }
 
 // invokeERTransformer runs the ER transformer and returns the re-wrapped result

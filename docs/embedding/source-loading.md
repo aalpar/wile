@@ -423,8 +423,8 @@ never see each other's entries (the load stack cannot answer this: a thread
 inherits its starter's). An include of a file already on the chain raises
 `werr.ErrIncludeCycle`, naming the cycle outermost first, when every include
 from that file on was written in the file it appears in. A cycle through a
-macro-produced include, or an include a macro passed through, is not refused:
-the macro can stop producing it. One that never stops ends at the expansion
+macro-produced include, or one a macro passed through or expanded with
+`expand`, is not refused: the macro can stop producing it. One that never stops ends at the expansion
 depth guard (`werr.ErrExpandDepthExceeded`), reported once with the include
 depth and a bounded list of the files.
 

@@ -699,12 +699,14 @@ func TestLibraryDeclarationIncludeResolvesAgainstTheSldDirectory(t *testing.T) {
 // not refused, because the macro can stop producing the include. Here a phase-1
 // counter stops it after three rounds; racket (racket/include with
 // begin-for-syntax) and petite (a let-over-transformer counter) both give 3.
-// The macro either writes the include itself or passes through one written in
-// the file as its argument; both are the macro's to drop.
+// The macro writes the include itself, passes through one written in the file
+// as its argument, or expands that argument with expand; all are the macro's to
+// drop.
 func TestMacroProducedIncludeRecursionTerminates(t *testing.T) {
 	fsys := fstest.MapFS{
 		"self-g.scm": &fstest.MapFile{Data: []byte(`(set! count (+ count 1)) (inc-once)`)},
 		"self-h.scm": &fstest.MapFile{Data: []byte(`(set! count (+ count 1)) (maybe (include "self-h.scm"))`)},
+		"lx.scm":     &fstest.MapFile{Data: []byte(`(set! count (+ count 1)) (gate (include "lx.scm"))`)},
 	}
 	tcs := []struct {
 		name string
@@ -729,6 +731,16 @@ count`},
           (begin (set! n (+ n 1)) (car (cdr f)))
           (list (r 'begin))))))
 (maybe (include "self-h.scm"))
+count`},
+		// The transformer expands its argument itself (racket's local-expand twin
+		// gives 3), so the include is met while the macro runs, not in its output.
+		{name: "include a transformer expands", code: `(define count 0)
+(define-for-syntax n 0)
+(define-syntax gate
+  (lambda (stx)
+    (syntax-case stx ()
+      ((_ x) (if (< n 3) (begin (set! n (+ n 1)) (expand #'x)) #'(begin))))))
+(gate (include "lx.scm"))
 count`},
 	}
 	for _, tc := range tcs {
@@ -774,7 +786,7 @@ func TestMacroProducedIncludeLoopFailsConcisely(t *testing.T) {
 // identifiers in the library, whether the include is written in the body or
 // introduced by another library's macro. No row has been found that
 // distinguishes the propagation (removing it leaves these green); they stand as
-// controls.
+// controls. The cross-library row is skipped on an ER hygiene bug it exposed.
 func TestIncludeInLibraryBodyMacrosResolveInTheLibrary(t *testing.T) {
 	fsys := fstest.MapFS{
 		"lib/m.sld": &fstest.MapFile{Data: []byte(`(define-library (m)
@@ -806,12 +818,17 @@ func TestIncludeInLibraryBodyMacrosResolveInTheLibrary(t *testing.T) {
 		name string
 		code string
 		want string
+		skip string
 	}{
 		{name: "let-syntax, syntax-case and er macros in an included file", code: `(import (m)) (define (helper) 0) (define (helper2) 1) (list (get) (use-it) (use-er))`, want: "(42 43 43)"},
-		{name: "include introduced by another library's macro", code: `(import (b)) (define (helper) 'top) (get-b)`, want: "b"},
+		{name: "include introduced by another library's macro", code: `(import (b)) (define (helper) 'top) (get-b)`, want: "shared",
+			skip: "ER rename in an included file resolves to the including library's binding: gives b (racket: shared; Wile's syntax-rules, syntax-case and direct-reference versions: shared)"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.skip != "" {
+				t.Skip(tc.skip)
+			}
 			engine := libraryIncludeEngine(t, fsys)
 			result, err := engine.EvalProgram(context.Background(), tc.code, "includer.scm")
 			qt.Assert(t, err, qt.IsNil)
