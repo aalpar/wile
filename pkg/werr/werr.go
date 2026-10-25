@@ -230,6 +230,14 @@ var (
 	// that is not in force for the later importer.
 	ErrLibraryInstantiationCancelled = NewStaticError("library instantiation was cancelled")
 
+	// ErrLibraryInstantiationEscaped is what a later importer of a library
+	// receives when the library's body exited through a continuation or an abort
+	// the first time it ran. The body runs at most once, so the failure is
+	// remembered; it is not remembered as the control signal itself, which would
+	// resume the continuation or deliver the abort again although the body did
+	// not run again.
+	ErrLibraryInstantiationEscaped = NewStaticError("library instantiation exited through a control transfer")
+
 	// Recursion depth
 
 	ErrCallDepthExceeded   = NewStaticError("call depth exceeded")

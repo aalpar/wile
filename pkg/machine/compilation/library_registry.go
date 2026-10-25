@@ -194,8 +194,13 @@ func (p *CompiledLibrary) EnsureInstantiated(ctx context.Context, evaluator mach
 // that driver to resolve it; remembered as is, every later import would hand the
 // same signal to whichever driver ran it, which would resume the continuation
 // again, or deliver the abort again and rerun the after thunks it carries
-// although the body never re-ran. Later importers get a continuation barrier
-// error instead, located at the library's form like first. first is what the
+// although the body never re-ran. Later importers get
+// ErrLibraryInstantiationEscaped instead, located at the library's form like
+// first. Not a continuation barrier error: no barrier was crossed. The first
+// importer's error is whatever the body's exit produced and need not match: a
+// top-level import whose body aborts to a tag nothing holds fails with "no
+// prompt found", one whose body resumes a runtime continuation fails with the
+// engine's ErrContinuationBarrier (no runtime driver to resume it). first is what the
 // first importer received; cause is the body's own failure, which first wraps.
 //
 // An uncaught raise (ErrExceptionEscape) is NOT converted, although it is a
@@ -236,7 +241,7 @@ func (p *CompiledLibrary) memoizableInstantiateError(first, cause error, cancell
 	default:
 		return first
 	}
-	return wrapSourcedError(p.formSource, werr.WrapForeignErrorf(werr.ErrContinuationBarrier,
+	return wrapSourcedError(p.formSource, werr.WrapForeignErrorf(werr.ErrLibraryInstantiationEscaped,
 		"library %s: its body exited through %s when it was first instantiated",
 		p.Name.SchemeString(), how))
 }
