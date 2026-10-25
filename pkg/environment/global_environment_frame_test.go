@@ -1017,3 +1017,30 @@ func TestGlobalFrame_RetractGlobalBinding(t *testing.T) {
 		})
 	}
 }
+
+// IsStartupBinding is pointer identity over the startup set's slots: a sealed
+// write is one, a mutable define and an import into a sealed slot are not, and
+// the answer is per object, not per name.
+func TestIsStartupBinding(t *testing.T) {
+	c := qt.New(t)
+	ns := NewNamespace()
+	sym := values.NewSymbol("car")
+	store := ns.Store()
+
+	sealedIdx, created := ns.Runtime().SealedWriteViewAt(PhaseRuntime).
+		MaybeCreateOwnGlobalBinding(sym, BindingTypePrimitive, syntax.Scopes{})
+	c.Assert(created, qt.IsTrue)
+	sealed := store.GetOwnGlobalBinding(sealedIdx)
+	c.Assert(store.IsStartupBinding(sym, sealed), qt.IsTrue)
+	c.Assert(store.IsStartupBinding(values.NewSymbol("cdr"), sealed), qt.IsFalse)
+
+	mutableIdx := mustDefine(c, ns.Runtime(), sym, BindingTypeVariable, AmbientScopes(), values.NewInteger(1))
+	c.Assert(store.IsStartupBinding(sym, store.GetOwnGlobalBinding(mutableIdx)), qt.IsFalse)
+
+	sealed.UpdateMeta(func(m *BindingMeta) bool {
+		m.Imported = true
+		return true
+	})
+	c.Assert(store.IsStartupBinding(sym, sealed), qt.IsFalse)
+	c.Assert(store.IsStartupBinding(sym, nil), qt.IsFalse)
+}
