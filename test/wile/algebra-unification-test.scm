@@ -308,6 +308,59 @@
     ;; (g x) vs (g a) — g non-AC but unifier binds x↦a
     (test 1 (length (ac-unify (list 'g vx) '(g a) theory proto)))))
 
+;; A18: the ground fast path compared compound operands through the
+;; written-form comparator, so (* a b) and (* b a) were "unequal" one level
+;; below the AC root, and ac-unify disagreed with ac-match.
+(test-group "ac-unify: ground nested AC operands compare modulo AC"
+  (let* ((theory (make-ac-theory '(+ *)))
+         (proto (sexp-term-protocol default-compare)))
+    (test 1 (length (ac-unify '(+ (* a b) c) '(+ c (* b a)) theory proto)))
+    (test 1 (length (ac-match '(+ (* a b) c) '(+ c (* b a)) theory proto)))
+    ;; Two levels down, and under a positional (non-AC) operator.
+    (test 1 (length (ac-unify '(+ (* (+ a b) c) d) '(+ d (* c (+ b a)))
+                              theory proto)))
+    (test 1 (length (ac-unify '(f (+ (* a b) c)) '(f (+ c (* b a)))
+                              theory proto)))
+    ;; Still discriminating: a nested operand that is not AC-equal.
+    (test 0 (length (ac-unify '(+ (* a b) c) '(+ c (* a c)) theory proto)))
+    (test 0 (length (ac-unify '(+ (* a b) c) '(+ c (g b a)) theory proto)))))
+
+(test-group "ac-match: identical substitutions are returned once"
+  (let* ((theory (make-ac-theory '(+)))
+         (proto (sexp-term-protocol default-compare))
+         (x (make-pattern-var 'x)))
+    (test 1 (length (ac-match '(+ a a b) '(+ a b a) theory proto)))
+    (let ((results (ac-match (list '+ x 'a) '(+ a a) theory proto)))
+      (test 1 (length results))
+      (test 'a (substitution-lookup (car results) x)))
+    ;; Two AC nodes under a positional operator: 2 x 2 duplicates before.
+    (test 1 (length (ac-match '(f (+ a a) (+ b b)) '(f (+ a a) (+ b b))
+                              theory proto)))))
+
+;; The message of the condition THUNK raises, or 'no-error.
+(define (raised-message thunk)
+  (guard (e ((error-object? e) (error-object-message e)))
+    (thunk)
+    'no-error))
+
+(test-group "ac-match / ac-unify: improper operand lists raise at the entry"
+  (let* ((theory (make-ac-theory '(+)))
+         (proto (sexp-term-protocol default-compare))
+         (m "ac-match: operands are not a proper list")
+         (u "ac-unify: operands are not a proper list"))
+    (test m (raised-message (lambda () (ac-match '(g . a) '(g . a) theory proto))))
+    (test m (raised-message (lambda () (ac-match '(+ . a) '(+ a b) theory proto))))
+    (test m (raised-message (lambda () (ac-match '(g a) '(g . a) theory proto))))
+    (test m (raised-message (lambda () (ac-match '(+ b c) '(+ b (g . a)) theory proto))))
+    (test m (raised-message (lambda () (ac-match '(f a) '(f (g . a)) theory proto))))
+    (test u (raised-message (lambda () (ac-unify '(g . a) '(g . b) theory proto))))
+    (test u (raised-message (lambda () (ac-unify '(+ a b) '(+ . a) theory proto))))
+    (test u (raised-message (lambda () (ac-unify '(f a) '(f (g a . b)) theory proto))))
+    ;; The irritant is the offending subterm, not the whole input.
+    (test '((g . a))
+          (guard (e ((error-object? e) (error-object-irritants e)))
+            (ac-unify '(f a) '(f (g . a)) theory proto)))))
+
 (test-group "integration: sexp-term-protocol conforms to contract"
   ;; Exercises the protocol via a non-trivial nested AC term —
   ;; operators +, * both AC; pattern has compound children under +.

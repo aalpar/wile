@@ -3,8 +3,10 @@
 ;;; Term protocol contract: term-compare is the boolean "sorts before"
 ;;; predicate (wile algebra rewrite) documents, and it must be a strict total
 ;;; order consistent with equal? modulo the AC-equivalence induced by the
-;;; caller's theory. Equality is derived from it by antisymmetry
-;;; (`term-equal?`): two terms are equal when neither sorts before the other.
+;;; caller's theory. Equality of two atoms, or of an atom and a compound, is
+;;; derived from it by antisymmetry (`term-equal?`): they are equal when
+;;; neither sorts before the other. Two compounds are compared structurally,
+;;; modulo AC, recursing down to atoms.
 
 (define-record-type <pattern-var>
   (make-pattern-var name)
@@ -199,6 +201,8 @@ CSU-like result set; empty list means no match. Pattern variables are
 <pattern-var> records (see parse-pattern); other terms are protocol-level
 terms. THEORY's associative-ops that also have a commutativity axiom are
 treated as AC operators; all other compound terms match positionally.
+Identical substitutions are returned once. Raises if any compound subterm of
+PATTERN or SUBJECT has operands that are not a proper list, e.g. (g . a).
 
 Parameters:
   pattern : term (may contain <pattern-var> records)
@@ -212,8 +216,22 @@ Keywords: AC matching, pattern matching, associative, commutative, unification"
     (error "ac-match: expected theory" theory))
   (unless (term-protocol? proto)
     (error "ac-match: expected term-protocol" proto))
+  (assert-proper-term "ac-match" pattern proto)
+  (assert-proper-term "ac-match" subject proto)
   (let ((ac-ops (ac-ops-of theory)))
     (match-rec pattern subject empty-substitution ac-ops proto)))
+
+;; Raise unless every compound subterm of TERM has a proper operand list.
+;; Checked once per public entry, so the recursion below can take operands
+;; with car/cdr unguarded: every term it reaches is a subterm of a checked
+;; input, a binding to one, or an (op . subset) it built from a proper list.
+;; list? also refuses a circular operand spine instead of looping on it.
+(define (assert-proper-term site term proto)
+  (when (and (not (pattern-var? term)) (term-compound? proto term))
+    (let ((operands (term-get-operands proto term)))
+      (unless (list? operands)
+        (error (string-append site ": operands are not a proper list") term))
+      (for-each (lambda (a) (assert-proper-term site a proto)) operands))))
 
 ;; Collapse nested (op ...) applications under an AC operator into a flat
 ;; list of operand terms. Non-compound terms return (list term); compound
@@ -237,11 +255,14 @@ Keywords: AC matching, pattern matching, associative, commutative, unification"
      (cond
        ((not (term-compound? proto s)) '())
        ((not (eq? (term-get-operator proto p) (term-get-operator proto s))) '())
+       ;; Deduplicated per AC node, before an enclosing node multiplies the
+       ;; results: repeated subject operands yield identical assignments.
        ((ac-op? (term-get-operator proto p) ac-ops)
-        (match-ac (term-get-operator proto p)
-                  (flatten-ac p (term-get-operator proto p) proto)
-                  (flatten-ac s (term-get-operator proto p) proto)
-                  sub ac-ops proto))
+        (deduplicate-substitutions
+          (match-ac (term-get-operator proto p)
+                    (flatten-ac p (term-get-operator proto p) proto)
+                    (flatten-ac s (term-get-operator proto p) proto)
+                    sub ac-ops proto)))
        (else
         (match-positional (term-get-operands proto p)
                           (term-get-operands proto s)
@@ -443,7 +464,9 @@ Returns a list of <substitution> — a CSU (complete set of unifiers);
 empty list means no unifier exists. Pattern variables are <pattern-var>
 records; other terms are protocol-level terms. Non-AC compound terms are
 unified positionally; compound terms whose operator is both associative
-and commutative (per THEORY) are unified modulo multiset equality.
+and commutative (per THEORY) are unified modulo multiset equality, nested
+AC operands included. Raises if any compound subterm of T1 or T2 has
+operands that are not a proper list, e.g. (g . a).
 
 Parameters:
   t1    : term (may contain <pattern-var> records)
@@ -457,6 +480,8 @@ Keywords: AC unification, unify, associative, commutative, Stickel, Robinson"
     (error "ac-unify: expected theory" theory))
   (unless (term-protocol? proto)
     (error "ac-unify: expected term-protocol" proto))
+  (assert-proper-term "ac-unify" t1 proto)
+  (assert-proper-term "ac-unify" t2 proto)
   (let ((ac-ops (ac-ops-of theory)))
     (unify-rec t1 t2 empty-substitution ac-ops proto)))
 
@@ -525,12 +550,12 @@ Keywords: AC unification, unify, associative, commutative, Stickel, Robinson"
                 (unify-positional (cdr t1s) (cdr t2s) s1 ac-ops proto))
               partial))))))
 
-;; AC-unifier: ground case uses multiset equality; variable case delegates
-;; to Stickel reduction via unify-ac-stickel.
+;; AC-unifier: ground case uses multiset equality modulo AC; variable case
+;; delegates to Stickel reduction via unify-ac-stickel.
 (define (unify-ac op t1-ops t2-ops sub ac-ops proto)
   (cond
     ((and (all-ground? t1-ops proto) (all-ground? t2-ops proto))
-     (if (multiset-equal? t1-ops t2-ops proto)
+     (if (multiset-equal? t1-ops t2-ops ac-ops proto)
          (list sub)
          '()))
     (else
@@ -556,8 +581,10 @@ Keywords: AC unification, unify, associative, commutative, Stickel, Robinson"
 ;;     compound pairs);
 ;;   - the comparator ties distinct atoms, or an atom and a compound (a
 ;;     partial comparator answering #f outside its domain, or a written-form
-;;     collision such as two records). Compound/compound ties stay legal:
-;;     nested AC terms are equal modulo AC without being equal?.
+;;     collision such as two records). A compound/compound tie is accepted,
+;;     but no caller asks: multiset-equal? decides compound pairs
+;;     structurally, and match-rec / unify-rec reach here only when one
+;;     side is an atom.
 ;; On atoms this makes the comparator's equality coincide with equal?, which is
 ;; what bind-or-check and substitution-compose use. Lazy and lean on the hot
 ;; path: b<a is asked only when a<b is #f, and the compound test and equal?
@@ -579,18 +606,33 @@ Keywords: AC unification, unify, associative, commutative, Stickel, Robinson"
       (error "term-equal?: comparator inconsistent with equal?: it ranks equal atoms" a))
   #f)
 
-;; True iff XS and YS are equal as multisets under term-equal?.
-(define (multiset-equal? xs ys proto)
+;; True iff the ground operand lists XS and YS are equal as multisets modulo
+;; AC. A compound pair is equal? or decided by unify-rec, which recurses
+;; AC-aware and, both sides being ground, binds nothing; the comparator
+;; decides the other pairs (term-equal?). A written-form comparator ranks
+;; (* a b) and (* b a) apart, so consulting it on compounds would miss
+;; AC-equality one level down. Greedy first-match is complete because
+;; AC-equality is an equivalence. The shape of X is tested once per scan of
+;; YS, so an atom X costs what the comparator costs.
+(define (multiset-equal? xs ys ac-ops proto)
   (cond
     ((and (null? xs) (null? ys)) #t)
     ((or (null? xs) (null? ys)) #f)
     (else
-     (let ((match-idx (find-index
-                        (lambda (y)
-                          (term-equal? proto (car xs) y))
-                        ys)))
+     (let* ((x (car xs))
+            (same?
+             (if (term-compound? proto x)
+                 (lambda (y)
+                   (if (term-compound? proto y)
+                       (or (equal? x y)
+                           (pair? (unify-rec x y empty-substitution
+                                             ac-ops proto)))
+                       (term-equal? proto x y)))
+                 (lambda (y) (term-equal? proto x y))))
+            (match-idx (find-index same? ys)))
        (and match-idx
-            (multiset-equal? (cdr xs) (remove-at ys match-idx) proto))))))
+            (multiset-equal? (cdr xs) (remove-at ys match-idx)
+                             ac-ops proto))))))
 
 ;; Return the index of the first element of XS matching PRED, or #f.
 (define (find-index pred xs)
