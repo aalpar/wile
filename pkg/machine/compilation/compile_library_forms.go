@@ -53,6 +53,14 @@ import (
 // in order, and hands the finished CompiledLibrary to the library callback
 // (LoadLibrary is what installs it in the registry).
 func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallContext, expr syntax.SyntaxValue) error {
+	// A library body compiles on a compiler carrying libraryScope (the body
+	// compiler and the transformer-RHS compilers under it). R7RS 5.6.1 lists
+	// the library declarations and define-library is not one, nor is it an
+	// expression or a definition; compiled anyway, the inner library got its
+	// own environment and was never registered, so nothing could import it.
+	if p.libraryScope != nil {
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, nestedDefineLibraryMessage))
+	}
 	// expr is ((lib-name) <declaration> ...) - args after 'define-library' keyword
 	rest, ok := expr.(*syntax.SyntaxPair)
 	if !ok {
@@ -72,11 +80,9 @@ func (p *CompileTimeContinuation) CompileDefineLibrary(ctctx CompileTimeCallCont
 	// Namespace for syntax interning.
 	//
 	// The hinted compiler compiles exactly one form and is then discarded, and
-	// nested (define-library ...) forms compile on libCompiler below, which is
-	// built without a hint; that construction is what
-	// TestNestedDefineLibraryDoesNotShareTheOuterEnv pins. Clearing the hint
-	// here, first, is a cheap defence on top: it keeps a second form on this
-	// compiler from adopting the environment.
+	// a nested (define-library ...) is refused above (TestNestedDefineLibraryIsRefused).
+	// Clearing the hint here, first, is a cheap defence on top: it keeps a
+	// second form on this compiler from adopting the environment.
 	var libEnv *environment.EnvironmentFrame
 	hint := p.libEnvHint
 	p.libEnvHint = nil
@@ -219,10 +225,18 @@ func (p *CompileTimeContinuation) processLibraryDeclaration(ctctx CompileTimeCal
 		return p.processCondExpand(ctctx, lib, argsExpr)
 	case "description":
 		return p.processLibraryDescription(lib, argsExpr)
+	case "define-library":
+		p.pushSource(declPair.SourceContext()) // locate at the nested form, not the outer one
+		defer p.popSource()
+		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, nestedDefineLibraryMessage))
 	default:
 		return p.wrapCompilationError(werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "unknown library declaration: %s", keyword))
 	}
 }
+
+// nestedDefineLibraryMessage is the refusal for a define-library inside a
+// library, in declaration position or in a body.
+const nestedDefineLibraryMessage = "define-library: not permitted inside a library (R7RS 5.6.1)"
 
 // processLibraryExport handles (export <export-spec> ...) within a library.
 func (p *CompileTimeContinuation) processLibraryExport(ctx context.Context, lib *CompiledLibrary, args syntax.SyntaxValue) error {

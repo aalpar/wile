@@ -127,42 +127,54 @@ func TestInlineDefineLibraryStillMintsItsOwnEnv(t *testing.T) {
 	c.Assert(*n, qt.Equals, 3)
 }
 
-// TestNestedDefineLibraryDoesNotShareTheOuterEnv pins that a (define-library
-// ...) nested in a file library's body gets its own environment. The nested
-// form compiles on the library compiler, which must not carry the outer hint;
-// if it did, the nested library's (import (dep)) would land in the outer
-// library's environment and make `depval` visible to the outer body.
-func TestNestedDefineLibraryDoesNotShareTheOuterEnv(t *testing.T) {
+// TestNestedDefineLibraryIsRefused pins the refusal of a (define-library ...)
+// inside a file library, in a body and in declaration position. R7RS 5.6.1
+// lists the declarations, and define-library is not one, nor an expression or
+// definition. Compiled anyway (the former behaviour this test pinned only
+// half of), the nested library got its own environment and was never
+// registered, so an export of its own name read as "no binding" and nothing
+// could import it. The refusal names the nested form's location; the outer
+// library's import of (dep) must not have leaked either way.
+func TestNestedDefineLibraryIsRefused(t *testing.T) {
 	t.Parallel()
 
-	c := qt.New(t)
-	ctx := context.Background()
-
-	fsys := fstest.MapFS{
-		"lib/dep.sld": &fstest.MapFile{
-			Data: []byte(`(define-library (dep)
-  (import (scheme base))
-  (export depval)
-  (begin (define depval 99)))`),
-		},
-		"lib/leak.sld": &fstest.MapFile{
-			Data: []byte(`(define-library (leak)
+	tcs := []struct {
+		name, file, src, at string
+	}{
+		{"in a begin body", "lib/leak.sld", `(define-library (leak)
   (import (scheme base))
   (export answer)
   (begin
     (define-library (leak-inner)
       (import (dep))
       (export))
-    (define answer depval)))`),
-		},
+    (define answer depval)))`, "leak.sld:5:5"},
+		{"in declaration position", "lib/leak.sld", `(define-library (leak)
+  (import (scheme base))
+  (export answer)
+  (define-library (leak-inner) (import (dep)) (export))
+  (begin (define answer 1)))`, "leak.sld:4:2"},
 	}
-
-	engine, err := newLibraryCountEngine(ctx, fsys)
-	c.Assert(err, qt.IsNil)
-
-	_, err = engine.EvalMultiple(ctx, `(import (scheme base))`)
-	c.Assert(err, qt.IsNil)
-
-	_, err = engine.EvalMultiple(ctx, `(import (leak)) answer`)
-	c.Assert(errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue, qt.Commentf("err: %v", err))
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c := qt.New(t)
+			ctx := context.Background()
+			fsys := fstest.MapFS{
+				"lib/dep.sld": &fstest.MapFile{
+					Data: []byte(`(define-library (dep)
+  (import (scheme base))
+  (export depval)
+  (begin (define depval 99)))`),
+				},
+				tc.file: &fstest.MapFile{Data: []byte(tc.src)},
+			}
+			engine, err := newLibraryCountEngine(ctx, fsys)
+			c.Assert(err, qt.IsNil)
+			_, err = engine.EvalMultiple(ctx, `(import (leak))`)
+			c.Assert(errors.Is(err, werr.ErrInvalidSyntax), qt.IsTrue, qt.Commentf("err: %v", err))
+			c.Assert(err.Error(), qt.Contains, "define-library: not permitted inside a library")
+			c.Assert(err.Error(), qt.Contains, tc.at)
+		})
+	}
 }
