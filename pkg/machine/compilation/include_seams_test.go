@@ -145,7 +145,8 @@ func TestExpandAndCompile_IncludeResolvesThroughTheGivenResolver(t *testing.T) {
 	}
 }
 
-// Pin: LoadBootstrapSources leaves env's resolver as it found it. The resolver
+// Regression guard (passes on master too; it pins no change, it keeps one out):
+// LoadBootstrapSources leaves env's resolver as it found it. The resolver
 // lives on the root namespace, which a library env shares with the running
 // engine and bootstraps into at import time, so installing the bootstrap's
 // resolver there would redirect every concurrent include engine-wide.

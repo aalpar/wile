@@ -770,10 +770,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   is what its nested compiles already used. No caller in `wile-goast` or
   `wile-extension-example`.
 
+- **`WithMaxExpandDepth` and `WithInlineThreshold` configure the namespace, and
+  every engine on it shares them.** `NewEngine` sets both on the namespace it
+  creates. `NewEngineWithNamespace` without the option inherits the namespace's
+  value and writes nothing (it used to write the default, moving every other
+  engine on the namespace); with it, a namespace no engine configured takes the
+  value, and one holding a different value fails construction with
+  `ErrEngineInit` wrapping `ErrInvalidArgument`. A second engine can therefore
+  no longer lift the first one's expansion bound by joining with
+  `WithMaxExpandDepth(0)`.
+
 - **CI runs the standalone lint passes.** `make -C tools lint`
   (singlelinefunclint, typeswitchlint, nestinglint) was reachable only through
   `make lint`, which CI skips in favour of the golangci-lint action; it is now
-  its own step.
+  its own step. typeswitchlint passes vacuously: no switch in the tree carries
+  its `//exhaustive` marker.
 
 - **BREAKING (Go API, behavior): the `er-macro-transformer` contract is one
   contract on both syntax-forms layers.** `compilation.NewERMacroTransformer`,

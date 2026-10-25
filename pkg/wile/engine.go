@@ -473,6 +473,10 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 	}
 	reg := ns.Registry().(*registry.PrimitiveRegistry)
 
+	// This engine created ns, so its bounds (defaulted above) are the namespace's.
+	ns.SetInlineThreshold(cfg.inlineThreshold)
+	ns.SetMaxExpandDepth(cfg.maxExpandDepth)
+
 	return finishEngine(ctx, cfg, ns, reg, snapshots, closers)
 }
 
@@ -495,6 +499,9 @@ func NewEngine(ctx context.Context, opts ...EngineOption) (*Engine, error) {
 //	)
 //	eng, err := wile.NewEngineWithNamespace(ctx, ns, wile.WithLibraryPaths("."))
 //
+// WithInlineThreshold and WithMaxExpandDepth configure the namespace, which every
+// engine on it shares, not this engine alone: see joinCompileBound for the rule.
+//
 // A nil namespace is an error, not a request to bootstrap one: this parameter
 // names the namespace the engine is built on, and there is no engine without
 // it. Use NewEngine when you want one built for you.
@@ -515,11 +522,43 @@ func NewEngineWithNamespace(ctx context.Context, ns *environment.Namespace, opts
 		return nil, err
 	}
 
+	err = joinCompileBound("WithInlineThreshold", cfg.inlineThresholdSet, cfg.inlineThreshold, ns.InlineThreshold, ns.SetInlineThreshold)
+	if err != nil {
+		return nil, err
+	}
+	err = joinCompileBound("WithMaxExpandDepth", cfg.expandDepthSet, cfg.maxExpandDepth, ns.MaxExpandDepth, ns.SetMaxExpandDepth)
+	if err != nil {
+		return nil, err
+	}
+
 	// snapshots and closers are both nil here: they are produced by
 	// buildRegistry, which only the bootstrap path runs. An engine over a
 	// pre-built namespace registers no extension libraries of its own and owns
 	// no close hooks — see the Engine.Close doc comment.
 	return finishEngine(ctx, cfg, ns, reg, nil, nil)
+}
+
+// joinCompileBound applies an engine's explicit compile bound to a namespace it
+// joins. The bound belongs to the namespace, not the engine: every compile, the
+// engine's top level included, reads it from the shared EngineServices, so an
+// engine that rewrote it would move every other engine on the namespace (a 0
+// would lift their expansion bound outright). Without the option the engine
+// inherits and writes nothing; with it, an unset namespace takes the value and a
+// set one must already hold it.
+func joinCompileBound(option string, set bool, want int, current func() (int, bool), store func(int)) error {
+	if !set {
+		return nil
+	}
+	have, ok := current()
+	if !ok {
+		store(want)
+		return nil
+	}
+	if have == want {
+		return nil
+	}
+	return werr.WrapForeignErrorWithCause(werr.ErrEngineInit, werr.ErrInvalidArgument,
+		"NewEngineWithNamespace: %s(%d) conflicts with the namespace's %d, which other engines on it share", option, want, have)
 }
 
 // namespaceRegistry extracts the primitive registry a pre-built namespace must
@@ -583,19 +622,6 @@ func applyConfigDefaults(cfg *engineConfig) {
 // the way contractEnforcement did.
 func finishEngine(ctx context.Context, cfg *engineConfig, ns *environment.Namespace, reg *registry.PrimitiveRegistry, snapshots []extSnapshot, closers []registry.CloseFunc) (*Engine, error) {
 	env := ns.Runtime()
-
-	// Forward the resolved inline threshold onto the shared EngineServices. It is
-	// the only place WithInlineThreshold lands: every compile, the engine's
-	// top-level path and runtime-triggered library compilation (import /
-	// (environment …)) alike, reads it from the namespace. cfg.inlineThreshold is
-	// already defaulted above; an explicit 0 (inlining disabled) is preserved by
-	// SetInlineThreshold's set-flag.
-	ns.SetInlineThreshold(cfg.inlineThreshold)
-
-	// Forward the resolved expansion-depth bound too, for the same reason: without
-	// this no expansion honors WithMaxExpandDepth. cfg.maxExpandDepth is already
-	// defaulted above; an explicit 0 (unlimited) is preserved by the set-flag.
-	ns.SetMaxExpandDepth(cfg.maxExpandDepth)
 
 	// Set the default file resolver for runtime include/load operations.
 	// This must happen after bootstrap (which uses EmbedFileResolver).
