@@ -963,8 +963,7 @@ func TestValidationErrorFormatting(t *testing.T) {
 	result := ValidateExpression(context.TODO(), nil, makeSyntax(values.List(values.NewSymbol("if"))))
 	c.Assert(result.Ok(), qt.IsFalse)
 	c.Assert(len(result.Errors), qt.Equals, 1)
-	errStr := result.Error()
-	c.Assert(errStr, qt.Not(qt.Equals), "")
+	c.Assert(result.Errors[0].Error(), qt.Not(qt.Equals), "")
 
 	// Multiple errors - case-lambda with multiple bad clauses
 	badCaseLambda := values.List(
@@ -975,10 +974,12 @@ func TestValidationErrorFormatting(t *testing.T) {
 	result2 := ValidateExpression(context.TODO(), nil, makeSyntax(badCaseLambda))
 	c.Assert(result2.Ok(), qt.IsFalse)
 	c.Assert(len(result2.Errors) > 1, qt.IsTrue)
-	errStr2 := result2.Error()
-	c.Assert(errStr2, qt.Not(qt.Equals), "")
-	// Should contain "validation errors" plural
-	c.Assert(errStr2, qt.Contains, "validation errors")
+	// The list is rendered by the compiler, which carries it (see
+	// TestValidationErrorsListRendersEachChain in pkg/wile); each entry renders
+	// on its own.
+	for _, e := range result2.Errors {
+		c.Assert(e.Error(), qt.Not(qt.Equals), "")
+	}
 }
 
 // TestValidatedFormSources tests that all validated forms have Source() methods

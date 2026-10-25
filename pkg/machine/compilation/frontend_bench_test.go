@@ -54,7 +54,7 @@ func BenchmarkValidatePhase(b *testing.B) {
 		for _, ex := range expanded {
 			result := validate.ValidateExpression(ctx, env, ex)
 			if !result.Ok() {
-				b.Fatalf("validate: %v", result.Error())
+				b.Fatalf("validate: %v", result.Errors)
 			}
 		}
 	}
@@ -82,7 +82,7 @@ func BenchmarkFrontEndPhase(b *testing.B) {
 			}
 			result := validate.ValidateExpression(ctx, env, ex)
 			if !result.Ok() {
-				b.Fatalf("validate %q: %v", code, result.Error())
+				b.Fatalf("validate %q: %v", code, result.Errors)
 			}
 			tpl := machine.NewNativeTemplate(0, 0, false)
 			cctx := NewCompileTimeContinuation(tpl, env, eval)
@@ -122,7 +122,7 @@ func BenchmarkQuasiquoteExpand(b *testing.B) {
 			}
 			result := validate.ValidateExpression(ctx, env, ex)
 			if !result.Ok() {
-				b.Fatalf("validate %q: %v", code, result.Error())
+				b.Fatalf("validate %q: %v", code, result.Errors)
 			}
 			tpl := machine.NewNativeTemplate(0, 0, false)
 			cctx := NewCompileTimeContinuation(tpl, env, eval)

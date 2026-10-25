@@ -38,30 +38,49 @@ type SourcedError struct {
 	Cause  error
 }
 
-// Error renders the cause with its position and the macro-origin chain of the
-// node it was stamped on. Only the innermost SourcedError renders either: it
-// names the node that failed, so its location is the most specific (the exact
-// sub-expression, not the enclosing form) and its chain is the one that
-// describes that node. Outer SourcedErrors stay in the chain for programmatic
-// extraction via errors.As but add nothing to the text; a chain on an outer
-// link would blame a macro for syntax it merely passed through.
+// Error renders the cause with a position and a macro-origin chain, each once
+// across the whole chain of SourcedErrors:
+//   - the location is that of the deepest SourcedError that has one, the most
+//     specific (the exact sub-expression, not the enclosing form); a deeper
+//     position-less node, such as a syntax-case template pair, does not hide it;
+//   - the chain is that of the deepest SourcedError, the node that failed. A
+//     chain on an outer link would blame a macro for syntax it merely passed
+//     through.
+//
+// Outer SourcedErrors stay in the chain for programmatic extraction via
+// errors.As but add nothing to the text.
 func (p *SourcedError) Error() string {
+	chain := ""
 	var inner *SourcedError
-	if errors.As(p.Cause, &inner) {
-		return p.Cause.Error()
+	if !errors.As(p.Cause, &inner) {
+		chain = syntax.OriginChainText(p.Source)
 	}
-	return renderSourced(p.Source, p.Cause.Error())
+	loc := ""
+	if !locatedBelow(p.Cause) {
+		loc = p.Source.Location()
+	}
+	return renderSourced(loc, p.Cause.Error(), chain)
 }
 
-// renderSourced is the one renderer of a compile-time failure's where: the
-// location prefixed, the expansion chain appended.
-func renderSourced(src *syntax.SourceContext, text string) string {
-	q := text
-	loc := src.Location()
-	if loc != "" {
-		q = loc + ": " + q
+// locatedBelow reports whether err holds a SourcedError with a location, which
+// then renders it instead of any link above.
+func locatedBelow(err error) bool {
+	var se *SourcedError
+	for e := err; errors.As(e, &se); e = se.Cause {
+		if se.Source.Location() != "" {
+			return true
+		}
 	}
-	return q + validate.OriginChainText(src)
+	return false
+}
+
+// renderSourced is the one layout of a compile-time failure's where: the
+// location prefixed, the expansion chain appended.
+func renderSourced(loc, text, chain string) string {
+	if loc == "" {
+		return text + chain
+	}
+	return loc + ": " + text + chain
 }
 
 func (p *SourcedError) Unwrap() error {
@@ -89,9 +108,13 @@ func wrapSourcedError(src *syntax.SourceContext, err error) error {
 
 // validationFailure carries a failed validation as an error. A single error is
 // stamped on the node it names, so errors.As reaches that node's position and
-// macro origin rather than the top-level form being compiled. Several errors
-// have no one owning node: each line is rendered by renderSourced and the list
-// is left for the caller to stamp with the enclosing form.
+// macro origin rather than the top-level form being compiled.
+//
+// Several errors have no one owning node. Each line renders its own node's
+// location and chain, and the list is stamped with a nil Source: the deepest
+// SourcedError, so the enclosing form's stamp above it renders its location but
+// not its chain a second time, and the Scheme condition cuts its message there
+// (machine.failureChain) with the whole list intact.
 func validationFailure(result *validate.ValidationResult) error {
 	if len(result.Errors) == 1 {
 		e := result.Errors[0]
@@ -101,8 +124,8 @@ func validationFailure(result *validate.ValidationResult) error {
 	fmt.Fprintf(&sb, "%d validation errors:\n", len(result.Errors))
 	for _, e := range result.Errors {
 		sb.WriteString("  ")
-		sb.WriteString(renderSourced(e.Source, e.Failure()))
+		sb.WriteString(renderSourced(e.Source.Location(), e.Failure(), syntax.OriginChainText(e.Source)))
 		sb.WriteString("\n")
 	}
-	return werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "%s", sb.String())
+	return &SourcedError{Cause: werr.WrapForeignErrorf(werr.ErrInvalidSyntax, "%s", sb.String())}
 }

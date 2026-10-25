@@ -16,28 +16,11 @@ package validate
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 )
-
-// DefaultMaxOriginDepth is how many macro expansions a diagnostic names before
-// it summarizes the rest.
-const DefaultMaxOriginDepth = 10
-
-// OriginChainText renders the expansion chain src carries, at
-// DefaultMaxOriginDepth, or "" when src is nil or was written by hand. It is the
-// one rendering both diagnostic surfaces use: the Go error text
-// (compilation.SourcedError) and the Scheme condition's message
-// (machine.ConditionFromError), so the two cannot disagree on depth or format.
-func OriginChainText(src *syntax.SourceContext) string {
-	if src == nil {
-		return ""
-	}
-	return syntax.FormatOriginChain(src.Origin, DefaultMaxOriginDepth)
-}
 
 // ValidationError captures location and details for error reporting. It does
 // not render the macro-origin chain on Source.Origin: the compiler carries the
@@ -210,23 +193,6 @@ func unitDefineParams(d *ValidatedDefine) *ValidatedParams {
 // Ok returns true if no validation errors were encountered.
 func (p *ValidationResult) Ok() bool {
 	return len(p.Errors) == 0
-}
-
-func (p *ValidationResult) Error() string {
-	if len(p.Errors) == 0 {
-		return ""
-	}
-	if len(p.Errors) == 1 {
-		return p.Errors[0].Error()
-	}
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "%d validation errors:\n", len(p.Errors))
-	for _, e := range p.Errors {
-		sb.WriteString("  ")
-		sb.WriteString(e.Error())
-		sb.WriteString("\n")
-	}
-	return sb.String()
 }
 
 func (p *ValidationResult) addError(source *syntax.SourceContext, form, message string) {

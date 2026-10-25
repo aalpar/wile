@@ -405,3 +405,25 @@ func TestValidationErrorsListRendersEachChain(t *testing.T) {
 	qt.Assert(t, text, qt.Contains, "  :2:18: if requires at least 2 argument(s), got 1 in if form\n  expanded from 'badif' at :2:18\n")
 	qt.Assert(t, strings.Count(text, "expanded from 'badif'"), qt.Equals, 1, qt.Commentf("%s", text))
 }
+
+// TestValidationErrorsListInMacroBuiltForm (B30): when a macro builds the form
+// holding several validation errors, its chain is rendered on each failing line
+// and not again for the enclosing form, on the Go text and on the condition.
+// Three links: (if) names outer; (if x) names badif and outer.
+func TestValidationErrorsListInMacroBuiltForm(t *testing.T) {
+	t.Parallel()
+
+	defs := "(define-syntax badif (syntax-rules () ((_ x) (if x))))\n" +
+		"(define-syntax outer (syntax-rules () ((_) (define (f) (if) (badif 1)))))\n"
+	t.Run("go text", func(t *testing.T) {
+		err := evalSyntaxFormsErr(t, defs+"(outer)")
+		qt.Assert(t, err, qt.IsNotNil)
+		qt.Assert(t, err.Error(), qt.Contains, "2 validation errors:")
+		qt.Assert(t, strings.Count(err.Error(), "expanded from '"), qt.Equals, 3, qt.Commentf("%s", err.Error()))
+	})
+	t.Run("condition message", func(t *testing.T) {
+		msg := evalSyntaxForms(t, defs+"(guard (e (#t (error-object-message e))) (eval '(outer) (interaction-environment)))")
+		qt.Assert(t, msg, qt.Contains, "2 validation errors:")
+		qt.Assert(t, strings.Count(msg, "expanded from '"), qt.Equals, 3, qt.Commentf("%s", msg))
+	})
+}

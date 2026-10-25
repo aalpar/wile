@@ -644,6 +644,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **A compile error names the sub-form that failed, and carries the macro
+  that built it (B30).** A validation error (`if requires at least 2
+  argument(s)`, `let binding must be (name init)`, ...) is now stamped on the
+  offending node, so `CompilationError.Source` and `error-object-source` name
+  that sub-form instead of the enclosing top-level form, and the Go text no
+  longer prints two locations (`<eval>:1:0: <eval>:1:63: ...` is now
+  `<eval>:1:63: ...`). `error-object-message` no longer repeats the location.
+  The `expanded from` chain is rendered once, by the failing node's
+  `*compilation.SourcedError`, so a Go caller reaches it as
+  `Source.Origin` through `errors.As`, and every compile error on a node a
+  macro built now shows it: `syntax-error`, `syntax-rules: no matching clause
+  for input`, `set!` of an unbound name, and others. In the Go text the
+  sentinel's `: invalid syntax` now comes before the chain rather than after
+  it.
+
 - **BREAKING: `ac-match` / `ac-unify` and `term-compare` read the comparator as
   a boolean (I177).** A protocol whose comparator returns a number, such as the
   old three-way -1 / 0 / 1, now raises (`term-compare: comparator returned a

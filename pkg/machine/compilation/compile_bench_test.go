@@ -200,7 +200,7 @@ func BenchmarkCompilePhase(b *testing.B) {
 		}
 		result := validate.ValidateExpression(context.Background(), env, ex)
 		if !result.Ok() {
-			b.Fatalf("validate %q: %v", code, result.Error())
+			b.Fatalf("validate %q: %v", code, result.Errors)
 		}
 		validated = append(validated, result.Expr)
 	}

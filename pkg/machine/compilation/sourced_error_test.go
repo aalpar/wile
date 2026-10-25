@@ -22,7 +22,6 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/aalpar/wile/pkg/internal/validate"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -125,7 +124,7 @@ func TestSourcedError(t *testing.T) {
 
 // TestSourcedErrorOriginChain: the innermost SourcedError renders the chain of
 // the node it was stamped on, once, whether or not that node has a position,
-// and truncates at validate.DefaultMaxOriginDepth. Ported from validate's
+// and truncates at syntax.DefaultMaxOriginDepth. Ported from validate's
 // ValidationError, which rendered the chain before the compiler carried it.
 func TestSourcedErrorOriginChain(t *testing.T) {
 	at := func(line int) *syntax.SourceContext {
@@ -148,14 +147,24 @@ func TestSourcedErrorOriginChain(t *testing.T) {
 		outer := &SourcedError{Source: at(9).WithOrigin(&syntax.OriginInfo{Identifier: "enclosing", Location: at(9)}), Cause: inner}
 		qt.Assert(t, outer.Error(), qt.Equals, at(1).Location()+": bad in let form: invalid syntax"+wantChain)
 	})
+	t.Run("position-less deepest node keeps the outer location", func(t *testing.T) {
+		inner := &SourcedError{Source: &syntax.SourceContext{Origin: chain}, Cause: cause}
+		outer := &SourcedError{Source: at(9), Cause: werr.WrapForeignErrorf(inner, "route")}
+		qt.Assert(t, outer.Error(), qt.Equals, at(9).Location()+": route: bad in let form: invalid syntax"+wantChain)
+	})
+	t.Run("nil Source ends the chain and renders no location", func(t *testing.T) {
+		list := &SourcedError{Cause: cause}
+		outer := &SourcedError{Source: at(9).WithOrigin(chain), Cause: list}
+		qt.Assert(t, outer.Error(), qt.Equals, at(9).Location()+": bad in let form: invalid syntax")
+	})
 	t.Run("max depth truncates", func(t *testing.T) {
 		var deep *syntax.OriginInfo
-		for i := validate.DefaultMaxOriginDepth + 2; i > 0; i-- {
+		for i := syntax.DefaultMaxOriginDepth + 2; i > 0; i-- {
 			deep = &syntax.OriginInfo{Identifier: fmt.Sprintf("m%d", i), Parent: deep}
 		}
 		se := &SourcedError{Source: at(1).WithOrigin(deep), Cause: cause}
 		text := se.Error()
-		qt.Assert(t, strings.Count(text, "expanded from"), qt.Equals, validate.DefaultMaxOriginDepth)
+		qt.Assert(t, strings.Count(text, "expanded from"), qt.Equals, syntax.DefaultMaxOriginDepth)
 		qt.Assert(t, strings.HasSuffix(text, "\n  ... and 2 more expansion(s)"), qt.IsTrue, qt.Commentf("%s", text))
 	})
 }

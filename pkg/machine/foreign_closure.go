@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/aalpar/wile/pkg/environment"
-	"github.com/aalpar/wile/pkg/internal/validate"
 	"github.com/aalpar/wile/pkg/parser"
 	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/syntax"
@@ -119,8 +118,8 @@ func conditionMessageAndIrritants(err error) (string, []values.Value) {
 	if msg == "" {
 		// The chain is nothing but a category sentinel, so its own text is all
 		// there is. Widest fallback on purpose: this is the one shape where
-		// nothing better exists.
-		msg = err.Error()
+		// nothing better exists, and that text already renders the origin chain.
+		return err.Error(), nil
 	}
 	return msg + innermostOriginChain(err), nil
 }
@@ -143,7 +142,7 @@ func innermostOriginChain(err error) string {
 	if innermost == nil {
 		return ""
 	}
-	return validate.OriginChainText(innermost.SourceContext())
+	return syntax.OriginChainText(innermost.SourceContext())
 }
 
 // failureChain returns the part of err that describes the failure rather than the
