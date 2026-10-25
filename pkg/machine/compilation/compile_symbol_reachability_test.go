@@ -44,6 +44,13 @@
 //     statement that lexically PRECEDES the emit in it. An arm that emits first
 //     and classifies afterwards is not guarded, however loudly it names the
 //     refusal; neither is one vouched for only by a sibling arm's refusal.
+//   - The refusal must be reached on EVERY path through that statement: in its
+//     unconditional part (an if's condition, not its branches), and through
+//     helpers that refuse on every path through them. A refusal on another
+//     branch guards only that branch; the library arm's `if imported { return
+//     p.emitCachedBindingLoad(...) }` once vouched for its non-imported path.
+//     The cost is explicit exemptions for the nil-binding fallbacks
+//     (nilBindingFallbacks), which have no binding to refuse.
 //   - The verdict must be PROPAGATED: a `return` has to sit between the refusal
 //     and the emit. `_ = refuseCompileTimeMeaning(...)` guards nothing.
 //   - Helpers count. Arms are collected from CompileSymbol AND from every
@@ -61,9 +68,8 @@
 //     TestCompileSymbolRefusalGuardNamesAreUnique fails if one of the four names
 //     the guard turns on ever gains a twin, rather than leaving that as an
 //     assumption.
-//   - A refusal reached only on a branch not taken still counts, and so does a
-//     refusal whose result is discarded when some unrelated `return` happens to
-//     sit between it and the emit.
+//   - A refusal whose result is discarded still counts when some unrelated
+//     `return` happens to sit between it and the emit.
 //   - Interface and function-value calls are invisible; an emit reached only
 //     through one is not discovered.
 
@@ -99,17 +105,23 @@ var globalLoadOps = map[string]bool{
 
 // refusalReach is the package's name-keyed call graph, reduced to the set of
 // functions that transitively reach refuseCompileTimeMeaning.
+//
+// edges is every call in a body, for discovering the functions CompileSymbol
+// reaches; mustEdges is only the calls a body makes on EVERY path through it
+// (unconditionalCallees), for deciding which functions are a guard.
 type refusalReach struct {
-	edges map[string][]string
-	names map[string]bool
-	decls map[string]*ast.FuncDecl
+	edges     map[string][]string
+	mustEdges map[string][]string
+	names     map[string]bool
+	decls     map[string]*ast.FuncDecl
 }
 
 func newRefusalReach() *refusalReach {
 	return &refusalReach{
-		edges: map[string][]string{},
-		names: map[string]bool{},
-		decls: map[string]*ast.FuncDecl{},
+		edges:     map[string][]string{},
+		mustEdges: map[string][]string{},
+		names:     map[string]bool{},
+		decls:     map[string]*ast.FuncDecl{},
 	}
 }
 
@@ -132,16 +144,19 @@ func (p *refusalReach) addFiles(files []*ast.File) {
 	}
 	for name, fd := range p.decls {
 		p.edges[name] = calleeNames(fd.Body)
+		p.mustEdges[name] = unconditionalCallees(fd.Body.List)
 	}
 }
 
-// compute returns the set of function names that reach the refusal, iterated to
-// a fixed point.
+// compute returns the set of function names that reach the refusal on every
+// path through them, iterated to a fixed point. A function that refuses only on
+// some branch (tryResolvedBinding refuses a pin that resolves, not one that does
+// not) is not a guard for the statement that calls it.
 func (p *refusalReach) compute() map[string]bool {
 	reaches := map[string]bool{refusalFunc: true}
 	for {
 		changed := false
-		for name, callees := range p.edges {
+		for name, callees := range p.mustEdges {
 			if reaches[name] {
 				continue
 			}
@@ -202,6 +217,86 @@ func calleeNames(body ast.Node) []string {
 		if name != "" && !seen[name] {
 			seen[name] = true
 			out = append(out, name)
+		}
+		return true
+	})
+	return out
+}
+
+// unconditionalCallees returns the names called on every path through list: the
+// calls in each statement's unconditional part (stmtUnconditionalCallees), up to
+// and including the first statement that can return. A call after a possible
+// return is skipped on that return's path.
+func unconditionalCallees(list []ast.Stmt) []string {
+	var out []string
+	for _, st := range list {
+		out = append(out, stmtUnconditionalCallees(st)...)
+		if stmtReturns(st) {
+			break
+		}
+	}
+	return out
+}
+
+// stmtUnconditionalCallees returns the names st calls whenever it executes: an
+// if's init and condition but not its branches, a block's own list, and no
+// loop, switch or select body, function literal, or right operand of && or ||.
+func stmtUnconditionalCallees(st ast.Stmt) []string {
+	switch x := st.(type) {
+	case *ast.BlockStmt:
+		return unconditionalCallees(x.List)
+	case *ast.IfStmt:
+		var out []string
+		if x.Init != nil {
+			out = append(out, stmtUnconditionalCallees(x.Init)...)
+		}
+		return append(out, exprUnconditionalCallees(x.Cond)...)
+	case *ast.ExprStmt:
+		return exprUnconditionalCallees(x.X)
+	case *ast.AssignStmt:
+		var out []string
+		for _, e := range x.Rhs {
+			out = append(out, exprUnconditionalCallees(e)...)
+		}
+		return out
+	case *ast.ReturnStmt:
+		var out []string
+		for _, e := range x.Results {
+			out = append(out, exprUnconditionalCallees(e)...)
+		}
+		return out
+	case *ast.DeclStmt:
+		var out []string
+		ast.Inspect(x, func(n ast.Node) bool {
+			e, ok := n.(ast.Expr)
+			if !ok {
+				return true
+			}
+			out = append(out, exprUnconditionalCallees(e)...)
+			return false
+		})
+		return out
+	}
+	return nil
+}
+
+// exprUnconditionalCallees returns the names e calls whenever it is evaluated.
+func exprUnconditionalCallees(e ast.Expr) []string {
+	var out []string
+	ast.Inspect(e, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.FuncLit:
+			return false
+		case *ast.BinaryExpr:
+			if x.Op == token.LAND || x.Op == token.LOR {
+				out = append(out, exprUnconditionalCallees(x.X)...)
+				return false
+			}
+		case *ast.CallExpr:
+			name := calleeName(x)
+			if name != "" {
+				out = append(out, name)
+			}
 		}
 		return true
 	})
@@ -306,22 +401,61 @@ func emitIsGuarded(site emitSite, reaches map[string]bool) bool {
 	return false
 }
 
-// stmtReachesRefusal reports whether st calls anything that transitively reaches
-// the refusal.
+// nilBindingFallbacks are the emits exempt from emitIsGuarded, by function and
+// count: each is the runtime-resolution fallback for a global index whose
+// binding is nil at compile time, so there is no binding to classify and the
+// refusal would be a no-op (refuseCompileTimeMeaning: a nil binding is not a
+// refusal). The count is exact, so a new fallback, or one that stops being
+// needed, fails the ratchet instead of riding an existing exemption.
+var nilBindingFallbacks = map[string]int{
+	// The empty-scope arm: GetGlobalBinding(gi) is nil.
+	compileSymbolFunc: 1,
+	// The pin arm: GetOwnGlobalBinding(gi) is nil.
+	"tryResolvedBinding": 1,
+}
+
+// isNilBindingFallback reports whether the emit's own list first handles the
+// non-nil case: an earlier `if x != nil { ... }` with no else, whose body
+// reaches the refusal on every path and returns. The emit is then the nil
+// branch of a binding that is refused whenever there is one.
+func isNilBindingFallback(site emitSite, reaches map[string]bool) bool {
+	for j := range site.idx {
+		ifs, ok := site.list[j].(*ast.IfStmt)
+		if !ok || ifs.Else != nil || ifs.Init != nil {
+			continue
+		}
+		cond, ok := ifs.Cond.(*ast.BinaryExpr)
+		if !ok || cond.Op != token.NEQ {
+			continue
+		}
+		nilID, ok := cond.Y.(*ast.Ident)
+		if !ok || nilID.Name != "nil" {
+			continue
+		}
+		if !stmtReturns(ifs.Body) {
+			continue
+		}
+		for _, name := range unconditionalCallees(ifs.Body.List) {
+			if reaches[name] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// stmtReachesRefusal reports whether st, whenever it executes, calls something
+// that reaches the refusal on every path. A refusal inside one of st's branches
+// does not count: in CompileSymbol's library arm, `if imported { return
+// p.emitCachedBindingLoad(...) }` refuses on the imported path only, and
+// counting it let the non-imported path drop its own refusal unseen.
 func stmtReachesRefusal(st ast.Stmt, reaches map[string]bool) bool {
-	found := false
-	ast.Inspect(st, func(n ast.Node) bool {
-		if found {
-			return false
+	for _, name := range stmtUnconditionalCallees(st) {
+		if reaches[name] {
+			return true
 		}
-		call, ok := n.(*ast.CallExpr)
-		if ok && reaches[calleeName(call)] {
-			found = true
-			return false
-		}
-		return true
-	})
-	return found
+	}
+	return false
 }
 
 // stmtReturns reports whether st contains a return of its OWN function. A
@@ -425,8 +559,13 @@ func TestCompileSymbolRefusesCompileTimeMeaningOnEveryGlobalArm(t *testing.T) {
 			"let an emit in a helper pass", compileSymbolFunc)
 	}
 
+	exempt := map[string]int{}
 	for _, s := range sites {
 		if emitIsGuarded(s, reaches) {
+			continue
+		}
+		if nilBindingFallbacks[s.fn] > 0 && isNilBindingFallback(s, reaches) {
+			exempt[s.fn]++
 			continue
 		}
 		t.Errorf("%s: the global load at %s emits a load of a resolved global "+
@@ -437,6 +576,13 @@ func TestCompileSymbolRefusesCompileTimeMeaningOnEveryGlobalArm(t *testing.T) {
 			"arm through emitCachedBindingLoad, or call %s directly — before the "+
 			"emit, and return its error — when the arm must keep runtime resolution.",
 			s.fn, fset.Position(s.pos), refusalFunc, refusalFunc)
+	}
+	for fn, want := range nilBindingFallbacks {
+		if exempt[fn] != want {
+			t.Errorf("%s: %d nil-binding fallback emit(s) exempted, want %d — a "+
+				"fallback was added or removed; update nilBindingFallbacks only after "+
+				"checking the new emit cannot see a non-nil binding", fn, exempt[fn], want)
+		}
 	}
 }
 
@@ -498,6 +644,13 @@ func emitLeakyHelperArm(a int) error {
 	return nil
 }
 
+func refusesOnOneBranch(a int) error {
+	if a > 0 {
+		return refuseCompileTimeMeaning(a, a)
+	}
+	return nil
+}
+
 func CompileSymbol() error {
 	if guarded {
 		return emitCachedBindingLoad(1, 2)
@@ -527,6 +680,28 @@ func CompileSymbol() error {
 		p.AppendOperations(machine.NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(0))
 		return nil
 	}
+	if refusedOnSiblingBranch {
+		if imported {
+			return emitCachedBindingLoad(1, 2)
+		}
+		p.AppendOperations(machine.NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(0))
+		return nil
+	}
+	if refusedByConditionalHelper {
+		err := refusesOnOneBranch(1)
+		if err != nil {
+			return err
+		}
+		p.AppendOperations(machine.NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(0))
+		return nil
+	}
+	if refusedInCondition {
+		if refuseCompileTimeMeaning(1, 2) != nil {
+			return nil
+		}
+		p.AppendOperations(machine.NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(0))
+		return nil
+	}
 	if local {
 		p.AppendOperations(machine.NewOperationLoadLocalByLocalIndexImmediate(0))
 		return nil
@@ -550,12 +725,16 @@ func CompileSymbol() error {
 	}
 
 	sites := collectSurfaceEmits(reach)
-	// Six global loads across the surface: four in CompileSymbol
-	// (directlyGuarded, emitsThenClassifies, dropsTheError, leaky), one in
-	// emitCachedBindingLoad, one in emitLeakyHelperArm. The LOCAL load is not a
-	// global arm and must not be counted.
-	if len(sites) != 6 {
-		t.Fatalf("discovered %d emits, want 6 (the LOCAL load is not a global arm)", len(sites))
+	// Nine global loads across the surface: seven in CompileSymbol
+	// (directlyGuarded, emitsThenClassifies, dropsTheError, leaky,
+	// refusedOnSiblingBranch, refusedByConditionalHelper, refusedInCondition),
+	// one in emitCachedBindingLoad, one in emitLeakyHelperArm. The LOCAL load is
+	// not a global arm and must not be counted.
+	if len(sites) != 9 {
+		t.Fatalf("discovered %d emits, want 9 (the LOCAL load is not a global arm)", len(sites))
+	}
+	if reaches["refusesOnOneBranch"] {
+		t.Fatal("refusesOnOneBranch refuses on one branch only and must not count as a guard")
 	}
 	unguarded := map[string]bool{}
 	for _, s := range sites {
@@ -564,10 +743,66 @@ func CompileSymbol() error {
 		}
 		unguarded[fset.Position(s.pos).String()] = true
 	}
-	if len(unguarded) != 4 {
-		t.Errorf("unguarded emits = %v, want exactly four (viaHelper's helper, "+
-			"emitsThenClassifies, dropsTheError, leaky) — the analyzer either "+
-			"misses one, which is the silent hole this guard exists to close, or "+
-			"falsely flags a guarded arm", unguarded)
+	if len(unguarded) != 6 {
+		t.Errorf("unguarded emits = %v, want exactly six (viaHelper's helper, "+
+			"emitsThenClassifies, dropsTheError, leaky, refusedOnSiblingBranch, "+
+			"refusedByConditionalHelper) — the analyzer either misses one, which is "+
+			"the silent hole this guard exists to close, or falsely flags a guarded "+
+			"arm", unguarded)
+	}
+}
+
+// TestNilBindingFallbackExemptionIsStructural pins isNilBindingFallback on
+// synthetic arms: the exemption needs an earlier non-nil branch that refuses on
+// every path and returns, not merely a nil check.
+func TestNilBindingFallbackExemptionIsStructural(t *testing.T) {
+	const src = `
+package fake
+
+func refuseCompileTimeMeaning(a, b int) error { return nil }
+
+func refusedThenFallback() {
+	if bd != nil {
+		return refuseCompileTimeMeaning(1, 2)
+	}
+	p.AppendOperations(machine.NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(0))
+}
+
+func nilCheckWithoutRefusal() {
+	if bd != nil {
+		return nil
+	}
+	p.AppendOperations(machine.NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(0))
+}
+
+func refusalWithoutReturn() {
+	if bd != nil {
+		_ = refuseCompileTimeMeaning(1, 2)
+	}
+	p.AppendOperations(machine.NewOperationLoadGlobalByGlobalIndexLiteralIndexImmediate(0))
+}
+`
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "fake.go", src, 0)
+	if err != nil {
+		t.Fatalf("parse synthetic source: %v", err)
+	}
+	reach := newRefusalReach()
+	reach.addFiles([]*ast.File{f})
+	reaches := reach.compute()
+	want := map[string]bool{
+		"refusedThenFallback":    true,
+		"nilCheckWithoutRefusal": false,
+		"refusalWithoutReturn":   false,
+	}
+	for fn, exempt := range want {
+		sites := collectEmits(fn, reach.decls[fn])
+		if len(sites) != 1 {
+			t.Fatalf("%s: discovered %d emits, want 1", fn, len(sites))
+		}
+		got := isNilBindingFallback(sites[0], reaches)
+		if got != exempt {
+			t.Errorf("%s: isNilBindingFallback = %v, want %v", fn, got, exempt)
+		}
 	}
 }
