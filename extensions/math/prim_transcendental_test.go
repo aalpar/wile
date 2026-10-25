@@ -690,6 +690,10 @@ func TestSqrtExptBigTierAgreement(t *testing.T) {
 		code string
 	}{
 		{"negative bigint arm carries the positive arm's digits", `(eqv? (imag-part (sqrt (- 1 (expt 10 400)))) (sqrt (- (expt 10 400) 1)))`},
+		// A BigInteger root keeps the operand's bit length, so a wide operand
+		// keeps every digit (408 characters here, not a 256-bit 84), on both arms.
+		{"wide bigint root keeps its digits", `(= (string-length (number->string (sqrt (+ 3 (expt 10 401))))) 408)`},
+		{"wide negative bigint arm carries the positive arm's digits", `(eqv? (imag-part (sqrt (- (+ 3 (expt 10 401))))) (sqrt (+ 3 (expt 10 401))))`},
 		{"negative rational arm carries the positive arm's digits", `(eqv? (imag-part (sqrt -2/3)) (sqrt 2/3))`},
 		{"expt one half is sqrt", `(eqv? (expt #m2 #m0.5) (sqrt #m2))`},
 		{"expt one half is sqrt, exact base", `(eqv? (expt 3 #m0.5) (sqrt #m3))`},

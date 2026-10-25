@@ -490,8 +490,11 @@ func PrimSqrt(mc machine.CallContext) error {
 			}
 			return nil
 		}
-		// SetInt at zero precision is exact; the root rounds to the default.
-		mc.SetValue(realBigSqrt(new(big.Float).SetInt(bi), values.DefaultBigFloatPrecision))
+		// SetInt at zero precision is exact, at max(bit length, 64) bits; the
+		// root keeps that precision, so a wide operand keeps its digits and
+		// both signs carry the same ones.
+		f := new(big.Float).SetInt(bi)
+		mc.SetValue(realBigSqrt(f, f.Prec()))
 	case *values.Float:
 		if v.Value < 0 {
 			mc.SetValue(values.NewComplex(cmplx.Sqrt(complex(v.Value, 0))))
@@ -551,8 +554,9 @@ func PrimSqrt(mc machine.CallContext) error {
 // return fewer digits than the positive arm for an operand wider than that.
 //
 // Precision policy: sqrt keeps a BigFloat operand's precision (big.Float.Sqrt
-// rounds at the receiver's); a BigInteger or Rational operand, which has none,
-// rounds at DefaultBigFloatPrecision. exp, log, atan and the
+// rounds at the receiver's); a BigInteger operand keeps its bit length (at
+// least 64), and a Rational, which has none, rounds at
+// DefaultBigFloatPrecision. exp, log, atan and the
 // makeComplexPrimitive family compute at DefaultBigFloatPrecision, as does the
 // BigComplex arm of sqrt.
 func bigFloatSqrt(bf *values.BigFloat) values.Number {
