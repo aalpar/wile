@@ -41,19 +41,3 @@ func NewZeroValueSourceContext() *SourceContext {
 func FormatOriginChain(origin *OriginInfo, maxDepth int) string {
 	return values.FormatOriginChain(origin, maxDepth)
 }
-
-// DefaultMaxOriginDepth is how many macro expansions a diagnostic names before
-// it summarizes the rest.
-const DefaultMaxOriginDepth = 10
-
-// OriginChainText renders the expansion chain src carries, at
-// DefaultMaxOriginDepth, or "" when src is nil or was written by hand. It is the
-// one rendering both diagnostic surfaces use: the Go error text
-// (compilation.SourcedError) and the Scheme condition's message
-// (machine.ConditionFromError), so the two cannot disagree on depth or format.
-func OriginChainText(src *SourceContext) string {
-	if src == nil {
-		return ""
-	}
-	return FormatOriginChain(src.Origin, DefaultMaxOriginDepth)
-}

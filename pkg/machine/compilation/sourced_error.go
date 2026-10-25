@@ -61,7 +61,7 @@ func renderSourced(src *syntax.SourceContext, text string) string {
 	if loc != "" {
 		q = loc + ": " + q
 	}
-	return q + syntax.OriginChainText(src)
+	return q + validate.OriginChainText(src)
 }
 
 func (p *SourcedError) Unwrap() error {

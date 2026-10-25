@@ -22,6 +22,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/internal/validate"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -124,7 +125,7 @@ func TestSourcedError(t *testing.T) {
 
 // TestSourcedErrorOriginChain: the innermost SourcedError renders the chain of
 // the node it was stamped on, once, whether or not that node has a position,
-// and truncates at syntax.DefaultMaxOriginDepth. Ported from validate's
+// and truncates at validate.DefaultMaxOriginDepth. Ported from validate's
 // ValidationError, which rendered the chain before the compiler carried it.
 func TestSourcedErrorOriginChain(t *testing.T) {
 	at := func(line int) *syntax.SourceContext {
@@ -149,12 +150,12 @@ func TestSourcedErrorOriginChain(t *testing.T) {
 	})
 	t.Run("max depth truncates", func(t *testing.T) {
 		var deep *syntax.OriginInfo
-		for i := syntax.DefaultMaxOriginDepth + 2; i > 0; i-- {
+		for i := validate.DefaultMaxOriginDepth + 2; i > 0; i-- {
 			deep = &syntax.OriginInfo{Identifier: fmt.Sprintf("m%d", i), Parent: deep}
 		}
 		se := &SourcedError{Source: at(1).WithOrigin(deep), Cause: cause}
 		text := se.Error()
-		qt.Assert(t, strings.Count(text, "expanded from"), qt.Equals, syntax.DefaultMaxOriginDepth)
+		qt.Assert(t, strings.Count(text, "expanded from"), qt.Equals, validate.DefaultMaxOriginDepth)
 		qt.Assert(t, strings.HasSuffix(text, "\n  ... and 2 more expansion(s)"), qt.IsTrue, qt.Commentf("%s", text))
 	})
 }

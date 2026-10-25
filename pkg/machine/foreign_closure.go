@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/internal/validate"
 	"github.com/aalpar/wile/pkg/parser"
 	"github.com/aalpar/wile/pkg/security"
 	"github.com/aalpar/wile/pkg/syntax"
@@ -142,7 +143,7 @@ func innermostOriginChain(err error) string {
 	if innermost == nil {
 		return ""
 	}
-	return syntax.OriginChainText(innermost.SourceContext())
+	return validate.OriginChainText(innermost.SourceContext())
 }
 
 // failureChain returns the part of err that describes the failure rather than the

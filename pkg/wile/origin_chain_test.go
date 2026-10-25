@@ -90,7 +90,7 @@ func TestMacroErrorCarriesOriginChainForEveryTransformerKind(t *testing.T) {
 				err := evalSyntaxFormsErr(t, src, kind.opts...)
 				c.Assert(err, qt.IsNotNil)
 				c.Assert(err.Error(), qt.Contains, "let binding must be (name init) in let form")
-				c.Assert(err.Error(), qt.Contains, "expanded from 'bad'")
+				c.Assert(strings.Count(err.Error(), "expanded from 'bad'"), qt.Equals, 1, qt.Commentf("%s", err.Error()))
 			})
 		}
 	}
@@ -368,4 +368,40 @@ func TestMacroOriginChainIsCarried(t *testing.T) {
 	qt.Assert(t, loc, qt.Not(qt.Equals), "")
 	qt.Assert(t, strings.Count(err.Error(), loc+": "), qt.Equals, 1, qt.Commentf("%s", err.Error()))
 	qt.Assert(t, strings.Count(err.Error(), "expanded from 'badif'"), qt.Equals, 1)
+}
+
+// TestMacroOriginChainInConditionMessage (B30): the Scheme condition's message
+// carries the chain once, rendered from the same innermost node as the Go text.
+// Two shapes reach it: a validation error and a compile error stamped by the
+// compiler on a macro-built node.
+func TestMacroOriginChainInConditionMessage(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct{ name, def, use string }{
+		{"validation", "(define-syntax m (syntax-rules () ((_ x) (if x))))", "(m 1)"},
+		{"set! of no such binding", "(define-syntax m (syntax-rules () ((_ x) (set! nosuchvar x))))", "(m 1)"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := tc.def + "\n(guard (e (#t (error-object-message e))) (eval '" + tc.use + " (interaction-environment)))"
+			msg := evalSyntaxForms(t, src)
+			qt.Assert(t, strings.Count(msg, "expanded from 'm'"), qt.Equals, 1, qt.Commentf("%s", msg))
+		})
+	}
+}
+
+// TestValidationErrorsListRendersEachChain (B30): several validation errors on
+// one form have no single owning node, so the compiler's stamp on the enclosing
+// form carries the list, and each line renders its own node's location and
+// chain once.
+func TestValidationErrorsListRendersEachChain(t *testing.T) {
+	t.Parallel()
+
+	err := evalSyntaxFormsErr(t, "(define-syntax badif (syntax-rules () ((_ x) (if x))))\n(define (f) (if) (badif 1))")
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrInvalidSyntax), qt.IsTrue)
+	text := err.Error()
+	qt.Assert(t, text, qt.Contains, "2 validation errors:\n  :2:13: if requires at least 2 argument(s), got 0 in if form\n")
+	qt.Assert(t, text, qt.Contains, "  :2:18: if requires at least 2 argument(s), got 1 in if form\n  expanded from 'badif' at :2:18\n")
+	qt.Assert(t, strings.Count(text, "expanded from 'badif'"), qt.Equals, 1, qt.Commentf("%s", text))
 }
