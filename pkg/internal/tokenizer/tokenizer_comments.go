@@ -48,7 +48,7 @@ func (p *Tokenizer) continueBlockComment() Token {
 					// block comments: the token carries only raw text.)
 					// Consuming the '#' may hit EOF; the comment is closed all the
 					// same, so no error check may intervene before this return.
-					p.next()
+					p.consumeFinal()
 					if len(p.value) > 0 {
 						p.value = p.value[:len(p.value)-1]
 					}

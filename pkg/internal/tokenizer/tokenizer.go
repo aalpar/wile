@@ -441,13 +441,13 @@ func (p *Tokenizer) read() {
 		p.next()
 		if p.curr() == ')' {
 			p.state = TokenizerStateEmptyList
-			p.next()
+			p.consumeFinal()
 		}
 		p.term()
 		return
 	case p.curr() == ')':
 		p.state = TokenizerStateCloseParen
-		p.next()
+		p.consumeFinal()
 		p.term()
 		return
 	case p.curr() == '[':
@@ -456,13 +456,13 @@ func (p *Tokenizer) read() {
 		p.next()
 		if p.curr() == ']' {
 			p.state = TokenizerStateEmptyList
-			p.next()
+			p.consumeFinal()
 		}
 		p.term()
 		return
 	case p.curr() == ']':
 		p.state = TokenizerStateCloseBracket
-		p.next()
+		p.consumeFinal()
 		p.term()
 		return
 	// Every numeral shape — leading dot, sign, digit — scans under the pending
@@ -477,7 +477,7 @@ func (p *Tokenizer) read() {
 		return
 	case isQuote(p.curr()):
 		p.state = TokenizerStateQuote
-		p.next()
+		p.consumeFinal()
 		p.term()
 		return
 	case p.curr() == ',':
@@ -488,18 +488,21 @@ func (p *Tokenizer) read() {
 			return
 		}
 		p.state = TokenizerStateUnquoteSplicing
-		p.next()
+		p.consumeFinal()
 		p.term()
 		return
 	case p.curr() == '`': // quasiquote
 		p.state = TokenizerStateQuasiquote
-		p.next()
+		p.consumeFinal()
 		p.term()
 		return
 	case p.curr() == '"': // string
-		p.state = TokenizerStateFailed
+		// String from the opening quote, so a fault inside the body reports
+		// the state it was scanned in; a string that does not close is failed.
+		p.state = TokenizerStateString
 		p.next() // skip "
 		if p.err != nil {
+			p.state = TokenizerStateFailed
 			p.term()
 			return
 		}
@@ -515,8 +518,8 @@ func (p *Tokenizer) read() {
 		return
 	case isVerticalLine(p.curr()): // '|'
 		// skip vertical lines outside symbols
-		p.next()
 		p.state = TokenizerStateSymbol
+		p.next()
 		if p.err != nil {
 			p.term()
 			return
@@ -673,6 +676,18 @@ func (p *Tokenizer) readNextRune() {
 	// consumed, so an invalid byte advances the index by one, not by the
 	// substitute's three.
 	p.runeEnd = values.AdvanceIndexes(p.runeEnd, p.prev, p.cur, n)
+}
+
+// consumeFinal is next for a token's last rune: consuming it fixes the token's
+// extent, so the rune read past it belongs to no token yet. A fault on that
+// rune is stamped in intertoken state, as Next stamps one in whitespace; under
+// the token's own state the parser would report a fault in a ")" that
+// contains no such rune. The token keeps its state.
+func (p *Tokenizer) consumeFinal() {
+	state := p.state
+	p.state = TokenizerStateFailed
+	p.next()
+	p.state = state
 }
 
 // next advances to the next rune, appending the current rune to scratch.

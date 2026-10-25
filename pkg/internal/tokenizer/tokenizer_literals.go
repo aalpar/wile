@@ -151,7 +151,7 @@ func (p *Tokenizer) readDelimited(terminator rune, unterminatedMsg string) bool 
 			return false
 		}
 	}
-	p.next() // consume terminator — may set p.err to io.EOF, which is fine
+	p.consumeFinal() // consume terminator — may set p.err to io.EOF, which is fine
 	return true
 }
 
@@ -159,8 +159,8 @@ func (p *Tokenizer) readDelimited(terminator rune, unterminatedMsg string) bool 
 // Builds the processed string content in p.value (without quotes, with escapes converted).
 func (p *Tokenizer) readString() {
 	ok := p.readDelimited('"', MessageUnterminatedString)
-	if ok {
-		p.state = TokenizerStateString
+	if !ok {
+		p.state = TokenizerStateFailed
 	}
 }
 
@@ -251,9 +251,10 @@ func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape()
 		return utf8.RuneError
 
 	case unicode.IsGraphic(p.curr()):
+		// A non-letter graphic character is the whole literal (#\( or #\1).
 		p.state = TokenizerStateCharGraphic
 		qrune = p.curr()
-		p.next()
+		p.consumeFinal()
 		return qrune
 	}
 	p.fail(MessageExpectingCharacterMnemonicOrHexEscape)
