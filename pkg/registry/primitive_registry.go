@@ -127,6 +127,11 @@ type PrimitiveSpec struct {
 	// loses its Identity is still CORRECT — it just stops being inlined, for
 	// good, and no value assertion notices. TestPromotedPrimitivesCarryTheirIdentity
 	// is the ratchet against that.
+	//
+	// Identity.Name() must equal Name; Validate refuses the spec otherwise. A
+	// recognizer locates the binding by the token's name (see
+	// machine.PrimitiveIdentity.Name), so a token named differently from the
+	// spelling it is bound under would never be found.
 	Identity *machine.PrimitiveIdentity
 }
 
@@ -372,6 +377,8 @@ func (p *PrimitiveRegistry) conflictingRegistration(spec PrimitiveSpec, phases P
 // For ParamTypes (when non-empty): non-variadic requires len == ParamCount;
 // variadic requires len in [1, ParamCount].
 //
+// A non-nil Identity must carry Name (see the Identity field).
+//
 // [Registry.AddPrimitive] and [PrimitiveRegistry.AddPrimitives] panic on a spec that
 // fails this check, on the contract that specs are source literals whose shape
 // is fixed at compile time (the regexp.MustCompile idiom). An embedder that
@@ -391,6 +398,11 @@ func (p PrimitiveSpec) Validate() error {
 		return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
 			"validate %q: variadic spec requires ParamCount >= 1, got %d",
 			p.Name, p.ParamCount)
+	}
+	if p.Identity != nil && p.Identity.Name() != p.Name {
+		return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"validate %q: Identity is named %q, so a lookup by its name would not find this binding",
+			p.Name, p.Identity.Name())
 	}
 	n := len(p.ParamTypes)
 	if n == 0 {
