@@ -1565,15 +1565,19 @@ func wrapCompilationError(msg string, cause error) *CompilationError {
 	}
 	// Parse errors carry location on their token rather than a SourcedError.
 	// Consult them only when the compiler chain yielded nothing, so a genuine
-	// compiler location (more specific) always wins when both are present. The
-	// prefix is kept although a parser-level fault's own suffix also renders
-	// file:line:col (ParserError.contextSuffix): the suffix is what names the file
-	// when the error is nested under another location (an include, a file port),
-	// and here the prefix keeps every CompilationError leading with its location.
+	// compiler location (more specific) always wins when both are present.
+	//
+	// A ParserError from a named input already renders its location as
+	// file:line:col, for a parser-level and a lexical fault alike. The text has
+	// to carry it, because a read error nested under another location (an
+	// include, a file port) has no other place to name its file; here that makes
+	// the prefix a repeat, so the error is structured. Unnamed input renders
+	// "line N, column N", and keeps the prefix.
 	if ce.Source == "" {
 		var pe *parser.ParserError
 		if errors.As(cause, &pe) {
 			ce.Source = pe.Location()
+			ce.structured = ce.Source != "" && strings.Contains(pe.Error(), ce.Source)
 		}
 	}
 	if cause == nil {

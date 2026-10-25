@@ -140,21 +140,22 @@ func (p *ParserError) Error() string {
 // A parser error faults on a token rather than on a rune, so the token is the
 // analogue of the tokenizer's offending character: its start index is where the
 // failure is, its text is what failed, and its type is the state the reader was
-// in. When a located tokenizer error is already in the chain it renders no
-// position, because causeText has then rendered a more precise one (the exact
-// rune, not the token containing it) and repeating a coarser one would only
-// mislead.
+// in. When a located tokenizer error is already in the chain it renders
+// nothing, because causeText has then rendered a more precise position (the
+// exact rune, not the token containing it) and repeating a coarser one would
+// only mislead.
 //
-// The file is rendered whenever the parser has one. The text is often all a
-// reader of the error gets: an included file's read error renders under the
-// include form's prefix and a file port's under none, so without the file here
-// the line and column point into a file the message never names.
+// The file is rendered whenever the parser has one, as file:line:col here and
+// in causeText's tokenizer form alike. The text is often all a reader of the
+// error gets: an included file's read error renders under the include form's
+// prefix and a file port's under none, so without the file the line and column
+// point into a file the message never names.
 func (p *ParserError) contextSuffix() string {
 	var terr *tokenizer.TokenizerError
 	if errors.As(p.err, &terr) {
 		_, located := terr.At()
 		if located {
-			return p.fileSuffix()
+			return ""
 		}
 	}
 	if p.tok == nil {
@@ -177,8 +178,8 @@ func (p *ParserError) contextSuffix() string {
 		start.Index(), start.Line(), start.Column(), p.tok.String(), p.tok.Type())
 }
 
-// fileSuffix names the file alone, for a suffix that carries no position of its
-// own: the position is the tokenizer's, already in the text, or there is none.
+// fileSuffix names the file alone, for an error with no position to render it
+// beside.
 func (p *ParserError) fileSuffix() string {
 	if p.file == "" {
 		return ""
@@ -200,7 +201,10 @@ func (p *ParserError) causeText() string {
 	}
 	var terr *tokenizer.TokenizerError
 	if errors.As(p.err, &terr) {
-		return terr.Error()
+		if p.file == "" {
+			return terr.Error()
+		}
+		return terr.ErrorInFile(values.DisplayFileName(p.file))
 	}
 	return p.err.Error()
 }

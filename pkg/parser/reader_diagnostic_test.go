@@ -61,7 +61,7 @@ func TestReadErrorNamesPositionCharacterAndState(t *testing.T) {
 		wantLoc: "in.scm:1:4",
 		wantText: []string{
 			tokenizer.MessageExpectingDelimiterAfterNumber,
-			"index 4", "line 1", "column 4",
+			"at in.scm:1:4, index 4",
 			`'9'`, "U+0039",
 			"unsigned-integer",
 		},
@@ -78,7 +78,7 @@ func TestReadErrorNamesPositionCharacterAndState(t *testing.T) {
 		wantLoc: "in.scm:2:3",
 		wantText: []string{
 			tokenizer.MessageExpectingDelimiterAfterNumber,
-			"index 9", "line 2", "column 3", `'9'`,
+			"at in.scm:2:3, index 9", `'9'`,
 		},
 	}, {
 		// A lexical fault that ends a token rather than following one: the
@@ -107,7 +107,7 @@ func TestReadErrorNamesPositionCharacterAndState(t *testing.T) {
 		wantLoc: "in.scm:1:3",
 		wantText: []string{
 			tokenizer.MessageExpectingDelimiterAfterBigNumber,
-			"index 3", "line 1", "column 3",
+			"at in.scm:1:3, index 3",
 			`'/'`, "U+002F",
 			"big-integer",
 		},
@@ -117,7 +117,7 @@ func TestReadErrorNamesPositionCharacterAndState(t *testing.T) {
 		wantLoc: "in.scm:2:3",
 		wantText: []string{
 			tokenizer.MessageExpectingDelimiterAfterBigNumber,
-			"index 9", "line 2", "column 3",
+			"at in.scm:2:3, index 9",
 			`'+'`, "U+002B",
 			"big-float",
 		},
@@ -151,9 +151,10 @@ func TestReadErrorNamesPositionCharacterAndState(t *testing.T) {
 // file or on a file port is rendered under some other file's prefix, or none,
 // so the text is the only place the reader's own file can appear.
 //
-// A parser-level fault renders file:line:col in its suffix. A lexical fault
-// yields its position to the tokenizer's located rune and adds only the file
-// name, so the position is not reported twice. Unnamed input renders as before.
+// A parser-level fault renders file:line:col in its suffix; a lexical fault
+// renders the tokenizer's located rune in the same shape (ErrorInFile), and the
+// suffix yields to it, so the position is reported once. Unnamed input renders
+// as before.
 func TestReadErrorTextNamesTheFile(t *testing.T) {
 	tcs := []struct {
 		name    string
@@ -166,9 +167,13 @@ func TestReadErrorTextNamesTheFile(t *testing.T) {
 		want:    []string{`(at in.scm:2:5, index 11, token "]", tokenizer state close-bracket)`},
 		mustNot: []string{"line 2", "column 5"},
 	}, {
-		name: "lexical_fault_names_the_file_once", file: "in.scm", src: "(a b)\n#b19",
-		want:    []string{"index 9, line 2, column 3", "(in file in.scm)"},
-		mustNot: []string{"in.scm:2:3"},
+		name: "lexical_fault_names_file_line_col", file: "in.scm", src: "(a b)\n#b19",
+		want:    []string{"(at in.scm:2:3, index 9, character '9' (U+0039), tokenizer state unsigned-integer)"},
+		mustNot: []string{"line 2", "column 3", "in file"},
+	}, {
+		name: "unnamed_lexical_fault_is_unchanged", file: "", src: "(a b)\n#b19",
+		want:    []string{"(at index 9, line 2, column 3, character '9' (U+0039), tokenizer state unsigned-integer)"},
+		mustNot: []string{"in file"},
 	}, {
 		name: "unnamed_input_is_unchanged", file: "", src: "(a b)\n(foo ]",
 		want:    []string{`(at index 11, line 2, column 5, token "]", tokenizer state close-bracket)`},
@@ -196,6 +201,18 @@ func TestReadErrorTextNamesTheFile(t *testing.T) {
 	}
 }
 
+// TestSchemeStringNamesTheLocationOnce: Error() carries a named input's
+// location, so SchemeString adds no "at <loc>" prefix of its own.
+func TestSchemeStringNamesTheLocationOnce(t *testing.T) {
+	c := qt.New(t)
+	err := readUntilError(t, "(a b)\n(foo ]")
+	var perr *ParserError
+	c.Assert(errors.As(err, &perr), qt.IsTrue)
+	s := perr.SchemeString()
+	c.Check(strings.HasPrefix(s, "ParserError: "), qt.IsTrue, qt.Commentf("%s", s))
+	c.Check(strings.Count(s, "in.scm:2:5"), qt.Equals, 1, qt.Commentf("%s", s))
+}
+
 // TestReadErrorTextAgreesWithUnwrapChain pins REVIEW.md's Error Chain
 // Losslessness rule 1 on the reader: text that appears in Error() must be
 // reachable through errors.As, and a cause reachable through errors.As must
@@ -211,7 +228,9 @@ func TestReadErrorTextAgreesWithUnwrapChain(t *testing.T) {
 	var terr *tokenizer.TokenizerError
 	c.Assert(errors.As(err, &terr), qt.IsTrue,
 		qt.Commentf("reader error lost its tokenizer cause: %v", err))
-	c.Check(strings.Contains(err.Error(), terr.Error()), qt.IsTrue,
+	// A named input renders the cause with its file (ErrorInFile), the same
+	// facts as terr.Error() with the position as file:line:col.
+	c.Check(strings.Contains(err.Error(), terr.ErrorInFile("in.scm")), qt.IsTrue,
 		qt.Commentf("cause %q reachable via errors.As but absent from text %q", terr, err))
 
 	// The sentinel identity the message constants provide must survive too.

@@ -137,6 +137,20 @@ func (p *TokenizerError) Error() string {
 		p.mess, p.at.Index(), p.at.Line(), p.at.Column(), p.describeRune(), p.state)
 }
 
+// ErrorInFile renders as Error does, with the position as file:line:col for a
+// reader that knows the file: the shape a parser-level fault's suffix uses, so
+// a named input's read error reads one way whichever layer detected it. The
+// tokenizer streams bytes and keeps no file; the caller supplies the name,
+// already rendered for display. An empty name or an unlocated error renders
+// as Error.
+func (p *TokenizerError) ErrorInFile(name string) string {
+	if p.at.Line() == 0 || name == "" {
+		return p.Error()
+	}
+	return fmt.Sprintf("%s (at %s:%d:%d, index %d, character %s, tokenizer state %s)",
+		p.mess, name, p.at.Line(), p.at.Column(), p.at.Index(), p.describeRune(), p.state)
+}
+
 func (p *TokenizerError) Unwrap() error {
 	return p.err
 }

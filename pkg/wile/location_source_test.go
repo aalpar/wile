@@ -212,9 +212,24 @@ func TestParseErrorLocationSurvivesSourcedErrorStamping(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected parse error")
 	}
-	const wantPrefix = "prog.scm:2:"
-	if !strings.HasPrefix(err.Error(), wantPrefix) {
-		t.Errorf("parse error %q, want prefix %q", err.Error(), wantPrefix)
+	assertParseErrorLocatedOnce(t, err, "prog.scm:2:")
+}
+
+// assertParseErrorLocatedOnce checks that a parse error's location survived to
+// CompilationError.Source and renders exactly once: the ParserError's own text
+// renders it for named input, so the prefix yields.
+func assertParseErrorLocatedOnce(t *testing.T, err error, wantSource string) {
+	t.Helper()
+	var ce *CompilationError
+	if !errors.As(err, &ce) {
+		t.Fatalf("parse error %v is %T, want *CompilationError", err, err)
+	}
+	if !strings.HasPrefix(ce.Source, wantSource) {
+		t.Errorf("parse error Source %q, want prefix %q", ce.Source, wantSource)
+	}
+	n := strings.Count(err.Error(), wantSource)
+	if n != 1 {
+		t.Errorf("parse error %q renders %q %d times, want once", err.Error(), wantSource, n)
 	}
 }
 
@@ -236,10 +251,57 @@ func TestBigNumDelimiterErrorReachesEngine(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected parse error for #z1/2")
 	}
-	if !strings.HasPrefix(err.Error(), "prog.scm:2:") {
-		t.Errorf("parse error %q, want prefix %q", err.Error(), "prog.scm:2:")
-	}
+	assertParseErrorLocatedOnce(t, err, "prog.scm:2:")
 	if !strings.Contains(err.Error(), "#z or #m") {
 		t.Errorf("parse error %q does not name the #z/#m rule", err.Error())
+	}
+}
+
+// TestTopLevelParseErrorRendersItsLocationOnce: a read error from a named
+// input renders its own location as file:line:col, a parser-level and a
+// lexical fault alike, so the CompilationError's prefix yields to it. Unnamed
+// input renders "line N, column N", and keeps the prefix.
+func TestTopLevelParseErrorRendersItsLocationOnce(t *testing.T) {
+	t.Parallel()
+
+	tcs := []struct {
+		name, src, file string
+		wantSource      string
+		wantOnce        []string
+		wantPrefix      string
+	}{
+		{name: "parser-level fault", src: "(+ 1 2)\n(foo ]", file: "top.scm",
+			wantSource: "top.scm:2:5", wantOnce: []string{"top.scm:2:5", "top.scm"}},
+		{name: "lexical fault", src: "(+ 1 2)\n#b19", file: "top.scm",
+			wantSource: "top.scm:2:3", wantOnce: []string{"top.scm:2:3", "top.scm"}},
+		{name: "unnamed input keeps the prefix", src: "(+ 1 2)\n(foo ]", file: "",
+			wantSource: "2:5", wantPrefix: "2:5: "},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			eng, err := NewEngine(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer eng.Close()
+			_, err = eng.EvalMultipleWithSource(ctx, tc.src, tc.file)
+			var ce *CompilationError
+			if !errors.As(err, &ce) {
+				t.Fatalf("got %T %v, want *CompilationError", err, err)
+			}
+			if ce.Source != tc.wantSource {
+				t.Errorf("Source %q, want %q", ce.Source, tc.wantSource)
+			}
+			for _, want := range tc.wantOnce {
+				n := strings.Count(err.Error(), want)
+				if n != 1 {
+					t.Errorf("%q renders %q %d times, want once", err.Error(), want, n)
+				}
+			}
+			if !strings.HasPrefix(err.Error(), tc.wantPrefix) {
+				t.Errorf("%q, want prefix %q", err.Error(), tc.wantPrefix)
+			}
+		})
 	}
 }

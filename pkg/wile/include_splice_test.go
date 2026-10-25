@@ -361,7 +361,7 @@ func TestIncludeErrorsKeepTheirLocations(t *testing.T) {
 		{name: "missing file names the include's line", code: "(define a 1)\n(define b 2)\n(include \"absent.scm\")", want: "includer.scm:3:"},
 		{name: "expansion failure keeps the file's line", code: `(include "badexp.scm")`, want: "badexp.scm:2:"},
 		{name: "parse error names the included file's position", code: "(define a 1)\n(include \"badread.scm\")", want: "(at badread.scm:2:13, index 27,"},
-		{name: "lexical error names the included file", code: "(define a 1)\n(include \"badlex.scm\")", want: "column 4, character '9' (U+0039), tokenizer state unsigned-integer) (in file badlex.scm)"},
+		{name: "lexical error names the included file", code: "(define a 1)\n(include \"badlex.scm\")", want: "(at badlex.scm:2:4, index 18, character '9' (U+0039), tokenizer state unsigned-integer)"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -389,22 +389,24 @@ func TestIncludedFormErrorNamesTheInclude(t *testing.T) {
 		want []string
 	}{
 		{name: "compile error in an included form", code: "(define a 1)\n(include \"badcompile.scm\")",
-			want: []string{"badcompile.scm:2:13: lambda requires", "expanded from 'include' at includer.scm:2:1"}},
+			want: []string{"badcompile.scm:2:13: lambda requires", "expanded from 'include' at includer.scm:2:1\n"}},
 		{name: "compiler-raised error in an included form", code: "(define a 1)\n(include \"badset.scm\")",
-			want: []string{"badset.scm:2:6: no such binding", "expanded from 'include' at includer.scm:2:1"}},
+			want: []string{"badset.scm:2:6: no such binding", "expanded from 'include' at includer.scm:2:1\n"}},
 		{name: "include-ci names itself", code: "(define a 1)\n(include-ci \"badcompile.scm\")",
-			want: []string{"expanded from 'include-ci' at includer.scm:2:1"}},
+			want: []string{"expanded from 'include-ci' at includer.scm:2:1\n"}},
 		{name: "nested include names both includes", code: "(include \"outer.scm\")",
-			want: []string{"expanded from 'include' at outer.scm:2:1", "expanded from 'include' at includer.scm:1:1"}},
+			want: []string{"expanded from 'include' at outer.scm:2:1\n", "expanded from 'include' at includer.scm:1:1\n"}},
 		{name: "macro used in an included file chains to the include", code: "(define a 1)\n(include \"usesmac.scm\")",
-			want: []string{"expanded from 'badif' at usesmac.scm:2:", "expanded from 'include' at includer.scm:2:1"}},
+			want: []string{"expanded from 'badif' at usesmac.scm:2:1\n", "expanded from 'include' at includer.scm:2:1\n"}},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := evalIncludeProgram(t, fsys, tc.code)
 			qt.Assert(t, err, qt.IsNotNil)
 			for _, want := range tc.want {
-				qt.Check(t, strings.Count(err.Error(), want), qt.Equals, 1, qt.Commentf("%s", err.Error()))
+				// A chain line ends at a newline or the end of the text, so
+				// includer.scm:2:1 cannot match includer.scm:2:10.
+				qt.Check(t, strings.Count(err.Error()+"\n", want), qt.Equals, 1, qt.Commentf("%s", err.Error()))
 			}
 			// The frame is carried, not only rendered: the failing node's
 			// SourcedError holds the include in its origin chain.
