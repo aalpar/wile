@@ -242,11 +242,7 @@ func TestTemplateContainsEllipsis_SpineTail(t *testing.T) {
 		return syntax.NewSyntaxSymbol(name, nil)
 	}
 	list := func(xs ...syntax.SyntaxValue) syntax.SyntaxValue {
-		var q syntax.SyntaxValue = syntax.SyntaxEmptyList
-		for i := len(xs) - 1; i >= 0; i-- {
-			q = syntax.NewSyntaxCons(xs[i], q, nil)
-		}
-		return q
+		return syntax.SyntaxList(nil, xs...)
 	}
 	nine := syntax.NewSyntaxObject(values.NewInteger(9), nil)
 	tcs := []struct {
