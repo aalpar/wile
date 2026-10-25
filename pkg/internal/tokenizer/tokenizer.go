@@ -246,7 +246,11 @@ type Tokenizer struct {
 	radix int
 	// tokRadix is the effective parse base recorded on the emitted integer token
 	// (2/8/10/16); 0 for tokens where base is not meaningful. Reset per token in mark().
-	tokRadix   int
+	tokRadix int
+	// between is set while the scanner is in no token: from Next until mark
+	// starts one, and from a token's consumeFinal until the next mark. A
+	// fault stamped then is past every token (TokenizerError.BetweenTokens).
+	between    bool
 	blockDepth int  // nesting depth for block comments
 	ci         bool // case insensitive symbol mode
 	hashDigit  bool // R7RS §7.1.1: whether # appeared as inexact digit placeholder
@@ -314,7 +318,15 @@ func NewTokenizerAt(rdr io.RuneReader, ci bool, origin syntax.SourceIndexes, pre
 // moving it would drop the rune, so SeekTo then does nothing and reports false.
 // The caller must treat false as "this tokenizer's positions are stale" and
 // discard it.
+//
+// A pending scanner diagnosis, which ReleaseLookahead keeps, reports true
+// without moving: the next Next reports it and reads nothing, and discarding
+// the tokenizer would lose the fault and read on past it.
 func (p *Tokenizer) SeekTo(origin syntax.SourceIndexes, prev rune) bool {
+	var terr *TokenizerError
+	if errors.As(p.err, &terr) {
+		return true
+	}
 	if !p.released {
 		return false
 	}
@@ -360,6 +372,7 @@ func (p *Tokenizer) Next() (Token, error) {
 	// re-read or in intertoken space is stamped before mark() runs, and would
 	// otherwise carry the previous token's state.
 	p.state = TokenizerStateFailed
+	p.between = true
 	if p.released {
 		p.released = false
 		p.readNextRune()
@@ -536,7 +549,7 @@ func (p *Tokenizer) read() {
 		p.readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrComment() //nolint:errcheck
 		p.term()
 		return
-	case isInitial(p.curr()): // read symbol
+	case p.atIdentifier(isInitial): // read symbol
 		p.state = TokenizerStateSymbol
 		p.value = utf8.AppendRune(p.value, p.curr())
 		p.next()
@@ -621,6 +634,20 @@ func (p *Tokenizer) curr() rune {
 	return p.cur
 }
 
+// atIdentifier reports whether cur may stand where pred decides an identifier
+// character: one pred accepts, or a U+FFFD read from the input (written, or an
+// invalid byte read as one), which racket and petite also take as a symbol
+// constituent. Every identifier predicate admits the initials, so U+FFFD, an
+// initial, belongs to each. End of input and a reader fault leave cur at the
+// same utf8.RuneError with p.err set: that flag, never the rune, keeps them
+// out of a symbol.
+func (p *Tokenizer) atIdentifier(pred func(rune) bool) bool {
+	if p.err != nil {
+		return false
+	}
+	return pred(p.cur) || p.cur == utf8.RuneError
+}
+
 // mark marks the current position as the beginning of a new token.
 func (p *Tokenizer) mark() {
 	p.value = p.value[:0]
@@ -634,6 +661,7 @@ func (p *Tokenizer) mark() {
 	// bails out before assigning one (readBoolean on a lexical error) would
 	// otherwise emit this token under the PREVIOUS token's type.
 	p.state = TokenizerStateFailed
+	p.between = false
 }
 
 // term terminates the current token, setting its end position.
@@ -686,6 +714,7 @@ func (p *Tokenizer) readNextRune() {
 func (p *Tokenizer) consumeFinal() {
 	state := p.state
 	p.state = TokenizerStateFailed
+	p.between = true
 	p.next()
 	p.state = state
 }

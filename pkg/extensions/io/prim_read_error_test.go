@@ -246,9 +246,10 @@ func TestReadOnClosedFilePortNamesTheFile(t *testing.T) {
 // TestReadAgreesWithReadCharOnInvalidUTF8 pins that read and read-char take
 // the same view of a byte that does not decode: both read it as U+FFFD, as
 // racket and petite do. read used to raise a rune error on a port read-char
-// read cleanly. Where U+FFFD may not appear (it is not an identifier
-// character) the read fails as it does for a written U+FFFD, with a lexical
-// error that names the character.
+// read cleanly. U+FFFD is an identifier character, so an invalid byte inside
+// a symbol joins it, as in racket. Where U+FFFD may not appear (ending a
+// radix-prefixed numeral) the read fails as it does for a written U+FFFD,
+// with a lexical error that names the character.
 func TestReadAgreesWithReadCharOnInvalidUTF8(t *testing.T) {
 	tcs := []struct {
 		name    string
@@ -261,7 +262,9 @@ func TestReadAgreesWithReadCharOnInvalidUTF8(t *testing.T) {
 		{name: "string", content: "\"a\xffb\"", code: "(let ((s (read p))) (list (string-length s) (char->integer (string-ref s 1)) (read p)))", want: "(3 65533 #<eof>)"},
 		{name: "comment", content: "; a\xffb\n42", code: "(list (read p) (read p))", want: "(42 #<eof>)"},
 		{name: "character", content: "#\\\xff", code: "(char->integer (read p))", want: "65533"},
-		{name: "symbol", content: "a\xffb", code: "(list (read p) (read p))", wantErr: "expecting token"},
+		{name: "symbol", content: "a\xffb", code: "(let ((s (symbol->string (read p)))) (list (string-length s) (char->integer (string-ref s 1)) (read p)))", want: "(3 65533 #<eof>)"},
+		{name: "symbol at end of input", content: "a\xff", code: "(let ((s (symbol->string (read p)))) (list (string-length s) (char->integer (string-ref s 1)) (read p)))", want: "(2 65533 #<eof>)"},
+		{name: "radix numeral", content: "#b1\xff", code: "(list (read p) (read p))", wantErr: "expecting delimiter"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -340,23 +343,120 @@ func TestReadRecoversFromATransientReaderFault(t *testing.T) {
 }
 
 // TestReadFaultPastACloseParenIsIntertoken pins the port-level shape of B39's
-// gate: a fault just past a ")", here a reader failing after "(x)". The fault
-// is in no token, and was stamped "close-paren" because the ")" read past
-// itself under its own state. Which of the two reads reports it is not pinned.
+// gate: a fault just past a ")", here a reader failing once after "(x)". The
+// fault is in no token, so it is stamped failed (between datums). The read
+// that completed (x) returns it, the next read on the port reports the fault,
+// and the port then reads on, as racket does ((x), the fault, y, eof). The
+// port's cached parser keeps the fault for that next read rather than being
+// rebuilt over the reader, which would have read past the transient failure.
 func TestReadFaultPastACloseParenIsIntertoken(t *testing.T) {
-	for _, op := range []string{"read", "read-syntax"} {
-		t.Run(op, func(t *testing.T) {
+	tcs := []struct {
+		op, datum string
+	}{
+		{"read", "d"},
+		{"read-syntax", "(syntax->datum d)"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.op, func(t *testing.T) {
 			c := qt.New(t)
-			datum := "(x)"
-			rdr := &transientReader{chunks: []*string{&datum, nil}}
+			datum, rest := "(x)", "y"
+			rdr := &transientReader{chunks: []*string{&datum, nil, &rest}}
 			engine := newEngineWithIOTest(t)
 			err := engine.Define("p", wile.WrapValue(values.NewCharacterInputPortFromReader(rdr)))
 			c.Assert(err, qt.IsNil)
-			_, err = engine.EvalMultiple(context.Background(), `(`+op+` p) (`+op+` p)`)
+			step := `(let ((d (` + tc.op + ` p))) (if (eof-object? d) 'eof ` + tc.datum + `))`
+			first := eval(t, engine, step)
+			c.Check(first.Internal().SchemeString(), qt.Equals, "(x)")
+			_, err = engine.EvalMultiple(context.Background(), step)
 			c.Assert(err, qt.IsNotNil)
 			c.Check(errors.Is(err, os.ErrDeadlineExceeded), qt.IsTrue, qt.Commentf("got: %v", err))
 			c.Check(strings.Contains(err.Error(), "(at index 3, line 1, column 3,"), qt.IsTrue, qt.Commentf("got: %v", err))
 			c.Check(strings.Contains(err.Error(), "tokenizer state failed)"), qt.IsTrue, qt.Commentf("got: %v", err))
+			tail := eval(t, engine, `(let* ((a `+step+`) (b `+step+`)) (list a b))`)
+			c.Check(tail.Internal().SchemeString(), qt.Equals, "(y eof)")
+		})
+	}
+}
+
+// TestDeferredReadFaultPrecedesTheNextCharacter pins that a reader fault read
+// deferred past (x) is reported by the port's next input operation, whichever
+// it is: the fault came before any character past it, so handing out y first
+// and raising the fault on a later read (at index 3, behind the characters
+// already taken) misordered the stream. racket raises it from read-char too.
+// After the report the port reads on.
+func TestDeferredReadFaultPrecedesTheNextCharacter(t *testing.T) {
+	for _, op := range []string{"(read-char p)", "(peek-char p)", "(read-line p)", "(read-string 1 p)", "(char-ready? p)", "(read p)", "(read-syntax p)"} {
+		t.Run(op, func(t *testing.T) {
+			c := qt.New(t)
+			datum, rest := "(x)", "yz"
+			rdr := &transientReader{chunks: []*string{&datum, nil, &rest}}
+			engine := newEngineWithIOTest(t)
+			err := engine.Define("p", wile.WrapValue(values.NewCharacterInputPortFromReader(rdr)))
+			c.Assert(err, qt.IsNil)
+			c.Check(eval(t, engine, `(read p)`).SchemeString(), qt.Equals, "(x)")
+			_, err = engine.EvalMultiple(context.Background(), op)
+			c.Assert(err, qt.IsNotNil)
+			c.Check(errors.Is(err, os.ErrDeadlineExceeded), qt.IsTrue, qt.Commentf("got: %v", err))
+			c.Check(strings.Contains(err.Error(), "(at index 3, line 1, column 3,"), qt.IsTrue, qt.Commentf("got: %v", err))
+			c.Check(eval(t, engine, `(list (read-char p) (read p))`).SchemeString(), qt.Equals, `(#\y z)`)
+		})
+	}
+}
+
+// TestReplacementCharacterIsAnIdentifierCharacter pins U+FFFD as a symbol
+// constituent in every reader entry, as racket and petite read it, and pins
+// the trap beside it: end of input arrives as the same utf8.RuneError, so a
+// symbol that ends the input must end there, with nothing appended.
+func TestReplacementCharacterIsAnIdentifierCharacter(t *testing.T) {
+	tcs := []struct {
+		name, code, want string
+	}{
+		{name: "read at end of input", code: `(let ((p (open-input-string "a"))) (list (read p) (read p)))`, want: "(a #<eof>)"},
+		{name: "read-syntax at end of input", code: `(let ((p (open-input-string "ab"))) (list (syntax->datum (read-syntax p)) (read-syntax p)))`, want: "(ab #<eof>)"},
+		{name: "read-char after a symbol at end of input", code: `(let ((p (open-input-string "a"))) (read p) (read-char p))`, want: "#<eof>"},
+		{name: "inside a symbol", code: `(symbol->string (read (open-input-string "a\xFFFD;b")))`, want: "\"a�b\""},
+		{name: "ending the input", code: `(string-length (symbol->string (read (open-input-string "a\xFFFD;"))))`, want: "2"},
+		{name: "in a list", code: `(let ((d (read (open-input-string "(\xFFFD;)")))) (list (length d) (symbol? (car d))))`, want: "(1 #t)"},
+		{name: "in a datum comment", code: `(read (open-input-string "#;a\xFFFD; 42"))`, want: "42"},
+		{name: "read-syntax inside a symbol", code: `(string-length (symbol->string (syntax->datum (read-syntax (open-input-string "a\xFFFD;b")))))`, want: "3"},
+		{name: "source text", code: "(symbol->string 'a�b)", want: "\"a�b\""},
+		{name: "source text at end of input", code: "'a", want: "a"},
+		{name: "written and read back", code: `(let* ((s (string->symbol "a\xFFFD;b")) (o (open-output-string))) (write s o) (eq? s (read (open-input-string (get-output-string o)))))`, want: "#t"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newEngineWithIOTest(t)
+			c.Check(eval(t, engine, tc.code).SchemeString(), qt.Equals, tc.want)
+			// The one-expression entry reads the same source.
+			expr, err := engine.Parse(context.Background(), tc.code)
+			c.Assert(err, qt.IsNil)
+			got, err := engine.Eval(context.Background(), expr)
+			c.Assert(err, qt.IsNil)
+			c.Check(got.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestCharReadyRequiresATextualInputPort pins that char-ready? checks its
+// argument: it answered #t for anything, a number, a binary port and an output
+// port included (petite refuses all three).
+func TestCharReadyRequiresATextualInputPort(t *testing.T) {
+	tcs := []struct {
+		arg, want string
+	}{
+		{arg: "5", want: "err"},
+		{arg: "(open-input-bytevector (bytevector 1))", want: "err"},
+		{arg: "(open-output-string)", want: "err"},
+		{arg: `(open-input-string "a")`, want: "#t"},
+		{arg: "", want: "#t"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.arg, func(t *testing.T) {
+			c := qt.New(t)
+			engine := newEngineWithIOTest(t)
+			got := eval(t, engine, `(guard (e (#t 'err)) (char-ready? `+tc.arg+`))`)
+			c.Check(got.SchemeString(), qt.Equals, tc.want)
 		})
 	}
 }

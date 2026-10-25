@@ -226,6 +226,24 @@ func wrapReadFault(err error, msg string) error {
 	return werr.WrapForeignReadErrorf(err, "%s", msg)
 }
 
+// deferredReadFault reports, as who's read error, a reader fault that read or
+// read-syntax deferred past the datum it returned (State.takeDeferredFault).
+// The caller holds port's read lock.
+//
+// A context with no I/O state has no cached parser, so nothing is deferred:
+// read-char needs no State and must not start failing for want of one.
+func deferredReadFault(mc machine.CallContext, port *values.PortObject, who string) error {
+	st, err := stateFrom(mc)
+	if err != nil {
+		return nil //nolint:nilerr // no State, no cache, nothing deferred
+	}
+	err = st.takeDeferredFault(port)
+	if err != nil {
+		return wrapReadFault(err, who)
+	}
+	return nil
+}
+
 // readSyntaxLocked reads the next datum from port's cached parser under the
 // port's read lock, and updates the cache in the same critical section: at end
 // of input (io.EOF, returned as is) and after a reader fault it evicts the
@@ -318,6 +336,10 @@ func PrimReadChar(mc machine.CallContext) error {
 	}
 	port.LockReads()
 	defer port.UnlockReads()
+	err = deferredReadFault(mc, port, "read-char: error reading character")
+	if err != nil {
+		return err
+	}
 
 	r, _, err := rr.ReadRune()
 	if errors.Is(err, io.EOF) {
@@ -343,6 +365,10 @@ func PrimPeekChar(mc machine.CallContext) error {
 	// have its rune unread instead.
 	port.LockReads()
 	defer port.UnlockReads()
+	err = deferredReadFault(mc, port, "peek-char: error reading character")
+	if err != nil {
+		return err
+	}
 
 	r, _, err := rr.ReadRune()
 	if errors.Is(err, io.EOF) {
@@ -374,6 +400,10 @@ func PrimReadLine(mc machine.CallContext) error {
 	}
 	port.LockReads()
 	defer port.UnlockReads()
+	err = deferredReadFault(mc, port, "read-line: error reading line")
+	if err != nil {
+		return err
+	}
 	urr, _ := port.AsRuneUnreader()
 
 	var line []rune
@@ -424,7 +454,19 @@ func PrimReadLine(mc machine.CallContext) error {
 func PrimCharReadyQ(mc machine.CallContext) error {
 	// For now, we assume a character is always ready for string input ports
 	// and the character input port (stdin may block, but we can't easily check)
-	// A more accurate implementation would need non-blocking I/O
+	// A more accurate implementation would need non-blocking I/O. A reader
+	// fault deferred past the last datum is next on the port, so it is
+	// reported rather than answered.
+	port, _, err := getOptionalInputPort(mc, 0)
+	if err != nil {
+		return err
+	}
+	port.LockReads()
+	defer port.UnlockReads()
+	err = deferredReadFault(mc, port, "char-ready?: error reading character")
+	if err != nil {
+		return err
+	}
 	mc.SetValue(values.TrueValue)
 	return nil
 }
@@ -467,6 +509,10 @@ func PrimReadString(mc machine.CallContext) error {
 	}
 	port.LockReads()
 	defer port.UnlockReads()
+	err = deferredReadFault(mc, port, "read-string: error reading string")
+	if err != nil {
+		return err
+	}
 
 	// Read up to k characters
 	chars := make([]rune, 0, k.Value)

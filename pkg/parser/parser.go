@@ -260,8 +260,14 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 		// stops at the 9) arrives looking valid with the fault still pending. The
 		// fault is the rune, not the token: clearing p.cur lets the error locate
 		// at the stamped rune. A clean end of input is not a fault.
+		//
+		// A fault the tokenizer stamped between tokens is past a token that was
+		// already complete (a reader failing just after "(x)"), so the datum is
+		// whole and this read returns it, as racket's does; the fault stays
+		// pending in the tokenizer and the next read reports it. A comment is
+		// no datum: the loop below reaches the fault in this read.
 		pending := p.toks.Err()
-		if pending != nil && !errors.Is(pending, io.EOF) {
+		if pending != nil && !errors.Is(pending, io.EOF) && !pastCompleteToken(pending) {
 			p.cur = nil
 			return nil, p.die(pending)
 		}
@@ -279,6 +285,41 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 			return q, nil
 		}
 	}
+}
+
+// PendingFault returns the fault a successful ReadSyntax left pending, located
+// as the next ReadSyntax would report it: one the tokenizer hit on the rune
+// past the datum it returned. It is nil when there is none, and on a closed or
+// failed parser (die and Close drop the tokenizer), whose death ReadSyntax
+// already reported.
+//
+// Deferring the fault is right only for a caller that keeps this parser, so a
+// later read reports it (a port's cached parser). A caller that reads one
+// datum and drops the parser must check this and fail the read, or the fault
+// is lost: a reader hands an error out once. A consumer that reads the same
+// reader without this parser (read-char on a shared port) owes the fault to
+// the input before anything past it.
+func (p *Parser) PendingFault() error {
+	if p.toks == nil {
+		return nil
+	}
+	var terr *tokenizer.TokenizerError
+	if !errors.As(p.toks.Err(), &terr) {
+		return nil
+	}
+	q := NewParserErrorWithWrap(terr, nil, messageReadFailed)
+	q.file = p.file
+	return q
+}
+
+// pastCompleteToken reports whether err is a fault the tokenizer stamped on a
+// rune in no token, past a token whose extent was already fixed. The state is
+// no witness: a sign still undecided between a number and a symbol ("+i",
+// "-inf.0") scans in TokenizerStateFailed too, and a fault there cut the token
+// short.
+func pastCompleteToken(err error) bool {
+	var terr *tokenizer.TokenizerError
+	return errors.As(err, &terr) && terr.BetweenTokens()
 }
 
 // ReleaseLookahead returns the rune the tokenizer has read past the end of the

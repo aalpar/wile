@@ -160,6 +160,9 @@ func TestFaultPastACompleteTokenIsIntertoken(t *testing.T) {
 		prefix    string
 		wantTok   TokenizerState
 		wantState TokenizerState
+		// still says the token could have absorbed the rune, so the fault is
+		// not between tokens (BetweenTokens).
+		still bool
 	}{
 		// Complete once their last rune is consumed.
 		{prefix: ")", wantTok: TokenizerStateCloseParen, wantState: TokenizerStateFailed},
@@ -184,12 +187,16 @@ func TestFaultPastACompleteTokenIsIntertoken(t *testing.T) {
 		{prefix: `#\(`, wantTok: TokenizerStateCharGraphic, wantState: TokenizerStateFailed},
 		{prefix: `#\1`, wantTok: TokenizerStateCharGraphic, wantState: TokenizerStateFailed},
 		// Still open when the rune is read: it could have extended the token.
-		{prefix: "(", wantTok: TokenizerStateOpenParen, wantState: TokenizerStateOpenParen},
-		{prefix: "[", wantTok: TokenizerStateOpenBracket, wantState: TokenizerStateOpenBracket},
-		{prefix: ",", wantTok: TokenizerStateUnquote, wantState: TokenizerStateUnquote},
-		{prefix: "#,", wantTok: TokenizerStateUnsyntax, wantState: TokenizerStateUnsyntax},
-		{prefix: "ab", wantTok: TokenizerStateSymbol, wantState: TokenizerStateSymbol},
-		{prefix: `#\a`, wantTok: TokenizerStateCharGraphic, wantState: TokenizerStateCharGraphic},
+		{prefix: "(", wantTok: TokenizerStateOpenParen, wantState: TokenizerStateOpenParen, still: true},
+		{prefix: "[", wantTok: TokenizerStateOpenBracket, wantState: TokenizerStateOpenBracket, still: true},
+		{prefix: ",", wantTok: TokenizerStateUnquote, wantState: TokenizerStateUnquote, still: true},
+		{prefix: "#,", wantTok: TokenizerStateUnsyntax, wantState: TokenizerStateUnsyntax, still: true},
+		{prefix: "ab", wantTok: TokenizerStateSymbol, wantState: TokenizerStateSymbol, still: true},
+		{prefix: `#\a`, wantTok: TokenizerStateCharGraphic, wantState: TokenizerStateCharGraphic, still: true},
+		// A sign run is undecided until an arm claims it, so it scans in
+		// state failed; the state alone does not say "between tokens".
+		{prefix: "+", wantTok: TokenizerStateSymbol, wantState: TokenizerStateFailed, still: true},
+		{prefix: "+i", wantTok: TokenizerStateSymbol, wantState: TokenizerStateFailed, still: true},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.prefix, func(t *testing.T) {
@@ -207,6 +214,7 @@ func TestFaultPastACompleteTokenIsIntertoken(t *testing.T) {
 			c.Assert(located, qt.IsTrue)
 			c.Check(at.Index(), qt.Equals, len(tc.prefix))
 			c.Check(terr.State(), qt.Equals, tc.wantState)
+			c.Check(terr.BetweenTokens(), qt.Equals, !tc.still)
 		})
 	}
 }
@@ -219,8 +227,10 @@ func TestFaultPastACompleteTokenIsIntertoken(t *testing.T) {
 func TestTokenizerErrorDistinguishesEOFFromLiteralReplacementChar(t *testing.T) {
 	c := qt.New(t)
 
-	// A literal U+FFFD starts no token: a real character the scanner rejected.
-	_, err := Tokenize("�", false)
+	// A literal U+FFFD cannot end a radix-prefixed numeral: a real character
+	// the scanner rejected. (It is an identifier character, so a context that
+	// rejects it is needed to raise on it at all.)
+	_, err := Tokenize("#b1�", false)
 	var terr *TokenizerError
 	c.Assert(errors.As(err, &terr), qt.IsTrue)
 	r, isChar := terr.Rune()
@@ -231,7 +241,7 @@ func TestTokenizerErrorDistinguishesEOFFromLiteralReplacementChar(t *testing.T) 
 
 	// An invalid byte reads as U+FFFD, so it is that same character, not end
 	// of input, even as the last byte of the source.
-	_, err = Tokenize("\xff", false)
+	_, err = Tokenize("#b1\xff", false)
 	c.Assert(errors.As(err, &terr), qt.IsTrue)
 	r, isChar = terr.Rune()
 	c.Check(isChar, qt.IsTrue)

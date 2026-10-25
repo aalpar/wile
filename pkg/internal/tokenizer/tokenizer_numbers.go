@@ -578,7 +578,7 @@ func (p *Tokenizer) readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalR
 				p.fallBackToSymbol()
 			}
 			return
-		case isSignSubsequent(p.curr()):
+		case p.atIdentifier(isSignSubsequent):
 			p.fallBackToSymbol()
 			return
 		}
@@ -873,7 +873,7 @@ func (p *Tokenizer) readDigitsAndHash(r int) {
 // sets the state to Symbol, consumes the rest of the symbol, and returns true.
 // Returns false without side effects if the current character is not a dot-subsequent.
 func (p *Tokenizer) readDotSubsequentSymbol() bool {
-	if !isDotSubsequent(p.curr()) {
+	if !p.atIdentifier(isDotSubsequent) {
 		return false
 	}
 	p.state = TokenizerStateSymbol

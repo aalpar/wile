@@ -302,6 +302,10 @@ var PrimBinaryPortQ = helpers.MakeTypePredicate(func(o values.Value) bool {
 // through close-port.
 func evictPortCache(st *State, port values.Value) {
 	st.mu.Lock()
+	entry := st.parsers[port]
+	if entry != nil && entry.deferred {
+		st.deferred.Add(-1)
+	}
 	delete(st.parsers, port)
 	st.mu.Unlock()
 }

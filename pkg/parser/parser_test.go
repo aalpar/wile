@@ -19,6 +19,7 @@ import (
 	"errors"
 	"io"
 	"math"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -2816,6 +2817,69 @@ func TestParser_ReadSyntaxReaderFaultIsNotEOF(t *testing.T) {
 			c.Check(errors.Is(err, werr.ErrIncompleteInput), qt.IsFalse, qt.Commentf("got: %v", err))
 			c.Check(strings.Contains(err.Error(), "U+FFFD"), qt.IsFalse, qt.Commentf("got: %v", err))
 			c.Check(strings.Contains(err.Error(), "is closed"), qt.IsTrue, qt.Commentf("got: %v", err))
+		})
+	}
+}
+
+// TestReadSyntaxReportsAFaultPastADatumOnTheNextRead pins which read reports a
+// reader fault on the rune just past a datum. The scanner reads that rune to
+// end the datum's last token; when the token was already complete (")", a
+// closing quote or bar), the datum is whole and is returned, and the next read
+// reports the fault, as racket does. A token the rune could still have
+// extended ("ab", "12", "#\a") was cut short, and its own read reports the
+// fault. A comment is no datum, so its read reaches the fault too.
+func TestReadSyntaxReportsAFaultPastADatumOnTheNextRead(t *testing.T) {
+	closed := werr.WrapForeignErrorf(werr.ErrPortClosed, "string-input-port is closed")
+	tcs := []struct {
+		src  string
+		want string // the first read's datum; empty means the first read faults
+	}{
+		{src: "(x)", want: "(x)"},
+		{src: "()", want: "()"},
+		{src: "[x]", want: "(x)"},
+		{src: "#(1)", want: "#(1)"},
+		{src: "#u8(1)", want: "#u8(1)"},
+		{src: "'(x)", want: "(quote (x))"},
+		{src: `"a"`, want: `"a"`},
+		{src: "|ab|", want: "ab"},
+		{src: `#\(`, want: `#\(`},
+		{src: "ab"},
+		{src: "12"},
+		{src: `#\a`},
+		{src: "#t"},
+		{src: "#f"},
+		// A sign run is undecided between a number and a symbol while it is
+		// scanned, in state failed, yet a fault there still cut it short.
+		{src: "+"},
+		{src: "-"},
+		{src: "+i"},
+		{src: "-i"},
+		{src: "+in"},
+		{src: "-inf.0"},
+		{src: "+nan.0"},
+		{src: "+."},
+		{src: "..."},
+		{src: "#|c|#"},
+		{src: "#;(x)"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.src, func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewNamespace().Runtime()
+			rdr := &faultAfterReader{rdr: strings.NewReader(tc.src), after: len(tc.src), fault: closed}
+			p := NewParser(env, true, rdr)
+			syn, err := p.ReadSyntax(context.TODO())
+			if tc.want != "" {
+				c.Assert(err, qt.IsNil)
+				c.Check(syn.UnwrapAll().SchemeString(), qt.Equals, tc.want)
+				syn, err = p.ReadSyntax(context.TODO())
+			}
+			c.Assert(err, qt.IsNotNil, qt.Commentf("read returned %v", syn))
+			c.Check(errors.Is(err, werr.ErrPortClosed), qt.IsTrue, qt.Commentf("got: %v", err))
+			c.Check(err.Error(), qt.Contains, "(at index "+strconv.Itoa(len(tc.src))+",")
+			// The fault is final: the parser does not resume past it.
+			_, again := p.ReadSyntax(context.TODO())
+			c.Check(errors.Is(again, werr.ErrPortClosed), qt.IsTrue, qt.Commentf("got: %v", again))
 		})
 	}
 }

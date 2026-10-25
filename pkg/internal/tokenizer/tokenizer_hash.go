@@ -139,7 +139,7 @@ func (p *Tokenizer) readRadixMarker(r int, state TokenizerState) {
 		return
 	}
 	p.state = TokenizerStateMarker
-	for p.err == nil && isSubsequent(p.curr()) {
+	for p.atIdentifier(isSubsequent) {
 		p.next()
 	}
 }
@@ -152,7 +152,7 @@ func (p *Tokenizer) readExactness(state TokenizerState) {
 		return
 	}
 	p.state = TokenizerStateMarker
-	for p.err == nil && isSubsequent(p.curr()) {
+	for p.atIdentifier(isSubsequent) {
 		p.next()
 	}
 }
@@ -168,7 +168,7 @@ func (p *Tokenizer) readBoolean(key string, state TokenizerState) {
 		return
 	}
 	p.state = TokenizerStateMarker
-	for p.err == nil && isSubsequent(p.curr()) {
+	for p.atIdentifier(isSubsequent) {
 		p.next()
 	}
 }
@@ -231,7 +231,7 @@ func (p *Tokenizer) readTypedArrayOrExactnessOrRadixOrBooleanMarker() {
 		return
 	default:
 		p.state = TokenizerStateMarker
-		for p.err == nil && isSubsequent(p.curr()) {
+		for p.atIdentifier(isSubsequent) {
 			p.next()
 		}
 		return

@@ -262,7 +262,7 @@ func (p *Tokenizer) readCharacterMnemonicOrCharacterEscapeOrCharacterHexEscape()
 }
 
 func (p *Tokenizer) readSymbol() {
-	for p.err == nil && isSymbolSubsequent(p.curr()) {
+	for p.atIdentifier(isSymbolSubsequent) {
 		p.value = utf8.AppendRune(p.value, p.curr())
 		p.next()
 	}
