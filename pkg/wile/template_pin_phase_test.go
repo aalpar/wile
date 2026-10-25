@@ -40,6 +40,12 @@ import (
 // its result without the walk and refused already; it is the control. The
 // phase-3 row inverts TestFreeTemplateIdentifierAtPhaseZeroResolvesPhaseThreeBinding,
 // which pinned the reach as the guard for PresentPhases's lifted ceiling.
+//
+// tail pins the full text where it is known to differ: the template's
+// identifier carries the macro's scopes, so the scoped arm renders "with
+// compatible scopes" before the same "(bound at phase 1)" clause the direct,
+// scopeless reference gets. That prefix is X22's rule (scoped and a same-named
+// binding exists), kept here; changing it must flip this row deliberately.
 func TestTemplatePinRefusesAHigherPhaseVariable(t *testing.T) {
 	t.Parallel()
 
@@ -49,11 +55,13 @@ func TestTemplatePinRefusesAHigherPhaseVariable(t *testing.T) {
 		ident string
 		phase string
 		from  string
+		tail  string
 	}{
 		{
 			name:  "direct reference control",
 			code:  `(begin-for-syntax (define helper3 7)) helper3`,
 			ident: "helper3", phase: "(bound at phase 1)",
+			tail: `no such binding "helper3" (bound at phase 1): no such binding`,
 		},
 		{
 			name: "syntax-rules template",
@@ -61,6 +69,7 @@ func TestTemplatePinRefusesAHigherPhaseVariable(t *testing.T) {
 (define-syntax useh2 (syntax-rules () ((_) helper2)))
 (useh2)`,
 			ident: "helper2", phase: "(bound at phase 1)", from: "useh2",
+			tail: `no such binding "helper2" with compatible scopes (bound at phase 1): no such binding`,
 		},
 		{
 			name: "a later phase-1 set! is not visible",
@@ -109,6 +118,9 @@ func TestTemplatePinRefusesAHigherPhaseVariable(t *testing.T) {
 			qt.Check(t, err.Error(), qt.Contains, tc.phase)
 			var se *compilation.SourcedError
 			qt.Check(t, errors.As(err, &se), qt.IsTrue, qt.Commentf("unlocated: %v", err))
+			if tc.tail != "" {
+				qt.Check(t, err.Error(), qt.Contains, tc.tail)
+			}
 			if tc.from != "" {
 				qt.Check(t, err.Error(), qt.Contains, "expanded from '"+tc.from+"'")
 			}
@@ -136,7 +148,12 @@ func TestLibraryTemplatePinRefusesAHigherPhaseVariable(t *testing.T) {
 	_, err = eng.EvalMultiple(ctx, `(usehelp)`)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Check(t, errors.Is(err, werr.ErrNoSuchBinding), qt.IsTrue, qt.Commentf("%v", err))
-	qt.Check(t, err.Error(), qt.Contains, `"helper"`)
+	// The importer's probes see only its own store, not the library's phase 1,
+	// so the clause reports no binding at any phase rather than the phase.
+	qt.Check(t, err.Error(), qt.Contains,
+		`no such local or global binding "helper" (no global binding of that name at any phase): no such binding`)
+	var se *compilation.SourcedError
+	qt.Check(t, errors.As(err, &se), qt.IsTrue, qt.Commentf("unlocated: %v", err))
 }
 
 // What the use-phase pin must keep: a keyword (stored one phase above the phase

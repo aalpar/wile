@@ -1338,7 +1338,8 @@ func (p *EnvironmentFrame) GetGlobalBinding(key *GlobalIndex) *Binding {
 
 // GetGlobalIndexAcrossPhases searches for a global binding across phases
 // (runtime → expand → compile) using read-only phase access. Returns the
-// first GlobalIndex found, or nil if not found in any phase.
+// first GlobalIndex found, or nil if not found in any phase or if the first hit
+// is a mutable variable above the template's use phase (below).
 //
 // This is used during macro compilation to pin a template's free identifiers,
 // which the receiver (a define-syntax right-hand side or a transformer body)
