@@ -105,9 +105,8 @@
 ;; A tie between two COMPOUNDS that are not equal? is legal: nested AC terms
 ;; are equal modulo AC without being equal?, so only atom ties are errors.
 ;; This comparator ranks atoms before compounds and ties every pair of
-;; compounds, so (g a) and (g c) tie. Matching them is the over-match filed as
-;; the nested-AC row of "Filed by the P6.9 crosscheck"; this row pins only that
-;; the tie does not raise.
+;; compounds, so (g a) and (g c) tie. Unification decides a compound pair
+;; structurally, never by that tie, so the tie neither raises nor over-matches.
 (define atoms-first-proto
   (sexp-term-protocol
     (lambda (a b)
@@ -117,7 +116,8 @@
         (else #f)))))
 
 (test-group "contract: a compound/compound tie does not raise"
-  (test 1 (length (ac-unify '(+ (g a) b) '(+ b (g c)) ac-theory atoms-first-proto))))
+  (test 0 (length (ac-unify '(+ (g a) b) '(+ b (g c)) ac-theory atoms-first-proto)))
+  (test 1 (length (ac-unify '(+ (g a) b) '(+ b (g a)) ac-theory atoms-first-proto))))
 
 (define-record-type <cell>
   (make-cell v)
