@@ -2047,8 +2047,8 @@ func (p *MachineContext) RunResumable() (rerr error) {
 			if applyErr != nil {
 				if isControlSignal(applyErr) || p.supersedingTimerInterrupt(applyErr) != nil {
 					// The handler's application transferred control, or failed after the
-					// outer timer it restored has also fired (a foreign handler's failure
-					// arrives already turned into that timer's interrupt by the bridge).
+					// outer timer it restored has also fired (resolveTimerInterrupt's
+					// bridge has already turned the failure into that timer's interrupt).
 					// Dispatch it here, as the break arm does, or a raw interrupt or the
 					// handler's failure reaches the embedder.
 					pending = applyErr
@@ -2275,10 +2275,10 @@ func (p *MachineContext) RunWithinBoundary() error {
 		if abErr != nil {
 			if isControlSignal(abErr) || p.supersedingTimerInterrupt(abErr) != nil {
 				// Dispatch it here rather than returning it, as RunResumable does: an
-				// after thunk or the prompt's handler transferred control (a foreign
-				// handler failing after this sub-context's timer fired becomes the
-				// timer's interrupt), or failed after it fired. Each arm below returns
-				// a signal it cannot resolve on this chain.
+				// after thunk or the prompt's handler transferred control (a handler
+				// failing after this sub-context's timer fired becomes the timer's
+				// interrupt at resolveAbort's bridge), or failed after it fired. Each
+				// arm below returns a signal it cannot resolve on this chain.
 				pending = abErr
 				continue
 			}
@@ -2336,7 +2336,10 @@ func (p *MachineContext) resolveAbort(abortErr *ErrPromptAbort, prompt *MachineC
 	if prompt != nil && prompt.PromptHandler() != nil {
 		_, applyErr := p.ApplyCallable(prompt.PromptHandler(), abortErr.Values...)
 		if applyErr != nil {
-			return false, applyErr
+			// The driver applies the handler, not an OpApply, so its failure
+			// (an arity mismatch) has crossed no bridge yet: bridge it here, or
+			// it reaches the embedder raw, past every guard on the chain.
+			return false, p.bridgeDriverApplyError(applyErr)
 		}
 		return false, nil
 	}
@@ -2535,8 +2538,26 @@ func (p *MachineContext) resolveTimerInterrupt(timerErr *ErrTimerInterrupt, boun
 		p.ctx = fired.savedCtx
 	}
 
+	// The handler is applied, and its failure bridged as resolveAbort bridges its
+	// handler's, only after the teardown above: with the fired timer still p.timer,
+	// the bridge (applyForeign's own, for a foreign handler) would claim the
+	// handler's failure as that timer's interrupt a second time, and the handler
+	// would run again (TestFiredTimerIsTornDownBeforeItsHandlerRuns).
 	_, applyErr := p.ApplyCallable(timerErr.Handler, resumable)
-	return applyErr
+	if applyErr != nil {
+		return p.bridgeDriverApplyError(applyErr)
+	}
+	return nil
+}
+
+// bridgeDriverApplyError sends the failure of a handler a driver applied itself
+// (resolveAbort, resolveTimerInterrupt) through bridgeForeignError, as every
+// OpApply failure is sent. A nil return means the failure was raised in place and
+// p now continues into the Scheme handler; a control signal, or a failure a
+// timer claims, is returned for the driver to dispatch or pass up.
+func (p *MachineContext) bridgeDriverApplyError(err error) error {
+	_, bridged := bridgeForeignError(p, err)
+	return bridged
 }
 
 // resolveBreakInterrupt is the shared debugger-break arm of RunResumable and
