@@ -90,6 +90,8 @@ func TestRawWalkResolvesHeadsInBinderFrames(t *testing.T) {
 			makeSyntax(L(S("lambda"), L(), L(S("define"), S("quote"), S("list")), quoteX)), quasiDepthCode, true},
 		{"internal procedure define covers the body",
 			makeSyntax(L(S("lambda"), L(), L(S("define"), L(S("quote"), S("v")), S("v")), quoteX)), quasiDepthCode, true},
+		{"procedure define shorthand formals cover its body",
+			makeSyntax(L(S("define"), L(S("g"), S("quote")), quoteX)), quasiDepthCode, true},
 		{"internal define spliced through a begin",
 			makeSyntax(L(S("let"), L(), L(S("begin"), L(S("define"), S("quote"), S("list"))), quoteX)), quasiDepthCode, true},
 		{"binder form inside an unquote",
@@ -99,6 +101,8 @@ func TestRawWalkResolvesHeadsInBinderFrames(t *testing.T) {
 			makeSyntax(quoteX), quasiDepthCode, false},
 		{"a lambda's frame does not reach its sibling",
 			makeSyntax(L(S("begin"), L(L(S("lambda"), L(S("quote")), S("quote")), values.NewInteger(1)), quoteX)), quasiDepthCode, false},
+		{"procedure define formals do not reach past its body",
+			makeSyntax(L(S("begin"), L(S("define"), L(S("g"), S("quote")), values.NewInteger(1)), quoteX)), quasiDepthCode, false},
 		{"an internal define does not reach past its body",
 			makeSyntax(L(S("begin"), L(L(S("lambda"), L(), L(S("define"), S("quote"), S("list")), values.NewInteger(1))), quoteX)), quasiDepthCode, false},
 		{"a let's names do not reach its inits",
@@ -202,4 +206,24 @@ func TestRawWalkAmbiguousHeadDemotesAtCodeDepth(t *testing.T) {
 		}
 	})
 	qt.Assert(t, got, qt.IsTrue)
+}
+
+// TestRawWalkUncoveredLocalLeavesTheBarrier is the false side of the demotion
+// rules above: a single local quote whose scopes the reference does not cover is
+// neither a tie nor a reachable local, so the reference still reaches the quote
+// form and x stays data.
+func TestRawWalkUncoveredLocalLeavesTheBarrier(t *testing.T) {
+	a := syntax.NewScope()
+	env := environment.NewEnvironmentFrameWithParent(environment.NewLocalEnvironment(0), binderTestEnv())
+	quote := syntax.NewSyntaxSymbol("quote", nil)
+	bindLocalSymbol(env, withScope(quote, a))
+	form := stxList(quote, syntax.NewSyntaxSymbol("x", nil))
+
+	got := false
+	forEachRawSymbol(env, form, quasiDepthCode, quasiquoteKW, walkWrites, func(sym *syntax.SyntaxSymbol) {
+		if sym.Key() == "x" {
+			got = true
+		}
+	})
+	qt.Assert(t, got, qt.IsFalse)
 }

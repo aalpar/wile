@@ -337,6 +337,14 @@ func resolveHead(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) (s
 // see forEachRawSymbolPair. A demoted quote is safe as an ordinary call, because
 // the code-depth walk reports everything its barrier would have hidden.
 //
+// At code depth a local variable the head reaches decides FIRST, ahead of the
+// definition-site pin resolveHead reads: that is validateForm's order
+// (resolveFormHead), which compiles the code this walk stands in for. A macro
+// template that writes both a binder and a reference spelled quote pins the
+// reference to the core form, and reading the pin first made it a barrier the
+// compiler never sees. Inside a template the pin stays first, as
+// compilation.headFormName reads it there.
+//
 // An ambiguous scope-set tie at code depth demotes too. Demotion only ever adds
 // to what the walk reports (a demoted quote walks its operands, a demoted opener
 // is read both ways), so it is the conservative answer for every consumer here.
@@ -345,6 +353,9 @@ func resolveHead(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) (s
 // tie; the binder frames forEachRawBinderForm mints from raw syntax are not, so a
 // tie among them proves nothing about what the compiler will see.
 func headKey(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol, quasi int) (string, bool) {
+	if quasi == quasiDepthCode && env != nil && env.HasLocalVariableBinding(sym.Sym, syntax.ScopesOf(sym.Scopes())) {
+		return "", true
+	}
 	denoted, bnd, ambiguous := resolveHead(env, sym)
 	if denoted != "" {
 		return denoted, false
@@ -606,7 +617,7 @@ func forEachRawBinderForm(env *environment.EnvironmentFrame, p *syntax.SyntaxPai
 		return false
 	}
 	switch key {
-	case "lambda", "case-lambda", "let", "let*", "letrec", "letrec*":
+	case "lambda", "case-lambda", "let", "let*", "letrec", "letrec*", "define":
 	default:
 		return false
 	}
@@ -630,10 +641,37 @@ func forEachRawBinderForm(env *environment.EnvironmentFrame, p *syntax.SyntaxPai
 	case "case-lambda":
 		return forEachRawCaseLambda(env, head, elems[1:], mk, mode, fn)
 
+	case "define":
+		return forEachRawProcedureDefine(env, head, elems, mk, mode, fn)
+
 	case "let", "let*", "letrec", "letrec*":
 		return forEachRawLet(env, head, key, elems, mk, mode, fn)
 	}
 	return false
+}
+
+// forEachRawProcedureDefine is forEachRawBinderForm's define arm, for the
+// procedure shorthand (define (name . formals) body...): the formals cover the
+// body as a lambda's would. The expander leaves the shorthand in place, so the
+// walk meets it unrewritten. The name itself is bound by the enclosing body
+// (rawBodyDefines); a variable define, or a curried signature, is not taken.
+func forEachRawProcedureDefine(env *environment.EnvironmentFrame, head *syntax.SyntaxSymbol, elems []syntax.SyntaxValue, mk quasiMarkers, mode walkMode, fn func(*syntax.SyntaxSymbol)) bool {
+	sig, ok := elems[1].(*syntax.SyntaxPair)
+	if !ok || len(elems) < 3 {
+		return false
+	}
+	name, ok := sig.SyntaxCar().(*syntax.SyntaxSymbol)
+	if !ok {
+		return false
+	}
+	params := validateParams(sig.SyntaxCdr(), &ValidationResult{})
+	if params == nil {
+		return false
+	}
+	fn(head)
+	fn(name)
+	walkRawClause(createLambdaValidationEnv(env, params), params, elems[2:], mk, mode, fn)
+	return true
 }
 
 // forEachRawCaseLambda is forEachRawBinderForm's case-lambda arm. Every clause is

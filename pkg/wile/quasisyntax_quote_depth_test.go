@@ -292,6 +292,26 @@ func TestMarkerNamedBinderInsideOpaqueSubtree(t *testing.T) {
 		// so their binders are the core forms' binders.
 		row("let-values under an unsyntax", `(quasisyntax (a #,(let-values (((quote) (values list))) (quote `+b+`))))`),
 		row("quasiquote: do loop variable", "`(a ,(do ((quote list) (i 0 (+ i 1))) ((= i 1) 5) (quote "+b+")))"),
+		row("quasiquote: procedure define shorthand formals", "`(a ,((lambda () (define (g quote) (quote "+b+")) (g list))))"),
+		// A template that writes both the binder and the reference pins the
+		// reference to the core quote; the local binder still decides first, as
+		// validateForm's resolveFormHead has it.
+		{"macro template: lambda parameter and reference, under an unquote",
+			`(define-syntax m3 (syntax-rules () ((_ e) ((lambda (quote) (quote e)) list))))
+			 (let ((f (lambda () 7)) (n 0)) ` + "`(a ,(m3 " + b + "))" + ` (list n (f)))`,
+			"(1 99)"},
+		{"macro template: lambda parameter and reference, under an unsyntax",
+			`(define-syntax m3 (syntax-rules () ((_ e) ((lambda (quote) (quote e)) list))))
+			 (let ((f (lambda () 7)) (n 0)) (quasisyntax (a #,(m3 ` + b + `))) (list n (f)))`,
+			"(1 99)"},
+		{"macro template: internal define and reference",
+			`(define-syntax m3 (syntax-rules () ((_ e) (let () (define quote list) (quote e)))))
+			 (let ((f (lambda () 7)) (n 0)) ` + "`(a ,(m3 " + b + "))" + ` (list n (f)))`,
+			"(1 99)"},
+		{"macro template: let name and reference",
+			`(define-syntax m3 (syntax-rules () ((_ e) (let ((quote list)) (quote e)))))
+			 (let ((f (lambda () 7)) (n 0)) ` + "`(a ,(m3 " + b + "))" + ` (list n (f)))`,
+			"(1 99)"},
 		{"user macro binder under an unsyntax",
 			`(define-syntax bind1 (syntax-rules () ((_ v e body) ((lambda (v) body) e))))
 			 (let ((f (lambda () 7)) (n 0)) (quasisyntax (a #,(bind1 quote list (quote ` + b + `)))) (list n (f)))`,
