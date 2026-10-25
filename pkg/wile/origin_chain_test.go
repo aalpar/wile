@@ -358,7 +358,7 @@ func TestMacroOriginChainIsCarried(t *testing.T) {
 	qt.Assert(t, errors.Is(err, werr.ErrInvalidSyntax), qt.IsTrue)
 	var deepest *compilation.SourcedError
 	var se *compilation.SourcedError
-	for e := error(err); errors.As(e, &se); e = se.Cause {
+	for e := err; errors.As(e, &se); e = se.Cause {
 		deepest = se
 	}
 	qt.Assert(t, deepest, qt.IsNotNil)
