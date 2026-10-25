@@ -773,13 +773,19 @@ func bigFloatExpt(base, exp values.Number) values.Number {
 	return values.NewBigFloat(q)
 }
 
-// bigPowAbs returns a^y rounded to prec bits for a ≥ 0, a ≠ 1, y ≠ 0, neither
-// NaN. wp is the working precision of the log path; a and y must be exact at it.
+// bigPowAbs returns a^y rounded to prec bits for a ≥ 0 and y ≠ 0, neither NaN.
+// wp is the working precision of the log path; a and y must be exact at it.
 func bigPowAbs(a, y *big.Float, prec, wp uint) *big.Float {
 	switch {
 	case y.IsInf():
-		// |x| < 1 vanishes under +inf and diverges under -inf; |x| > 1 the reverse.
-		return zeroOrInf(prec, (a.Cmp(big.NewFloat(1)) < 0) == y.Signbit())
+		// |x| < 1 vanishes under +inf and diverges under -inf; |x| > 1 the
+		// reverse. |x| = 1 is 1: a base of -1 reaches here as a = 1, and
+		// pow(-1, ±inf) is 1, as on the Float arm.
+		c := a.Cmp(big.NewFloat(1))
+		if c == 0 {
+			return new(big.Float).SetPrec(prec).SetInt64(1)
+		}
+		return zeroOrInf(prec, (c < 0) == y.Signbit())
 	case a.Sign() == 0 || a.IsInf():
 		return zeroOrInf(prec, a.IsInf() != y.Signbit())
 	}

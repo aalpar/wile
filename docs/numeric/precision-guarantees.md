@@ -45,7 +45,7 @@ These operations on exact inputs MUST produce exact results. Precision loss here
 
 ### Tier 2: INEXACT — Precision Loss Is Inherent
 
-These operations inherently produce results that cannot be represented exactly. Precision loss is expected and conformant, but implementations SHOULD maximize available precision. Wile does so by operand tier for the transcendentals with real results (`sin`, `exp`, `log`, `atan`, and the rest): a `BigInteger`, `Rational` or `BigFloat` operand yields a `BigFloat`, an `Integer` or `Float` operand a `Float`. Not every operation follows the tier: `(sqrt 1/3)`, `(expt #m2 0.5)`, `(log -1/2)` and `(exp 1/2+1/3i)` return float64-based results, and `(sqrt #m2)` currently raises.
+These operations inherently produce results that cannot be represented exactly. Precision loss is expected and conformant, but implementations SHOULD maximize available precision. Wile does so by operand tier for the transcendentals with real results (`sin`, `exp`, `log`, `atan`, and the rest): a `BigInteger`, `Rational` or `BigFloat` operand yields a `BigFloat`, an `Integer` or `Float` operand a `Float`. `sqrt` follows the tier for a non-square operand (`(sqrt 1/3)` is a `BigFloat`), and `expt` yields a `BigFloat` when either operand is one (`(expt #m2 0.5)`); an exact base with a `Float` exponent, as in `(expt 2/3 0.5)`, stays a `Float`. Results with a nonzero imaginary part do not follow the tier: `(log -1/2)` and `(exp 1/2+1/3i)` return float64-based results.
 
 | Operation | Why |
 |-----------|-----|

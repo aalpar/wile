@@ -654,6 +654,10 @@ func TestSqrtExptBigTier(t *testing.T) {
 		{"expt infinite exponent small base", `(expt #m0.5 +inf.0)`, "*values.BigFloat", "0.0"},
 		// float64 rounds this base to 1.0, where pow(1, +inf) is 1.
 		{"expt infinite exponent base just above one", `(expt #m1.000000000000000000000000000001 +inf.0)`, "*values.BigFloat", "+inf.0"},
+		// a base of -1 has magnitude 1, so an infinite exponent leaves it 1 (Float arm: (expt -1.0 +inf.0) is 1.0)
+		{"expt minus one infinite exponent", `(expt #m-1 +inf.0)`, "*values.BigFloat", "1.0l0"},
+		{"expt minus one negative infinite exponent", `(expt #m-1 -inf.0)`, "*values.BigFloat", "1.0l0"},
+		{"expt exact minus one bigfloat infinite exponent", `(expt -1 (/ #m1 #m0))`, "*values.BigFloat", "1.0l0"},
 		{"expt nan base zero exponent", `(expt (/ #m0 #m0) 0)`, "*values.BigFloat", "1.0l0"},
 		{"expt one base nan exponent", `(expt #m1 +nan.0)`, "*values.BigFloat", "1.0l0"},
 		{"expt nan exponent", `(expt #m2 +nan.0)`, "*values.BigFloat", "+nan.0"},
