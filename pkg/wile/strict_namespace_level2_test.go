@@ -216,10 +216,10 @@ func TestNoAmbientBindingsFloor(t *testing.T) {
 		})
 	}
 
-	// Columns 2 and 3: dead, with the offending name pinned. The wording differs
-	// between them ("no such local or global binding" vs "no such binding … with
-	// compatible scopes") because column 2 fails resolving a macro-introduced
-	// reference against a scope set, and column 3 fails a plain lookup.
+	// Columns 2 and 3: dead, with the offending name pinned. Both read "no such
+	// local or global binding": the name is bound at no phase in this namespace,
+	// so even column 2's macro-introduced reference, resolved against a scope
+	// set, makes no scope claim.
 	dead := []struct {
 		name   string
 		src    string
@@ -236,12 +236,12 @@ func TestNoAmbientBindingsFloor(t *testing.T) {
 			// unconditionally, and then die on the primitive they expand into.
 			name:   "resolves-unusable/unless needs not",
 			src:    `(unless #f 1)`,
-			errsub: `no such binding "not" with compatible scopes`,
+			errsub: `no such local or global binding "not"`,
 		},
 		{
 			name:   "resolves-unusable/guard needs call-with-exit",
 			src:    `(guard (e (#t 1)) 2)`,
-			errsub: `no such binding "call-with-exit" with compatible scopes`,
+			errsub: `no such local or global binding "call-with-exit"`,
 		},
 		{
 			// with-syntax is the expand-phase twin of quasiquote-with-unquote:

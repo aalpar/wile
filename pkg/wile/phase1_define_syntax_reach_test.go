@@ -135,5 +135,5 @@ func TestPhase1DefineSyntaxIsNotVisibleAtPhaseZero(t *testing.T) {
 		`(begin-for-syntax (define-syntax m (syntax-rules () ((_) 7))))
 		 (m)`)
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, err.Error(), qt.Contains, `no such local or global binding "m"`)
+	qt.Assert(t, err.Error(), qt.Contains, `no such binding "m" (bound at phase 2)`)
 }

@@ -386,7 +386,7 @@ func TestMacroOriginChainOnEveryExpanderFailure(t *testing.T) {
 		{"set! of no such binding",
 			"(define-syntax bs (syntax-rules () ((_ x) (set! nosuchvar x))))\n" +
 				"(define-syntax outer (syntax-rules () ((_ y) (bs y))))\n(outer 1)",
-			"no such binding \"nosuchvar\"", 2},
+			"no such local or global binding \"nosuchvar\"", 2},
 		{"validation",
 			"(define-syntax badif (syntax-rules () ((_ x) (if x))))\n" +
 				"(define-syntax outer (syntax-rules () ((_ y) (badif y))))\n(outer 1)",

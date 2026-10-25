@@ -99,8 +99,8 @@ This document catalogs differences between the current implementation and the R7
     first use. The dialect removes `record-modifier`, and
     `bootstrap_macros.scm` expands a modifier-declaring field spec to
     `(define modifier (record-modifier type 'field-tag))`, so the whole
-    declaration raises `no such binding "record-modifier" with compatible
-    scopes` and the record type never comes into existence — before any
+    declaration raises `no such local or global binding "record-modifier"`
+    and the record type never comes into existence — before any
     instance does. A modifier-free `define-record-type` is unaffected. The
     diagnostic names `record-modifier` rather than the modifier the program
     wrote.
