@@ -34,9 +34,9 @@ import (
 // reaches and which the first driver above the transformer's root holds. The
 // handler then returns, so R7RS 6.11's secondary exception must fire, as it
 // does for the same jump taken directly (the last row, a control).
-// Chez raises &non-continuable on the eval, dynamic-wind and direct rows; the
-// composable and transformer rows have no Chez equivalent and are pinned by
-// agreement with the direct jump.
+// Chez raises &non-continuable on the eval, dynamic-wind, after-thunk escape and
+// direct rows; the composable and transformer rows have no Chez equivalent and
+// are pinned by agreement with the direct jump.
 func TestNonContinuableSecondaryAcrossContexts(t *testing.T) {
 	t.Parallel()
 
@@ -92,6 +92,24 @@ func TestNonContinuableSecondaryAcrossContexts(t *testing.T) {
 			      (with-exception-handler
 			        (lambda (e) (call/cc (lambda (k) (eval (list 'm k) (interaction-environment)))) 42)
 			        (lambda () (list 'a (error "boom") 'b)))`,
+		},
+		{
+			// The after thunk runs on a sub-context while the handler's escape is in
+			// flight, so the handler context's chain still holds the finalizer frame:
+			// re-entering it there is a within-extent jump. The same re-entry made
+			// after the escape lands still forwards (a re-entry from outside, the
+			// guard miss-path's rule), which Chez does not; that is filed separately.
+			name: "call/cc continuation invoked from an after thunk the handler's escape runs",
+			src: `(let ()
+			        (define k #f)
+			        (call/cc (lambda (esc)
+			          (dynamic-wind
+			            (lambda () #f)
+			            (lambda ()
+			              (with-exception-handler
+			                (lambda (e) (if (call/cc (lambda (c) (set! k c) #t)) (esc 'out) 42))
+			                (lambda () (list 'a (raise 'boom) 'b))))
+			            (lambda () (if k (let ((kk k)) (set! k #f) (kk #f))))))))`,
 		},
 		{
 			name: "control: call/cc continuation invoked directly",

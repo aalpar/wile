@@ -628,6 +628,13 @@ func (p *MachineContext) applyComposableContinuation(cc *ComposableContinuation,
 	// it before reinstallSegment, whose winding reconcile runs dynamic-wind thunks
 	// that can re-point it.
 	revived := pendingEscalatorRevivals(cc.escalatorArms, p)
+	if cc.interrupted {
+		// A timer's hard suspension dropped the thunk's frames without leaving their
+		// extents, so the arms it carries were live at the interrupt: resuming
+		// continues inside them, which is no revival, though the live chain lacks
+		// the frames.
+		revived = nil
+	}
 	outside := p.windingStack
 	if cc.inPlace != nil {
 		outside = cc.inPlace.windingStack

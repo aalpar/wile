@@ -158,3 +158,45 @@ func TestResumedTimerThunkReentersItsWindingExtent(t *testing.T) {
 	}
 	qt.Assert(t, entered, qt.IsTrue)
 }
+
+// TestResumedTimerInsideNonContinuableHandlerStillEscalates sweeps a
+// with-timeout's firing point over a thunk whose non-continuable raise's handler
+// loops and then returns, and pins that resuming the timeout handler's
+// continuation answers what the thunk answers uninterrupted: the R7RS 6.11
+// secondary exception, caught by the outer guard. The timer's hard suspension
+// drops the handler's finalizer frame without leaving its extent, so a resume
+// that judged the frame's absence from the live chain as a re-entry from outside
+// forwarded the handler's 42 into the raise, (a 42 b), from the first point
+// inside the handler on. The second row runs the same program inside eval, whose
+// sub-context arms the timer.
+func TestResumedTimerInsideNonContinuableHandlerStillEscalates(t *testing.T) {
+	const sweep = 160
+	const program = `(let ((fired #f))
+  (list (guard (e (#t (list 'secondary (error-object? e))))
+          (with-timeout 1000 (lambda (k) (set! fired #t) (k))
+            (lambda ()
+              (with-exception-handler
+                (lambda (e) (let loop ((i 0)) (if (< i 100) (loop (+ i 1)))) 42)
+                (lambda () (list 'a (raise 'boom) 'b))))))
+        fired))`
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{name: "on the arming context", code: program},
+		{name: "inside eval", code: "(eval '" + program + " (interaction-environment))"},
+	}
+	expected := values.List(values.List(values.NewSymbol("secondary"), values.TrueValue), values.TrueValue)
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := testhelpers.NewFullRuntimeEnv(t)
+			for k := range uint64(sweep) {
+				ctx := machine.WithTimerFiringAfter(context.Background(), k)
+				result, err := testhelpers.RunSchemeCodeWithEnvAndContext(ctx, t, env, tc.code)
+				qt.Assert(t, err, qt.IsNil, qt.Commentf("fired after %d instructions", k))
+				qt.Assert(t, result, valuestest.SchemeEquals, expected, qt.Commentf("fired after %d instructions", k))
+			}
+		})
+	}
+}
