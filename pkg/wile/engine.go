@@ -1691,7 +1691,7 @@ func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
 			Condition:  wrapValue(ee.Condition),
 			structured: true,
 		}
-		re.Source = ee.Source.Location()
+		re.Source = ee.Location()
 		if len(ee.StackTrace) > 0 {
 			re.StackTrace = ee.StackTrace.String()
 		}

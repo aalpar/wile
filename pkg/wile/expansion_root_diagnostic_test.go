@@ -16,7 +16,12 @@ package wile_test
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"testing/fstest"
+
+	"github.com/aalpar/wile/pkg/stdlib"
+	"github.com/aalpar/wile/pkg/wile"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -39,6 +44,46 @@ func TestClosureTransformerFailureIsNotLabelledSyntaxRules(t *testing.T) {
 			qt.Assert(t, err, qt.IsNotNil)
 			qt.Assert(t, err.Error(), qt.Contains, "transformer invocation failed")
 			qt.Assert(t, err.Error(), qt.Not(qt.Contains), "syntax-rules")
+		})
+	}
+}
+
+// TestGuardMissReportsTheRaiseSite: a guard whose clauses all miss re-raises
+// the condition from inside the guard, and so does the foreign-call bridge for a
+// raise out of a library body or a transformer, so the uncaught carrier's own
+// source is the guard's (or the import's, or the eval's). A *NativeError keeps
+// the location of its first raise, which is what is reported. A condition of
+// another type has no location of its own and still reports the latest raise.
+func TestGuardMissReportsTheRaiseSite(t *testing.T) {
+	t.Parallel()
+
+	fsys := fstest.MapFS{
+		"probe/bad.sld": &fstest.MapFile{
+			Data: []byte("(define-library (probe bad) (import (scheme base)) (export x)\n  (begin (define x 1)\n         (car 5)))"),
+		},
+	}
+	for _, tc := range []struct {
+		name, src, want string
+	}{
+		{"a guard around a call", "(define (f) (car 5))\n(guard (e ((string? e) 'no))\n  (f))", ":1:13"},
+		{"a guard around an import whose body raised", "(guard (e ((string? e) 'no)) (environment '(probe bad)))", "probe/bad.sld:3:10"},
+		{"a guard around an eval whose transformer raised",
+			"(import (for-syntax (scheme base)))\n(define-syntax m (lambda (s) (car 5)))\n(guard (e ((string? e) 'no)) (eval '(m) (interaction-environment)))",
+			":2:30"},
+		{"a condition with no location of its own", "(define (f) (raise 'boom))\n(guard (e ((string? e) 'no))\n  (f))", ":2:1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			eng, err := wile.NewEngine(context.Background(),
+				wile.WithProfile(wile.KitchenSink),
+				wile.WithSourceFS(stdlib.FS),
+				wile.WithSourceFS(fsys),
+				wile.WithLibraryPaths("."),
+			)
+			qt.Assert(t, err, qt.IsNil)
+			_, err = eng.EvalMultiple(context.Background(), tc.src)
+			var re *wile.RuntimeError
+			qt.Assert(t, errors.As(err, &re), qt.IsTrue, qt.Commentf("%v", err))
+			qt.Assert(t, re.Source, qt.Equals, tc.want)
 		})
 	}
 }

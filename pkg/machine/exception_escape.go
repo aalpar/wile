@@ -45,7 +45,7 @@ func (p *ErrExceptionEscape) Error() string {
 	var b strings.Builder
 
 	// Format the source prefix if available
-	loc := p.Source.Location()
+	loc := p.Location()
 	hasSource := loc != ""
 	if hasSource {
 		b.WriteString(loc)
@@ -75,6 +75,20 @@ func (p *ErrExceptionEscape) Error() string {
 	}
 
 	return b.String()
+}
+
+// Location is where the condition was raised: a *NativeError's own location,
+// stamped at its first raise, else Source. They differ for a condition raised
+// again elsewhere, which a guard whose clauses all miss does (its re-raise sits
+// at the guard), and so does the foreign-call bridge for a raise out of an
+// expansion-time root. A condition of another type carries no location of its
+// own and reports the latest raise. StackTrace is always the latest raise's.
+func (p *ErrExceptionEscape) Location() string {
+	ne, ok := p.Condition.(*values.NativeError)
+	if ok && ne.SourceLocation() != "" {
+		return ne.SourceLocation()
+	}
+	return p.Source.Location()
 }
 
 // ConditionText returns the raised condition's human-readable text alone —
