@@ -236,8 +236,10 @@ func TestThreadStartedByAThreadEndsWithIt(t *testing.T) {
 }
 
 // TestSpawnContextIsReleasedWhenTheWorkEnds pins that the ctx SpawnContext made
-// for a thread or a child started in a with-timeout thunk is ended once the
-// thread has ended or the child is reaped, and at once when thread-start! fails.
+// for a child started in a with-timeout thunk is ended once the child is reaped,
+// and the one for a thread at once when thread-start! fails. A started thread's
+// is not released when the thread ends: what the thread started derives from it
+// (TestWorkAThreadStartedOutlivesTheThread).
 // Unreleased, each one stays registered on the host's ctx for as long as that
 // lives, a leak of one per start in a long-lived host (the CLI's signal ctx).
 // The witness is the count of live spawn ctxs, back where it was after the run.
@@ -249,9 +251,6 @@ func TestSpawnContextIsReleasedWhenTheWorkEnds(t *testing.T) {
 		want string
 		unix bool
 	}{
-		{"a thread, joined", `(let ((t (make-thread (lambda () 'v))))
-  (with-timeout 1000 (lambda (k) 'timed-out) (lambda () (thread-start! t)))
-  (thread-join! t))`, "v", false},
 		{"a second start of a started thread", `(let ((t (make-thread (lambda () 'v))))
   (thread-start! t)
   (list (with-timeout 1000 (lambda (k) 'timed-out)
@@ -272,6 +271,44 @@ func TestSpawnContextIsReleasedWhenTheWorkEnds(t *testing.T) {
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, result.SchemeString(), qt.Equals, tc.want)
 			qt.Assert(t, machine.LiveSpawnContexts(), qt.Equals, before)
+		})
+	}
+}
+
+// TestWorkAThreadStartedOutlivesTheThread pins that a thread T's own end does
+// not end what T started: a thread G parked on m, which the main thread holds,
+// and a child cat. T returns, the main thread joins T, then releases m and joins
+// G, or talks to the child and waits on it. Bare and under a with-timeout alike;
+// under one, releasing T's spawn ctx when T ended used to cancel both, since
+// SpawnContext hands T's children T's own ctx.
+func TestWorkAThreadStartedOutlivesTheThread(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses Unix commands")
+	}
+	const thread = `(define m (make-mutex))
+(mutex-lock! m)
+(define g (make-thread (lambda () (mutex-lock! m) 'g-done)))
+(define p #f)
+(define t (make-thread (lambda () (thread-start! g) (set! p (process-spawn "cat")) 't-done)))`
+	const after = `(thread-start! t) (thread-join! t)
+(mutex-unlock! m)
+(display "ping" (process-stdin p))
+(close-output-port (process-stdin p))
+(list (thread-join! g) (read-line (process-stdout p)) (process-wait p))`
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{"bare", thread + "\n" + after},
+		{"under a with-timeout", thread + "\n(with-timeout 1000 (lambda (k) 'timed-out) (lambda () " + after + "))"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			env := testhelpers.NewFullRuntimeEnv(t)
+			ctx, _ := machine.WithTimersFiringOnCue(context.Background())
+			result, err := testhelpers.RunSchemeCodeWithEnvAndContext(ctx, t, env, `(begin `+tc.code+`)`)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result.SchemeString(), qt.Equals, `(g-done "ping" 0)`)
 		})
 	}
 }

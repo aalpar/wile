@@ -202,26 +202,13 @@ func (p *Thread) StateSymbol() *Symbol {
 // enabling cancellation propagation from the engine/caller while allowing
 // independent termination via thread-terminate!.
 func (p *Thread) Start(parentCtx context.Context) error {
-	return p.StartReleasing(parentCtx, nil)
-}
-
-// StartReleasing is Start that calls release, when non-nil, once the thread
-// has ended (after its cleanup, before Join returns), or before returning when
-// the thread cannot start. A caller that derived parentCtx for this thread
-// alone drops it there.
-func (p *Thread) StartReleasing(parentCtx context.Context, release func()) error {
-	if release == nil {
-		release = func() {}
-	}
 	p.mu.Lock()
 	if p.state != ThreadNew {
 		p.mu.Unlock()
-		release()
 		return werr.ErrThreadAlreadyStarted
 	}
 	if p.RunFunc == nil {
 		p.mu.Unlock()
-		release()
 		return werr.WrapForeignErrorf(werr.ErrInvalidArgument, "thread-start!: no run function set")
 	}
 
@@ -239,7 +226,6 @@ func (p *Thread) StartReleasing(parentCtx context.Context, release func()) error
 			}
 			// Abandon any mutexes still owned after cleanup ran.
 			p.AbandonOwnedMutexes()
-			release()
 		}()
 		defer func() {
 			r := recover()

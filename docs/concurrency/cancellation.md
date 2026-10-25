@@ -141,7 +141,8 @@ which owns the timers, decides it (`supersedingTimerInterrupt`,
   ends its ctx with a cause of its own (`errTimerLeft`, which reads and matches
   as `context.Canceled`), which is how the two are told apart. A thread's ctx
   hides the starter's timers, so a thread it starts derives from it directly,
-  and is released when the thread ends (a child's, when it is reaped). A
+  and outlives the thread, as what it started may (a child's ctx is released
+  when the child is reaped, a thread's only if it cannot start). A
   started thread's root has no synchronous parent, so with no `with-timeout` of
   its own no context on its chain owns a timer. The
   failure is an ordinary condition: a `guard` around the wait can catch it, and a
@@ -450,7 +451,9 @@ this pins unchanged behaviour and passes on the code before the fix). `TestMutex
   `context.DeadlineExceeded`, a host cancel as `context.Canceled`.
   `TestThreadStartedByAThreadEndsWithIt`: a thread a started thread starts ends
   with it. `TestSpawnContextIsReleasedWhenTheWorkEnds`: the spawn ctx is ended
-  when the thread ends, when its start fails, and when the child is reaped.
+  when a thread's start fails and when a child is reaped.
+  `TestWorkAThreadStartedOutlivesTheThread`: a thread's end does not end what
+  it started, with or without a timer.
   `TestChildSpawnedInATimedThunkEndsOnlyByExpiry`: the `process-spawn` half;
   `TestProcessSpawnedInATimedThunkDiesWithTheHostCtx` (`extensions/process`):
   such a child still dies with the host's ctx.

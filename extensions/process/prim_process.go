@@ -233,14 +233,14 @@ func PrimProcessSpawn(mc machine.CallContext) error {
 		return werr.WrapForeignProcessError(err, "process-spawn", command.Value)
 	}
 
-	q := values.NewProcess(
+	q := values.NewSpawnedProcess(
 		command.Value,
 		cmd,
 		values.NewCharacterOutputPortFromWriterWithName(stdinPipe, pipeLabel(command.Value, "stdin")),
 		values.NewCharacterInputPortFromReaderWithName(stdoutPipe, pipeLabel(command.Value, "stdout")),
 		values.NewCharacterInputPortFromReaderWithName(stderrPipe, pipeLabel(command.Value, "stderr")),
+		release,
 	)
-	q.AfterReap = release
 	spawned = true
 	trackSpawnedProcess(mc, q)
 	mc.SetValue(q)

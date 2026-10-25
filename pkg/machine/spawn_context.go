@@ -33,8 +33,10 @@ import (
 // of ctx are kept. With no timer armed, ctx itself is returned.
 //
 // release ends the returned ctx and drops what it registered on the ctxs it
-// watches; call it once the work has ended, or at once if it never started. It
-// may be called more than once.
+// watches. Call it when the work never started, or once nothing can derive from
+// the ctx any more (a reaped child); not when a thread ends, since what the
+// thread started derives from its ctx and outlives it. It may be called more
+// than once.
 //
 // Deriving the work from ctx itself let the finalizer's cancel of a normal
 // return end it with a plain context.Canceled.
