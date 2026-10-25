@@ -136,9 +136,10 @@ func TestNonContinuableSecondaryAcrossContexts(t *testing.T) {
 // reached by a guard miss's re-raise (decided 2026-10-25: match Chez). Before,
 // each row forwarded the handler's value: (2 handler-returned), (outer 99).
 //
-// The re-entry rows use a call/cc guard (R7RS 7.3's shape, catch-all) because
-// Wile's guard escapes with call-with-exit, whose one-shot exit procedure is
-// expired when the re-entered handler's secondary reaches it.
+// The re-entry rows use a call/cc guard (R7RS 7.3's shape, catch-all); the
+// guard row runs the same program through Wile's guard, which escapes with
+// call-with-exit: re-entering the handler re-enters that exit procedure's
+// extent, so it is valid again (it was expired before 2026-10-25, N38).
 // petite agrees on every row.
 func TestNonContinuableReentryAfterGuardExitRaises(t *testing.T) {
 	t.Parallel()
@@ -177,6 +178,19 @@ func TestNonContinuableReentryAfterGuardExitRaises(t *testing.T) {
 		{
 			name: "handler re-entered through eval after the guard exited",
 			src:  strings.Replace(reentry, "REENTER", "(eval '((vector-ref cell 0) 7) (interaction-environment))", 1),
+			want: caughtTwice,
+		},
+		{
+			name: "handler re-entered directly after a Wile guard exited",
+			src: `(define cell (vector #f))
+			      (let ((n 0) (out '()))
+			        (let ((r (guard (o (#t (list 'outer 'non-continuable)))
+			                   (with-exception-handler
+			                     (lambda (e) (call/cc (lambda (k) (vector-set! cell 0 k))) 'handler-returned)
+			                     (lambda () (raise 'boom))))))
+			          (set! n (+ n 1))
+			          (set! out (cons (list n r) out))
+			          (if (= n 1) ((vector-ref cell 0) 7) (reverse out))))`,
 			want: caughtTwice,
 		},
 		{

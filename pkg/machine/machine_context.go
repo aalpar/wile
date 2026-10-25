@@ -98,6 +98,18 @@ type MachineContext struct {
 	// resume rule passes up a continuation a live driver elsewhere owns
 	// (resumePrompt).
 	hostCallRoot bool
+	// nestedRoot is set by MarkNestedRoot: a top-level root an embedder started
+	// while another run of the same engine is live (a host primitive calling
+	// Engine.Eval). Like a host call's root, it may have the calling program's
+	// driver above it on the Go stack, with no link to it (PromptOnAbortPath).
+	nestedRoot bool
+	// rewinding is the chain reinstallSegment is re-entering while its winding
+	// reconcile runs; RewindTo hands it to each before thunk's sub-context as
+	// rewindInto, the thunk's continuation (PromptOnAbortPath). The after thunks
+	// that reconcile runs first continue the driver's own chain, still the one
+	// being left, so they are not given it.
+	rewinding  *rewindTarget
+	rewindInto *rewindTarget
 	// escapeCont is vestigial: it is propagated into sub-contexts and threads but
 	// never consulted. Nothing resumes from it.
 	escapeCont *MachineContinuation
@@ -2212,6 +2224,13 @@ func (p *MachineContext) RunWithEscapeHandling() error {
 func (p *MachineContext) RunHostCall() error {
 	p.hostCallRoot = true
 	return p.RunResumable()
+}
+
+// MarkNestedRoot marks p, a top-level context, as one an embedder started while
+// another run of the same engine is live, so a prompt lookup does not treat it
+// as the program's outermost root (PromptOnAbortPath).
+func (p *MachineContext) MarkNestedRoot() {
+	p.nestedRoot = true
 }
 
 // RunWithinBoundary drives this sub-context like Run, but resolves an

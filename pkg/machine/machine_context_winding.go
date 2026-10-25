@@ -139,6 +139,7 @@ func (p *MachineContext) RewindTo(target WindingStack, commonDepth int) error {
 		frame := target[i]
 		if frame.Before != nil {
 			sub := p.NewSubContext()
+			sub.rewindInto = p.rewinding
 			// Run the before thunk in the dynamic-wind's entry mark environment (R7RS
 			// §6.10) on re-entry, mirroring the after thunk in unwindStackTo.
 			sub.capturedMarks = frame.entryMarks

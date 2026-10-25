@@ -257,6 +257,97 @@ func (p *MachineContext) PromptOwner(tag *PromptTag) *MachineContext {
 	return nil
 }
 
+// PromptOnAbortPath reports whether an abort to tag raised on p would find its
+// prompt live: whether some context from p up its parentMC links holds the tag
+// on its chain or boundary, in the continuation of the code running on p. It
+// follows the path the abort itself takes, each driver returning what it cannot
+// resolve to the context that ran it, so unlike PromptOwner it does not stop at
+// a dynamic-wind thunk's sub-context: the unwinder that ran the thunk is the
+// next driver.
+//
+// A thunk a jump runs does not continue the whole of that driver's chain, only
+// the part outside its dynamic-wind (R7RS 6.10: the thunk runs in the dynamic
+// extent of the dynamic-wind call). Past a context that does not cross to its
+// parent (crossesToParent), a frame counts only if it was entered outside the
+// extents live there: its recorded winding is a prefix of that context's. An
+// after thunk continues the chain being left, which the driver still holds. A
+// before thunk a resume's rewind runs continues the chain being entered
+// (rewindInto), which the driver does not hold yet: a frame found there counts
+// only when the driver's chain holds the tag too, since that is where the abort
+// is routed; one only the entered chain holds is reported not found.
+//
+// opaque is true when the walk ends at a root whose caller it holds no link to,
+// so the answer past it is unknown: an expansion-time root, which passes an
+// abort up by error return to that caller's driver (passUpAbort), a host call's
+// root (hostCallRoot), or a nested engine run's root (nestedRoot), whose host
+// program runs above it on the Go stack.
+func (p *MachineContext) PromptOnAbortPath(tag *PromptTag) (found bool, opaque bool) {
+	var limit WindingStack
+	limited := false
+	mc, top := p, p.cont
+	for {
+		frame, ok := findPromptFrame(top, tag)
+		if ok || mc.promptTag == tag {
+			return !limited || frame == nil || windingIsPrefix(frame.windingStack, limit), false
+		}
+		if mc.hostCallRoot || mc.nestedRoot {
+			// A host call's parentMC is Engine.Call's throwaway root, not the
+			// host's caller; a nested run's root has none.
+			return false, true
+		}
+		if !mc.crossesToParent() && (!limited || len(mc.windingStack) < len(limit)) {
+			limit = mc.windingStack
+			limited = true
+		}
+		if mc.parentMC == nil {
+			return false, mc.expansionRoot
+		}
+		next := mc.parentMC
+		top = next.cont
+		if mc.rewindInto != nil {
+			frame, ok = findPromptFrame(mc.rewindInto.segment, tag)
+			if ok {
+				_, routed := next.FindPrompt(tag)
+				return routed && (!limited || windingIsPrefix(frame.windingStack, limit)), false
+			}
+			top = mc.rewindInto.prompt
+		}
+		mc = next
+	}
+}
+
+// findPromptFrame is FindPrompt's frame walk from top: the nearest frame tagged
+// tag on the chain top heads.
+func findPromptFrame(top *MachineContinuation, tag *PromptTag) (*MachineContinuation, bool) {
+	for frame := top; frame != nil; frame = frame.parent {
+		if frame.promptTag == tag {
+			return frame, true
+		}
+	}
+	return nil, false
+}
+
+// windingIsPrefix reports whether a is a prefix of b, by frame identity.
+func windingIsPrefix(a, b WindingStack) bool {
+	if len(a) > len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].ID != b[i].ID {
+			return false
+		}
+	}
+	return true
+}
+
+// rewindTarget is the chain a resume's rewind is re-entering: the captured
+// segment, ungrafted while the before thunks run, over prompt (nil: the segment
+// alone, at the driver's own boundary). See PromptOnAbortPath.
+type rewindTarget struct {
+	segment *MachineContinuation
+	prompt  *MachineContinuation
+}
+
 // crossesToParent reports whether parentMC continues the continuation running on
 // p, for the prompt and mark-set walks: always, unless p is isolated
 // (isolatedMarks) without outerIntact.

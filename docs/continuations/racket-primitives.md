@@ -724,7 +724,7 @@ and `extensions/eval/`. Derived Scheme forms are in `(wile control)`.
 |-----------|---------|------|
 | `call-with-current-continuation` (`call/cc`) | Capture full (undelimited) continuation | Yes |
 | `call-with-composable-continuation` (`call/comp`) | Capture delimited composable continuation (up to nearest prompt) | Yes (tag required; no `call/comp` alias) |
-| `call-with-escape-continuation` (`call/ec`) | Capture escape-only (one-shot, up-stack) continuation | `call-with-exit`; both Racket names via `(wile control)` |
+| `call-with-escape-continuation` (`call/ec`) | Capture escape-only (up-stack) continuation, valid while its extent is live | `call-with-exit`; both Racket names via `(wile control)` |
 | `call-with-continuation-prompt` | Install a prompt delimiter | Yes |
 | `abort-current-continuation` | Abort to nearest prompt with matching tag | Yes |
 | `call-in-continuation` | Call proc with a given continuation as its continuation | No (Tier 3) |

@@ -1588,8 +1588,18 @@ func (p *Engine) compileExpr(ctx context.Context, stx syntax.SyntaxValue) (*Comp
 // sets the max call depth and stack size, attaches the debugger if present, and collects performance counters.
 // The CompiledCode's environment is used as the runtime environment for execution.
 func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, error) {
+	// A run whose ctx descends from one of this engine's runs (a host primitive
+	// passing mc.Context() to Eval) is nested in it: its root has the calling
+	// program's driver above it on the Go stack (machine.MarkNestedRoot). Read
+	// from the call's own ctx, not an engine-wide count, so another goroutine's
+	// run does not make this one nested.
+	nested := ctx.Value(engineRunKey{}) == p
+	ctx = context.WithValue(ctx, engineRunKey{}, p)
 	mc := machine.AcquireTopLevelContext(ctx, cc.template, cc.env)
 	defer machine.ReleaseTopLevelContext(mc)
+	if nested {
+		mc.MarkNestedRoot()
+	}
 	mc.SetMaxCallDepth(p.maxCallDepth)
 	mc.SetMaxStackSize(p.maxStackSize)
 	if p.debugger != nil {
@@ -1611,6 +1621,9 @@ func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, erro
 	}
 	return wrapValue(val), nil
 }
+
+// engineRunKey is the ctx key runCompiled stores its engine under.
+type engineRunKey struct{}
 
 // cancelledAtEnd is the end-of-run ctx check: the cancellation of a run that
 // finished normally although ctx ended while it ran, nil while ctx is live.

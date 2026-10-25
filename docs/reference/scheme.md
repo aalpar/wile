@@ -1193,7 +1193,7 @@ two independent reads of a lock-free table need not agree.
 
 | Procedure | Description |
 |-----------|-------------|
-| `(call-with-exit proc)` | One-shot escape continuation |
+| `(call-with-exit proc)` | Escape continuation, valid while its extent is live |
 | `(call-with-continuation-barrier thunk)` | Prevent continuation re-entry |
 
 ### Exception Handling

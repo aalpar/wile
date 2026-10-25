@@ -56,7 +56,7 @@
  ("call-with-continuation-barrier" "any" ("procedure") "github.com/aalpar/wile/pkg/registry/core.PrimCallWithContinuationBarrier" "pkg/registry/core/prim_barrier.go:39")
  ("call-with-continuation-prompt" "any" ("procedure" "any" "procedure") "github.com/aalpar/wile/pkg/registry/core.PrimCallWithContinuationPrompt" "pkg/registry/core/prim_prompt.go:68")
  ("call-with-current-continuation" "any" ("procedure") "github.com/aalpar/wile/pkg/registry/core.PrimCallCC" "pkg/registry/core/prim_control.go:154")
- ("call-with-exit" "any" ("procedure") "github.com/aalpar/wile/pkg/registry/core.PrimCallWithExit" "pkg/registry/core/prim_exit.go:39")
+ ("call-with-exit" "any" ("procedure") "github.com/aalpar/wile/pkg/registry/core.PrimCallWithExit" "pkg/registry/core/prim_exit.go:43")
  ("call-with-immediate-continuation-mark" "any" ("any" "procedure" "...any") "github.com/aalpar/wile/pkg/registry/core.PrimCallWithImmediateContMark" "pkg/registry/core/prim_cont_marks.go:291")
  ("call-with-input-file" "any" ("string" "procedure") "github.com/aalpar/wile/extensions/files.PrimCallWithInputFile" "extensions/files/prim_files.go:284")
  ("call-with-output-file" "any" ("string" "procedure") "github.com/aalpar/wile/extensions/files.PrimCallWithOutputFile" "extensions/files/prim_files.go:296")

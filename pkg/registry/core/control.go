@@ -47,7 +47,7 @@ func addControl(r *registry.PrimitiveRegistry) error {
 			Keywords: []string{"continuation", "escape", "non-local exit"}},
 		// dynamic-wind is now a compiled form, not a primitive (see machine/compile_validated.go)
 		{Name: "call-with-exit", InvokesProcedure: true, ParamCount: 1, Impl: PrimCallWithExit,
-			Doc: "Calls PROC with a lightweight one-shot escape procedure. The escape is only valid during the dynamic extent of the call.\n\nExamples:\n  (call-with-exit (lambda (exit) (exit 42) 99))  => 42", ParamNames: []string{"proc"}, Category: "control",
+			Doc: "Calls PROC with a lightweight escape procedure, valid while its extent is live: while the call is on the current continuation, including after a continuation re-enters it.\n\nExamples:\n  (call-with-exit (lambda (exit) (exit 42) 99))  => 42", ParamNames: []string{"proc"}, Category: "control",
 			ParamTypes: []values.TypeConstraint{values.TypeProcedure}, ReturnType: values.TypeAny},
 		{Name: "call-with-continuation-barrier", InvokesProcedure: true, ParamCount: 1, Impl: PrimCallWithContinuationBarrier,
 			Doc: "Calls THUNK with a continuation barrier. Continuations cannot cross the barrier boundary in either direction.\n\nExamples:\n  (call-with-continuation-barrier (lambda () 42))  => 42", ParamNames: []string{"thunk"}, Category: "control",

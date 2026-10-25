@@ -576,7 +576,18 @@ func (p *MachineContext) reinstallSegment(
 	// stack as an absolute target unwound the invoker's own extents, and a
 	// with-timeout's among them, on every re-entry.
 	target := composeWinding(outside, comp.windingStack, shared)
+	// The before thunks continue the chain being entered (rewinding) only when
+	// it is whole: delimited at a frame on this chain, or at this context's own
+	// boundary. A segment delimited at a sub-context's boundary that is gone (a
+	// capture inside eval resumed here) holds only its part of the program, so
+	// they keep the driver's chain, as before.
+	outer := p.rewinding
+	p.rewinding = nil
+	if prompt != nil || (comp.boundary != nil && comp.boundary == p.boundary) {
+		p.rewinding = &rewindTarget{segment: segment, prompt: prompt}
+	}
 	err := p.RestoreWithWindingFrom(nil, srcWinding, target)
+	p.rewinding = outer
 	if err != nil {
 		return false, err
 	}
