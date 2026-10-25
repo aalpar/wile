@@ -325,6 +325,8 @@ func TestDivision(t *testing.T) {
 		{Name: "divide single integer returns reciprocal", Code: `(/ 5)`, Expected: values.NewRational(1, 5)},
 		{Name: "divide single integer 1 returns integer", Code: `(/ 1)`, Expected: values.NewInteger(1)},
 		{Name: "divide integers non-evenly returns rational", Code: `(/ 1 2)`, Expected: values.NewRational(1, 2)},
+		// MinInt64 / -1 is +2^63, one past int64: it must promote, not wrap back to MinInt64.
+		{Name: "divide MinInt64 by -1 promotes", Code: `(/ -9223372036854775808 -1)`, Expected: values.NewBigIntegerFromString("9223372036854775808", 10)},
 		{Name: "divide integers auto-simplifies rational", Code: `(/ 10 4)`, Expected: values.NewRational(5, 2)},
 		{Name: "divide integers evenly returns integer", Code: `(/ 6 3)`, Expected: values.NewInteger(2)},
 
