@@ -16,12 +16,16 @@ package machine_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/registry/testhelpers"
+	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/values/valuestest"
+	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -199,4 +203,85 @@ func TestResumedTimerInsideNonContinuableHandlerStillEscalates(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestTimerClaimsErrorsOwnArgumentFailureBelowIt pins that error's own argument
+// failure, a non-string message, is claimed by a with-timeout that fired above
+// it, as car's failure is: inside eval, after a primitive that outlived the timer
+// (fire!), the guard inside eval does not see it and the timeout handler answers.
+// error raised that condition in place, so the guard caught it. A well-formed
+// error is the program's own raise and still reaches the guard (the timeout
+// answers once eval returns); the row without fire! shows the guard's flag is a
+// live witness.
+func TestTimerClaimsErrorsOwnArgumentFailureBelowIt(t *testing.T) {
+	tcs := []struct {
+		name   string
+		body   string
+		want   string
+		caught bool
+	}{
+		{name: "error with a non-string message", body: `(fire!) (error 5)`, want: "timed-out"},
+		{name: "car of a non-pair, the control", body: `(fire!) (car 5)`, want: "timed-out"},
+		{name: "a well-formed error is the program's raise", body: `(fire!) (error "boom" 5)`, want: "timed-out", caught: true},
+		{name: "no timer fired", body: `(error 5)`, want: "caught", caught: true},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			env := testhelpers.NewFullRuntimeEnv(t)
+			ctx, fire := machine.WithTimerFiringOnCue(context.Background())
+			_, err := env.DefineOwnGlobal(values.NewSymbol("fire!"), environment.BindingTypeVariable, syntax.Scopes{},
+				machine.NewForeignClosure(env, 0, false, func(cc machine.CallContext) error {
+					fire()
+					cc.SetValue(values.Void)
+					return nil
+				}))
+			qt.Assert(t, err, qt.IsNil)
+			result, err := testhelpers.RunSchemeCodeWithEnvAndContext(ctx, t, env, `(begin
+  (define caught (vector #f))
+  (list (with-timeout 1000 (lambda (k) 'timed-out)
+          (lambda ()
+            (eval '(guard (e (#t (vector-set! caught 0 #t) 'caught)) `+tc.body+`)
+                  (interaction-environment))))
+        (vector-ref caught 0)))`)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals,
+				values.List(values.NewSymbol(tc.want), values.BoolToBoolean(tc.caught)))
+		})
+	}
+
+	t.Run("uncaught, it keeps its sentinel", func(t *testing.T) {
+		_, err := testhelpers.RunSchemeCode(t, `(error 5)`)
+		qt.Assert(t, errors.Is(err, werr.ErrNotAString), qt.IsTrue)
+	})
+}
+
+// TestTimerHandlerAfterAnEscapeSeesTheOuterParameterize pins that a with-timeout
+// handler run because a wait in an escape's after thunk was cancelled sees the
+// parameterization outside the escaping continuation, not the one around its
+// capture: the escape reinstates k0, whose capture-time snapshot held the
+// parameterize around the call/cc, and the handler, below the reinstated frames,
+// read it ((handler esc)).
+func TestTimerHandlerAfterAnEscapeSeesTheOuterParameterize(t *testing.T) {
+	env := testhelpers.NewFullRuntimeEnv(t)
+	ctx, fire := machine.WithTimerFiringOnCue(context.Background())
+	_, err := env.DefineOwnGlobal(values.NewSymbol("fire!"), environment.BindingTypeVariable, syntax.Scopes{},
+		machine.NewForeignClosure(env, 0, false, func(cc machine.CallContext) error {
+			fire()
+			cc.SetValue(values.Void)
+			return nil
+		}))
+	qt.Assert(t, err, qt.IsNil)
+	result, err := testhelpers.RunSchemeCodeWithEnvAndContext(ctx, t, env, `(begin
+  (define p (make-parameter 'outer))
+  (define m (make-mutex))
+  (mutex-lock! m)
+  (with-timeout 1000 (lambda (k) (list 'handler (p)))
+    (lambda ()
+      (parameterize ((p 'esc))
+        (call/cc (lambda (k0)
+          (dynamic-wind (lambda () #f)
+                        (lambda () (k0 'escaped))
+                        (lambda () (fire!) (mutex-lock! m)))))))))`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, result, valuestest.SchemeEquals, values.List(values.NewSymbol("handler"), values.NewSymbol("outer")))
 }

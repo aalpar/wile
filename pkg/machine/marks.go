@@ -53,7 +53,7 @@ func lookupMark(ms []markEntry, key values.Value) values.Value {
 //     off parentMC so the invoker's marks do not bleed into a resumed call/cc
 //     continuation, but that continuation's own marks from ABOVE the sub-context
 //     boundary it was captured behind must still resolve; the snapshot
-//     (collectReachableMarks / SnapshotReachableMarksInto) carries them.
+//     (collectMarksOutsideSegment / SnapshotReachableMarksInto) carries them.
 //  4. otherwise hop to parentMC and repeat, mirroring how dynamic-wind extents
 //     are inherited by NewSubContext. Without the hop an outer parameterize would
 //     be invisible inside the sub-contexts created by

@@ -305,7 +305,7 @@ func TestSnapshotReachableMarksInto_LiveMarksAreAClone(t *testing.T) {
 	mc.SetMark(key, values.NewInteger(1))
 
 	comp := &ComposableContinuation{}
-	mc.SnapshotReachableMarksInto(comp)
+	mc.SnapshotReachableMarksInto(comp, nil)
 	mc.SetMark(key, values.NewInteger(2))
 
 	c.Assert(CollectMarksFromCapture(comp, DefaultPromptTag).ToList(key).SchemeString(), qt.Equals, "(1)")

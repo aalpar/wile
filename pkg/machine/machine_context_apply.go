@@ -434,17 +434,8 @@ func (p *MachineContext) findParameterInMarks(param *Parameter) values.Value {
 }
 
 // collectReachableMarks snapshots the parameter/handler mark environment
-// reachable from p, one entry per key with the nearest value winning, so a call/cc
-// continuation captured here can restore it on resume. It is consulted at the
-// isolatedMarks stop of forEachReachableMarkFrame, because
-// applyCapturedContinuation sets isolatedMarks and cuts the parentMC walk on resume.
-//
-// Including p's own live marks is correct and future-proof: today a producer-level
-// mark is unobservable on resume anyway (re-invoking a call-with-values producer
-// truncates — the value-facet limitation tracked in the open-problem plan), but once
-// that is fixed those marks must resolve. (Redundancy with marks the segment does
-// carry, on p.cont frames, is harmless: the restored chain is walked before the
-// snapshot, so the segment shadows it.)
+// reachable from p, one entry per key with the nearest value winning: a
+// dynamic-wind frame's entry mark environment (frame.entryMarks).
 func (p *MachineContext) collectReachableMarks() []markEntry {
 	var q []markEntry
 	p.forEachReachableMarkFrame(func(frame []markEntry) bool {
@@ -458,12 +449,58 @@ func (p *MachineContext) collectReachableMarks() []markEntry {
 	return q
 }
 
-// SnapshotReachableMarksInto attaches p's capture-time reachable marks to comp, so
-// resuming comp restores the outer parameter/handler environment, and keeps the
-// capturing activation's own live marks for (continuation-marks k). Called at call/cc
+// collectMarksOutsideSegment snapshots the parameter/handler mark environment a
+// call/cc continuation captured here, delimited at prompt (nil: this context's
+// boundary), inherits from outside its own frames: one entry per key, nearest
+// value winning, in forEachReachableMarkFrame's order. It is consulted at the
+// isolatedMarks stop of forEachReachableMarkFrame, because a call/cc resume sets
+// isolatedMarks and cuts the parentMC walk.
+//
+// The segment's own marks are left out: p's live marks and those of the chain
+// frames above prompt. The reinstated frames carry theirs (a frame saves the live
+// marks it was pushed under), and the live marks belong to the activation the
+// value is delivered past. In the snapshot they outlived their extent: it is
+// consulted after the reinstated frames have returned, for the rest of the
+// context's run, so a parameterize around the capture stayed in force after the
+// resumed parameterize returned.
+func (p *MachineContext) collectMarksOutsideSegment(prompt *MachineContinuation) []markEntry {
+	var q []markEntry
+	add := func(frame []markEntry) {
+		for _, e := range frame {
+			if markIndex(q, e.key) < 0 {
+				q = append(q, e)
+			}
+		}
+	}
+	inSegment := true
+	for mc := p; mc != nil; mc = mc.parentMC {
+		if mc != p {
+			add(mc.marks)
+		}
+		for c := mc.cont; c != nil; c = c.parent {
+			if c == prompt {
+				inSegment = false
+			}
+			if mc == p && inSegment {
+				continue
+			}
+			add(c.marks)
+		}
+		if mc.isolatedMarks {
+			add(mc.capturedMarks)
+			return q
+		}
+	}
+	return q
+}
+
+// SnapshotReachableMarksInto attaches to comp, a call/cc continuation delimited
+// at prompt, the marks it inherits from outside its frames, so resuming comp
+// restores the outer parameter/handler environment, and keeps the capturing
+// activation's own live marks for (continuation-marks k). Called at call/cc
 // capture sites (PrimCallCC).
-func (p *MachineContext) SnapshotReachableMarksInto(comp *ComposableContinuation) {
-	comp.capturedMarks = p.collectReachableMarks()
+func (p *MachineContext) SnapshotReachableMarksInto(comp *ComposableContinuation, prompt *MachineContinuation) {
+	comp.capturedMarks = p.collectMarksOutsideSegment(prompt)
 	p.RecordLiveMarksInto(comp)
 }
 

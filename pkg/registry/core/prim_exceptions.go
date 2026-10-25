@@ -75,8 +75,10 @@ func PrimError(cc machine.CallContext) error {
 		// offending value rides as an irritant (dispatchable via error-object-irritants)
 		// and the sentinel stays the wrapped cause (errors.Is still matches). %T would
 		// keep only the Go type. See CODING_STYLE.md "Error Message Pattern".
-		return machine.RaiseInPlace(mc,
-			values.NewErrorObjectWithCause("error: message must be a string", werr.ErrNotAString, message), false)
+		// Returned, not raised in place: it is error's own argument failure, like
+		// car's, so the foreign-call bridge raises it unless a fired with-timeout
+		// claims it (ConditionFromError passes a *NativeError through as is).
+		return values.NewErrorObjectWithCause("error: message must be a string", werr.ErrNotAString, message)
 	}
 
 	// Copy irritants out of the variadic rest-arg buffer (restArgBuf) into a fresh

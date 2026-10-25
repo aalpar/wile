@@ -19,7 +19,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"testing/fstest"
 
+	"github.com/aalpar/wile/pkg/stdlib"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
@@ -390,6 +392,171 @@ func TestEngineCallIsNotAPrompt(t *testing.T) {
 				qt.Assert(t, got.SchemeString(), qt.Equals, tc.want)
 			})
 		}
+	}
+}
+
+// TestEngineCallRaiseIsCatchableByTheCaller pins that a raise a procedure run
+// through Engine.Call leaves uncaught is raised in the calling program's
+// handlers when the host returns Call's error. The call's root holds none of
+// those handlers, so its uncaught raise is uncaught only on that root; before,
+// it ended the evaluation past every guard, while the func-typed callback, which
+// runs a linked sub-context, was caught. The table rows run through both hosts
+// and answer the same; the subtests after it are where the hosts differ or only
+// host-call applies.
+func TestEngineCallRaiseIsCatchableByTheCaller(t *testing.T) {
+	t.Parallel()
+
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{
+			name: "raise",
+			code: `(guard (e (#t (list 'caught e))) (HOST (lambda (_) (raise 'boom))))`,
+			want: "(caught boom)",
+		},
+		{
+			name: "error",
+			code: `(guard (e (#t (list 'caught (error-object? e) (error-object-message e)))) (HOST (lambda (_) (error "boom"))))`,
+			want: `(caught #t "boom")`,
+		},
+		{
+			name: "a primitive's failure",
+			code: `(guard (e (#t (list 'caught (error-object? e)))) (HOST (lambda (_) (car 5))))`,
+			want: "(caught #t)",
+		},
+		{
+			name: "a handler returning from a non-continuable raise",
+			code: `(guard (e (#t (list 'caught (error-object? e))))
+			        (HOST (lambda (_) (with-exception-handler (lambda (c) 1) (lambda () (raise 'boom))))))`,
+			want: "(caught #t)",
+		},
+		{
+			name: "a handler around the host call",
+			code: `(call/cc (lambda (out)
+			        (with-exception-handler (lambda (e) (out (list 'handled e)))
+			          (lambda () (HOST (lambda (_) (raise 'boom)))))))`,
+			want: "(handled boom)",
+		},
+		{
+			name: "a guard inside an outer host call",
+			code: `(HOST (lambda (_) (guard (e ((eq? e 'boom) 7)) (HOST (lambda (_) (raise 'boom))))))`,
+			want: "7",
+		},
+		{
+			// The inner call's bridge finds no handler on the outer call's root and
+			// settles nothing there: the outer call's own mark carries the raise on
+			// to the program's guard, whose handler runs once.
+			name: "nested host calls reach the program's guard once",
+			code: `(let ((n 0))
+			        (list (guard (e (#t (set! n (+ n 1)) (list 'caught e)))
+			                (HOST (lambda (_) (HOST (lambda (_) (raise 'boom))))))
+			              n))`,
+			want: "((caught boom) 1)",
+		},
+	}
+	for _, tc := range tcs {
+		for _, host := range []string{"host-call", "host-call-func"} {
+			t.Run(tc.name+"/"+host, func(t *testing.T) {
+				t.Parallel()
+				engine := newHostCallEngine(t)
+				code := strings.ReplaceAll(tc.code, "HOST", host)
+				got, err := engine.EvalMultiple(context.Background(), code)
+				qt.Assert(t, err, qt.IsNil)
+				qt.Assert(t, got.SchemeString(), qt.Equals, tc.want)
+			})
+		}
+	}
+
+	// A foreign callable raises while Call applies it, before the call's run
+	// starts; that raise escapes the same root. The func-typed callback refuses a
+	// primitive, so this is host-call only.
+	t.Run("a primitive applied by the call raises/host-call", func(t *testing.T) {
+		t.Parallel()
+		engine := newHostCallEngine(t)
+		got, err := engine.EvalMultiple(context.Background(), `(guard (e (#t (list 'caught e))) (host-call raise))`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, got.SchemeString(), qt.Equals, "(caught 0)")
+	})
+
+	// raise-continuable is where the hosts differ. The func-typed callback's
+	// sub-context is linked to the caller, so the handler returns into the
+	// callback (43). Through host-call the Call has ended by the time the
+	// condition reaches the caller's handlers, so there is no continuation to
+	// return to: it is raised non-continuable, and the handler's return is the
+	// R7RS 6.11 secondary error.
+	for _, tc := range []struct {
+		host string
+		want string
+	}{
+		{"host-call-func", "43"},
+		{"host-call", "(secondary #t)"},
+	} {
+		t.Run("raise-continuable/"+tc.host, func(t *testing.T) {
+			t.Parallel()
+			engine := newHostCallEngine(t)
+			got, err := engine.EvalMultiple(context.Background(), `(guard (e ((error-object? e) (list 'secondary #t)))
+			  (with-exception-handler (lambda (c) 42)
+			    (lambda () (+ 1 (`+tc.host+` (lambda (_) (raise-continuable 'c)))))))`)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+
+	t.Run("uncaught, it still reaches the embedder as a Scheme exception", func(t *testing.T) {
+		t.Parallel()
+		engine := newHostCallEngine(t)
+		_, err := engine.EvalMultiple(context.Background(), `(host-call (lambda (_) (raise 'boom)))`)
+		qt.Assert(t, err, qt.IsNotNil)
+		var re *wile.RuntimeError
+		qt.Assert(t, errors.As(err, &re), qt.IsTrue)
+		qt.Assert(t, re.IsSchemeException(), qt.IsTrue)
+		qt.Assert(t, re.Condition.SchemeString(), qt.Equals, "boom")
+	})
+}
+
+// TestEngineEvalMultipleRaiseIsCatchableByTheCaller pins that a host which runs
+// code through Engine.EvalMultiple and returns its error hands the program a
+// catchable raise, whether the raise came from instantiating a library at expand
+// time (import) or at run time (environment). The run's root holds none of the
+// program's handlers, as Engine.Call's does not. Before, the import was caught
+// (its error kept the expansion root's mark) and the environment one ended the
+// evaluation (the run's bridge, with no handler, had settled its mark).
+func TestEngineEvalMultipleRaiseIsCatchableByTheCaller(t *testing.T) {
+	t.Parallel()
+
+	libFS := fstest.MapFS{
+		"boomlib.sld": {Data: []byte(`(define-library (boomlib) (export x) (import (scheme base))
+		  (begin (define x 1) (raise 'libboom)))`)},
+	}
+	for _, src := range []string{`(import (boomlib))`, `(environment '(boomlib))`, `(raise 'boom)`} {
+		t.Run(src, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			engine, err := wile.NewEngine(ctx,
+				wile.WithProfile(wile.KitchenSink),
+				wile.WithSourceFS(stdlib.FS),
+				wile.WithSourceFS(libFS),
+				wile.WithLibraryPaths("."),
+			)
+			qt.Assert(t, err, qt.IsNil)
+			err = engine.RegisterPrimitive(wile.PrimitiveSpec{
+				Name: "host-eval",
+				Impl: func(mc wile.CallContext) error {
+					v, evalErr := engine.EvalMultiple(mc.Context(), src)
+					if evalErr != nil {
+						return evalErr
+					}
+					mc.SetValue(v.Internal())
+					return nil
+				},
+			})
+			qt.Assert(t, err, qt.IsNil)
+			got, err := engine.EvalMultiple(ctx, `(guard (e ((symbol? e) (list 'caught e))) (host-eval))`)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got.SchemeString(), qt.Matches, `\(caught (lib)?boom\)`)
+		})
 	}
 }
 

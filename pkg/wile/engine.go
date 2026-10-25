@@ -880,6 +880,10 @@ func (p *Engine) EvalIn(ctx context.Context, expr *Expression, ns *environment.N
 
 // EvalMultiple evaluates multiple expressions, returning the last result.
 //
+// Called from a host function, a raise the code leaves uncaught is uncaught only
+// inside this run: a host that returns the error has the condition raised in the
+// calling program's handlers, as for Call.
+//
 // A run whose ctx ended while it ran returns the cancellation
 // (werr.ErrOperationCancelled), even one that finished just before the ctx
 // ended: its value is discarded.
@@ -1124,6 +1128,10 @@ func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
 // Call and invoked from a later one is resumed by the later Call (a host-driven
 // generator).
 //
+// Likewise a raise proc leaves uncaught is uncaught only inside the call: a host
+// function that returns the error has the condition raised in the calling
+// program's handlers, so a guard around the host call catches it.
+//
 // A run whose ctx ended while it ran returns the cancellation
 // (werr.ErrOperationCancelled), even one that finished just before the ctx
 // ended: its value is discarded.
@@ -1174,9 +1182,11 @@ func (p *Engine) callCallable(ctx context.Context, callable values.Callable, arg
 	sub := mc.NewSubContext()
 	defer machine.ReleaseTopLevelContext(mc)
 	defer machine.ReleaseSubContext(sub)
+	// A foreign callable runs here, before RunHostCall: its raise escapes the
+	// same root, so it is marked the same way.
 	_, err := sub.ApplyCallable(callable, args...)
 	if err != nil {
-		return nil, p.wrapRuntimeError(err)
+		return nil, p.wrapRuntimeError(markEngineRootEscape(ctx, err))
 	}
 
 	// Run the VM loop; escape continuations are caught and converted, and a
@@ -1186,9 +1196,24 @@ func (p *Engine) callCallable(ctx context.Context, callable values.Callable, arg
 		err = cancelledAtEnd(ctx, sub)
 	}
 	if err != nil {
-		return nil, p.wrapRuntimeError(err)
+		return nil, p.wrapRuntimeError(markEngineRootEscape(ctx, err))
 	}
 	return wrapValue(sub.GetValue()), nil
+}
+
+// markEngineRootEscape marks an uncaught raise out of an engine run's root (a
+// Call's, or a top-level run's) as uncaught on that root only. A host function
+// may be what started the run, synchronously, and the root holds none of the
+// calling program's handlers, so a host that returns the error has its condition
+// raised in the program's handlers by the foreign-call bridge, as when the host
+// fails on its own. For an embedder the mark is invisible: errors.As still finds
+// the *machine.ErrExceptionEscape. A cancellation is the ctx ending and stays
+// uncaught everywhere.
+func markEngineRootEscape(ctx context.Context, err error) error {
+	if machine.CancelledBy(ctx, err) {
+		return err
+	}
+	return machine.MarkUnlinkedRootEscape(err)
 }
 
 // callParameter handles Parameter invocation from Go: zero args returns the
@@ -1577,7 +1602,7 @@ func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, erro
 		err = cancelledAtEnd(ctx, mc)
 	}
 	if err != nil {
-		return nil, p.wrapRuntimeError(err)
+		return nil, p.wrapRuntimeError(markEngineRootEscape(ctx, err))
 	}
 	return wrapValue(val), nil
 }
