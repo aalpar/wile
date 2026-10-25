@@ -258,6 +258,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   top level, a lambda body or a macro argument reaching the shadow still reads
   the form; inside a library it reads the shadow, as `if` already did.
 
+- **A handler's return from a non-continuable `raise` raises the secondary
+  exception on every route.** A `guard` whose clauses missed re-raised to an
+  outer handler, and that handler's value became the `guard`'s:
+  `(with-exception-handler (lambda (e) (list 'outer e)) (lambda () (guard (x
+  ((string? x) 'str)) (raise 99))))` answered `(outer 99)`, and
+  `(with-exception-handler (lambda (e) 42) (lambda () (+ 1 (guard (e (#f 0))
+  (raise 'x)))))` answered `43`. A continuation captured in the handler and
+  re-entered after the `guard` exited also returned the handler's value. Each
+  now raises the R7RS 6.11 secondary in the handler's dynamic environment, as
+  Chez does.
 - **A non-continuable `raise` raises its secondary exception when the handler
   invokes a continuation through `eval`.** A continuation captured inside the
   handler and invoked through `eval` (or a composable one, or from a macro
@@ -266,8 +276,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `(list 'a (error "boom") 'b)` answered `(a 42 b)`. The same jump taken
   directly raised, as Chez does on both. A `dynamic-wind` after thunk that runs
   while the handler escapes, and invokes the handler's continuation, now raises
-  too (Chez agrees); the same re-entry after the escape has landed still
-  forwards.
+  too (Chez agrees).
 - **A `with-timeout` that fires while a non-continuable `raise`'s handler runs
   no longer turns the handler's return into the value of the `raise` when the
   timeout handler resumes.** The timer's suspension drops the handler's frame

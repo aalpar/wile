@@ -2566,17 +2566,11 @@ func (p *MachineContext) passUpResume(resumeErr *ErrResumeContinuation) error {
 // may itself be an expansion-time root (a transformer that ran eval on its own
 // context): then its winding is right for leaving its own extents, and if it
 // passes the resume on, passUpResume marks it again for the driver above.
-//
-// The escalator revivals are filtered again here for the same reason: the root
-// has no parentMC, so a handler that reached the transformer through eval keeps
-// its finalizer frame on a chain the (k v) site could not see, and this driver's
-// walk can. Filtering only removes arms, so a set already right stays right.
 func (p *MachineContext) rebasePassedUpResume(resumeErr *ErrResumeContinuation) {
 	if !resumeErr.rebaseWinding {
 		return
 	}
 	resumeErr.SourceWinding = p.windingStack.Copy()
-	resumeErr.escalatorRevivals = pendingEscalatorRevivals(resumeErr.escalatorRevivals, p)
 	resumeErr.rebaseWinding = false
 }
 
@@ -2648,14 +2642,10 @@ func (p *MachineContext) resolveResume(resumeErr *ErrResumeContinuation, prompt 
 	// isolate=true: this signal is emitted only for call/cc resume, which restores
 	// the captured mark snapshot (composable resume composes marks and bypasses
 	// this signal — it calls reinstallSegment directly).
-	//
-	// The escalator revivals ride the signal rather than being computed here:
-	// p.cont is THIS driver's chain, and the (k v) site may have been a
-	// sub-context whose frames this chain never held (see escalatorRevivals).
 	p.outerIntact = prompt == nil && seg != nil && seg.boundary != nil && seg.boundary == p.boundary
 	wasEmpty, err := p.reinstallSegment(
 		resumeErr.Segment, prompt, resumeErr.SourceWinding, p.windingOutside(prompt),
-		resumeErr.Values, true, resumeErr.escalatorRevivals)
+		resumeErr.Values, true)
 	if err != nil {
 		return false, err
 	}

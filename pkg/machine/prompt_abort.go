@@ -66,20 +66,6 @@ type ErrResumeContinuation struct {
 	// resume up, when it is nil and rebaseWinding is set (passUpResume), and the
 	// next driver replaces it with its own (rebasePassedUpResume).
 	SourceWinding WindingStack
-	// escalatorRevivals is the non-continuable escalator arms this resume re-enters
-	// from OUTSIDE their finalizer frame's extent, decided at the (k v) site against
-	// that context's chain and the chains up its parentMC walk. The signal
-	// trampolines to the owning driver, whose own chain never held the frames of the
-	// sub-context a raise may have been handled in (a dynamic-wind thunk, a parameter
-	// converter), so asking the driver's chain there reads "absent" for an arm that
-	// is in fact still live. State of the invocation site, not of the driver; an
-	// expansion-time root has no parentMC, so the first driver above it filters the
-	// set again against its own walk (rebasePassedUpResume), as it rebases
-	// SourceWinding.
-	//
-	// Unexported unlike its neighbours: escalatorArm is package-private, so an
-	// exported field would be surface an embedder can neither set nor read through.
-	escalatorRevivals []*escalatorArm
 	// rebaseWinding is set by an expansion-time root that passed the resume up
 	// after leaving its own extents: SourceWinding was that root's winding, not
 	// the next driver's, so that driver replaces it with its own before resolving

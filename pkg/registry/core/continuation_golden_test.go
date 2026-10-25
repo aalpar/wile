@@ -67,7 +67,10 @@ var continuationGolden = []struct {
 	{"guard-clause-binds-condition", `(guard (e ((number? e) e) (else 'other)) (raise 5))`, "5"},
 	{"guard-clause-selection", `(guard (e ((eq? e 'a) 1) ((eq? e 'b) 2) (else 3)) (raise 'b))`, "2"},
 	{"guard-nested-outer-catches", `(guard (outer ((symbol? outer) (list 'o outer))) (guard (inner ((number? inner) (list 'i inner))) (raise 'sym)))`, "(o sym)"},
-	{"guard-reraise-to-weh", `(with-exception-handler (lambda (e) (list 'outer e)) (lambda () (guard (x ((string? x) 'str)) (raise 99))))`, "(outer 99)"},
+	// A guard miss's re-raise returns from the outer handler, which raises the R7RS 6.11
+	// secondary in the handler's dynamic environment: the outer handler sees 99, then
+	// the secondary, and returns again, raising a second secondary the enclosing guard catches.
+	{"guard-reraise-to-weh", `(let ((seen '())) (guard (s (#t (list 'raised (reverse (map (lambda (e) (eqv? e 99)) seen))))) (with-exception-handler (lambda (e) (set! seen (cons e seen)) (list 'outer e)) (lambda () (guard (x ((string? x) 'str)) (raise 99))))))`, "(raised (#t #f))"},
 	{"raise-continuable-returns-handler-value", `(with-exception-handler (lambda (e) (list 'h e)) (lambda () (raise-continuable 7)))`, "(h 7)"},
 	{"error-object-message", `(guard (e (#t (error-object-message e))) (error "boom" 1 2))`, `"boom"`},
 

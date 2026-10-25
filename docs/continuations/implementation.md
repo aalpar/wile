@@ -66,7 +66,7 @@ type MachineContinuation struct {
 }
 ```
 
-`escalatorArm` is shared by every copy of its frame; see [The Resume Trampoline](resume-trampoline.md).
+`escalatorArm` is carried by every copy of its frame; see [The Resume Trampoline](resume-trampoline.md).
 
 Each frame points to its parent. The chain reads bottom-up: the root frame (parent == nil) is the oldest pending return; the top of the chain is the most recent. When a function returns, the VM pops the top frame and restores its state. When `call/cc` captures a continuation, it copies this entire chain.
 
@@ -185,8 +185,7 @@ func (p *MachineContext) RunResumable() error {
         if errors.As(err, &resumeErr) {
             boundary, _ := p.FindPrompt(resumeErr.Tag)
             p.reinstallSegment(resumeErr.Segment, boundary,
-                resumeErr.SourceWinding, resumeErr.Values, true,
-                resumeErr.escalatorRevivals)
+                resumeErr.SourceWinding, resumeErr.Values, true)
             continue                     // the trampoline bounce
         }
         // ... timer and debugger-break interrupts, then real errors fall through
