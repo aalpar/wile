@@ -743,6 +743,31 @@ func TestInvalidUTF8ReadsAsReplacementCharacter(t *testing.T) {
 	}
 }
 
+// TestInvalidUTF8AdvancesByTheByteConsumed pins positions after the
+// substitute: an invalid byte is one byte of input, so the index moves by one,
+// not by the three bytes of the U+FFFD it reads as. Columns count characters,
+// so both forms agree there.
+func TestInvalidUTF8AdvancesByTheByteConsumed(t *testing.T) {
+	tcs := []struct {
+		name      string
+		src       string
+		wantIndex int
+	}{
+		{name: "invalid byte", src: "\"\xff\" 1", wantIndex: 4},
+		{name: "written U+FFFD", src: "\"\uFFFD\" 1", wantIndex: 6},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			toks, err := Tokenize(tc.src, false)
+			c.Assert(err, qt.ErrorIs, io.EOF)
+			c.Assert(len(toks), qt.Equals, 2)
+			c.Check(toks[1].Start().Index(), qt.Equals, tc.wantIndex)
+			c.Check(toks[1].Start().Column(), qt.Equals, 4)
+		})
+	}
+}
+
 // TestReplacementCharacterInDatumPositionIsNotEOF is the third face of the same
 // distinction, on the path that does not go through a string or character
 // literal. Next used to treat cur == utf8.RuneError as end of input, so a
