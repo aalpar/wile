@@ -66,8 +66,11 @@ func (p *OperationSetContMark) EqualTo(o values.Value) bool {
 	return SameType(p, v, ok)
 }
 
-// OperationSaveContMark saves the previous mark value and sets a new one.
-// Used in non-tail position, paired with OperationRestoreContMark.
+// OperationSaveContMark saves the previous mark value and sets a new one,
+// paired with OperationRestoreContMark. The compiler no longer emits the pair: a
+// non-tail with-continuation-mark pushes a continuation frame instead
+// (CompileValidatedWithContinuationMark), because overwriting the live frame's
+// mark merged the body's mark into the enclosing frame.
 //
 // Pre:  eval stack = [..., key], value register = val
 // Post: eval stack = [..., key, old_val_or_sentinel], marks[key] = val, pc++

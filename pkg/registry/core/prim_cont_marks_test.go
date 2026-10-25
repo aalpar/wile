@@ -616,6 +616,119 @@ func TestContinuationMarks_ShapeMatrix(t *testing.T) {
 	}
 }
 
+// TestContinuationMarks_NonTailWCMPushesFrame pins A23: the body of a with-continuation-mark
+// out of tail position runs in a continuation frame of its own, so a mark it sets sits
+// beside the enclosing frame's marks instead of overwriting them. Expected values are
+// Racket's, measured. In every RED row the wcm is an argument of a tail call (or a
+// non-final body form), so its key/value are evaluated in the frame whose marks it would
+// overwrite; the rows marked "control" answered the same before the fix and guard the
+// frame's return path (value register, env, tail calls out of the body).
+func TestContinuationMarks_NonTailWCMPushesFrame(t *testing.T) {
+	t.Parallel()
+
+	const g = `(g (lambda () (continuation-mark-set->list (current-continuation-marks) 'a)))`
+	tcs := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			name:     "same key, two frames",
+			code:     `((lambda () (with-continuation-mark 'a 1 (list (with-continuation-mark 'a 2 (continuation-mark-set->list #f 'a))))))`,
+			expected: "((2 1))",
+		},
+		{
+			name:     "two keys, two frames",
+			code:     `((lambda () (with-continuation-mark 'a 1 (list (with-continuation-mark 'b 2 (continuation-mark-set->list* #f '(a b)))))))`,
+			expected: "((#(#f 2) #(1 #f)))",
+		},
+		{
+			name:     "body tail-calls a closure",
+			code:     `(let (` + g + `) ((lambda () (with-continuation-mark 'a 1 (list (with-continuation-mark 'a 2 (g)))))))`,
+			expected: "((2 1))",
+		},
+		{
+			name:     "body tail-calls through a let-bound alias",
+			code:     `(let (` + g + `) ((lambda () (with-continuation-mark 'a 1 (list (with-continuation-mark 'a 2 (let ((h g)) (h))))))))`,
+			expected: "((2 1))",
+		},
+		{
+			name: "a tail wcm in the callee overwrites the body's frame, not the outer one",
+			code: `(let ((f (lambda () (with-continuation-mark 'a 3 (continuation-mark-set->list #f 'a)))))
+				((lambda () (with-continuation-mark 'a 1 (list (with-continuation-mark 'a 2 (f)))))))`,
+			expected: "((3 1))",
+		},
+		{
+			name:     "a tail wcm under a let in the body shares the body's frame",
+			code:     `((lambda () (with-continuation-mark 'a 1 (list (with-continuation-mark 'a 2 (let ((x 5)) (with-continuation-mark 'a 3 (continuation-mark-set->list #f 'a))))))))`,
+			expected: "((3 1))",
+		},
+		{
+			name:     "a non-final wcm in the body restores the body's mark",
+			code:     `((lambda () (with-continuation-mark 'a 1 (list (with-continuation-mark 'a 2 (begin (with-continuation-mark 'a 3 'x) (continuation-mark-set->list #f 'a)))))))`,
+			expected: "((2 1))",
+		},
+		{
+			name: "continuation-marks of a k captured in the body",
+			code: `((lambda () (with-continuation-mark 'a 1 (list (with-continuation-mark 'a 2
+				(call-with-current-continuation (lambda (k) (continuation-mark-set->list (continuation-marks k) 'a))))))))`,
+			expected: "((2 1))",
+		},
+		{
+			name:     "compound argument of a promoted primitive",
+			code:     `(let (` + g + `) ((lambda () (with-continuation-mark 'a 1 (+ 1 (with-continuation-mark 'a 2 (length (g))))))))`,
+			expected: "3",
+		},
+		{
+			name:     "call-with-immediate-continuation-mark in value position sees the new frame",
+			code:     `((lambda () (with-continuation-mark 'a 1 (list (with-continuation-mark 'b (call-with-immediate-continuation-mark 'a (lambda (v) v) 'D) (continuation-mark-set->list* #f '(a b)))))))`,
+			expected: "((#(#f D) #(1 #f)))",
+		},
+		{
+			name:     "control: the outer frame's mark is intact after the body returns",
+			code:     `((lambda () (with-continuation-mark 'a 1 (let ((r (list (with-continuation-mark 'a 2 'x)))) (continuation-mark-set->list #f 'a)))))`,
+			expected: "(1)",
+		},
+		{
+			name:     "control: tail-called primitives return through the body's frame",
+			code:     `((lambda (x) (list (with-continuation-mark 'a 2 (car x)) (with-continuation-mark 'a 3 (+ (car x) 1)))) '(5))`,
+			expected: "(5 6)",
+		},
+		{
+			name: "control: a closure escaping a let in the body outlives the frame",
+			code: `(let ((mk (lambda (n) (list (with-continuation-mark 'a n (let ((x n)) (lambda () x)))))))
+				(let loop ((i 0) (acc 0)) (if (= i 2000) acc (loop (+ i 1) (+ acc ((car (mk i))))))))`,
+			expected: "1999000",
+		},
+		{
+			name: "control: a self-call in the body",
+			code: `(letrec ((count (lambda (n acc) (if (= n 0) acc
+				(count (- n 1) (cons (with-continuation-mark 'a n (count 0 (continuation-mark-set->list #f 'a))) acc))))))
+				(count 3 '()))`,
+			expected: "((1) (2) (3))",
+		},
+		{
+			name:     "control: one frame per recursion level",
+			code:     `(let loop ((i 0)) (if (= i 3) (continuation-mark-set->list #f 'a) (list (with-continuation-mark 'a i (loop (+ i 1))))))`,
+			expected: "((((2 1 0))))",
+		},
+		{
+			name:     "control: nested parameterize",
+			code:     `(let ((p (make-parameter 1))) (list (parameterize ((p 2)) (list (parameterize ((p 3)) (p)) (p))) (p)))`,
+			expected: "((3 2) 1)",
+		},
+	}
+	for name, run := range markShapeRunners() {
+		for _, tc := range tcs {
+			t.Run(name+"/"+tc.name, func(t *testing.T) {
+				got, err := run(t, tc.code)
+				qt.Assert(t, err, qt.IsNil)
+				qt.Assert(t, got, qt.Equals, tc.expected)
+			})
+		}
+	}
+}
+
 // TestContinuationMarkSetToContextStaysStrict pins that (wile control)'s
 // continuation-mark-set->context, which delegates to ->list, does not inherit the
 // #f alias: Racket raises a contract violation there, and Wile raises the located

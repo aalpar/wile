@@ -116,9 +116,9 @@ Now contrast:
           (current-marks 'k))))
 ```
 
-The `list` call is *not* in tail position (its result is passed to `list`).
-So `SaveContinuation` creates a new frame before evaluating the inner
-`with-continuation-mark`. Now there are two frames, each with its own mark:
+The inner `with-continuation-mark` is *not* in tail position (its result is
+passed to `list`), so its body runs in a frame of its own: the compiler emits a
+`SaveContinuation` for it. Now there are two frames, each with its own mark:
 
 ```
 current frame: marks = { k: 2 }
@@ -306,10 +306,14 @@ using the same tail-position tracking (`CompileTimeCallContext.inTail`) that
 governs whether function calls are optimized. In tail position it emits a bare
 `SetContMark` and compiles the body in tail: the mark lands on the current
 frame, overwriting any prior value for that key, with no restore. Out of tail
-position it brackets the body with `SaveContMark` / `RestoreContMark`, which
-stash the key's previous value on the eval stack and put it back afterwards.
-The *new frame* in the accumulating example comes from the enclosing non-tail
-call's own `SaveContinuation`, not from the mark form.
+position the form is a continuation frame of its own, as in Racket: a
+`SaveContinuation` comes first (so key and value are evaluated with an empty
+stack in the new frame), then `SetContMark` on that frame's empty live marks,
+then the body in tail position *of that frame*, then a `RestoreContinuation`
+that a body ending without a tail call returns through. That body context
+arms no frame reuse (`TailOfPushedFrame`): the frame resumes in the enclosing
+procedure's env, which a self-tail jump or a frame release would clobber.
+This *new frame* is the one in the accumulating example above.
 
 ## Summary
 

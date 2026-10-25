@@ -919,7 +919,7 @@ Wile's `guard` uses `call-with-values` to capture all values from the body, then
 
 ### Continuation-Mark Accessors
 
-`with-continuation-mark`, `current-continuation-marks`, `continuation-marks` and the `continuation-mark-set-*` accessors are Racket's, not R7RS's; Wile follows Racket's answers where it can. Known departures are the one below (I167), a prompt tag given with an explicit mark set (Racket truncates the set at that tag's prompt; a Wile mark set records no prompt boundaries, so the accessors refuse the combination and accept a tag only with `#f`), and two open defects filed by the P6.3 crosscheck (2026-10-20): composable continuations, and the mark overwrite by a non-tail `with-continuation-mark`.
+`with-continuation-mark`, `current-continuation-marks`, `continuation-marks` and the `continuation-mark-set-*` accessors are Racket's, not R7RS's; Wile follows Racket's answers where it can. Known departures are the one below (I167), a prompt tag given with an explicit mark set (Racket truncates the set at that tag's prompt; a Wile mark set records no prompt boundaries, so the accessors refuse the combination and accept a tag only with `#f`), and an open defect filed by the P6.3 crosscheck (2026-10-20): composable continuations.
 
 `#f` is accepted for the mark set in `continuation-mark-set-first`, `continuation-mark-set->list` and `continuation-mark-set->list*`, standing for the current continuation's marks as in Racket. `(continuation-marks k)` for a `call/cc` captured in tail position of a `with-continuation-mark` body reports the capturing activation's marks, so `((lambda () (with-continuation-mark 'a 2 (call/cc (lambda (k) (continuation-mark-set->list (continuation-marks k) 'a))))))` is `(2)`, as in Racket.
 

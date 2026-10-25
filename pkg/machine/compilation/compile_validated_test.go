@@ -244,7 +244,7 @@ func TestCompileWithContinuationMark_NonTailPosition(t *testing.T) {
 	env := newContMarkEnv()
 
 	// In (begin X Y), X is not in tail position. The with-continuation-mark
-	// is X, so it compiles with SaveContMark/RestoreContMark. The begin returns
+	// is X, so its body runs in a frame of its own. The begin returns
 	// the value of Y ('after), but the wcm body must still evaluate correctly.
 	// We verify the overall begin returns 'after (the last expression).
 	mc := compileAndRun(t, env, "(begin (with-continuation-mark 'k 1 42) 'after)")
@@ -271,7 +271,7 @@ func TestCompileWithContinuationMark_Nested(t *testing.T) {
 	mc := compileAndRun(t, env, "(with-continuation-mark 'a 1 (with-continuation-mark 'b 2 (+ 10 20)))")
 	qt.Assert(t, mc.GetValue(), valuestest.SchemeEquals, values.NewInteger(30))
 
-	// Nested in non-tail position: both marks saved/restored,
+	// Nested in non-tail position: each body runs in a frame of its own,
 	// begin discards the wcm result and returns the final expression.
 	mc = compileAndRun(t, env,
 		"(begin (with-continuation-mark 'a 1 (with-continuation-mark 'b 2 (+ 10 20))) 'done)")

@@ -719,16 +719,24 @@ func CompileValidatedApply(p *CompileTimeContinuation, ctctx CompileTimeCallCont
 //	SetContMark               ; pops key, sets marks[key] = val
 //	<compile body in tail>
 //
-// Non-tail position:
+// Non-tail position: the body is a continuation frame of its own (as in Racket),
+// so its mark sits beside the enclosing frame's marks rather than overwriting them.
 //
+//	SaveContinuation →after   ; before key/val: it hands the frame an empty stack
 //	<compile key> PUSH
 //	<compile val>
-//	SaveContMark              ; pops key, saves (key, old) on stack, sets mark
-//	<compile body in non-tail>
-//	RestoreContMark           ; pops (old, key), restores mark
+//	SetContMark               ; on the new frame's (empty) live marks
+//	<compile body in tail of the new frame>
+//	RestoreContinuation       ; a body that ends without a tail call returns here
+//	after:
 func CompileValidatedWithContinuationMark(p *CompileTimeContinuation, ctctx CompileTimeCallContext, expr forms.ValidatedExpr) error {
 	v := expr.(*validate.ValidatedWithContinuationMark)
 	exprCtx := ctctx.NotInTail()
+
+	var saveContinuationIndex int
+	if !ctctx.inTail {
+		saveContinuationIndex = p.emitPatchableSaveContinuation()
+	}
 
 	// Compile key expression
 	err := p.compileValidated(exprCtx, v.Key)
@@ -742,19 +750,17 @@ func CompileValidatedWithContinuationMark(p *CompileTimeContinuation, ctctx Comp
 	if err != nil {
 		return err
 	}
+	p.AppendOperations(machine.NewOperationSetContMark())
 
 	if ctctx.inTail {
-		// Tail position: set mark, compile body in tail, no restore
-		p.AppendOperations(machine.NewOperationSetContMark())
 		return p.compileValidated(ctctx, v.Body)
 	}
 
-	// Non-tail position: save+set, body, restore
-	p.AppendOperations(machine.NewOperationSaveContMark())
-	err = p.compileValidated(exprCtx, v.Body)
+	err = p.compileValidated(ctctx.TailOfPushedFrame(), v.Body)
 	if err != nil {
 		return err
 	}
-	p.AppendOperations(machine.NewOperationRestoreContMark())
+	p.AppendOperations(machine.NewOperationRestoreContinuation())
+	p.patchSaveContinuationOffset(saveContinuationIndex)
 	return nil
 }
