@@ -133,7 +133,7 @@ func (p *ExpanderTimeContinuation) pruneUseSiteScopes(stx syntax.SyntaxValue) sy
 	if !ok {
 		return stx
 	}
-	switch headFormName(p.env, head) {
+	switch headFormName(p.env, p.defines, head) {
 	case "begin", "begin-for-syntax":
 		// Both splicing heads recurse into their forms. begin-for-syntax is here
 		// and not in pruneDefinitionBinder's list because it binds nothing itself:
@@ -290,7 +290,7 @@ func (p *ExpanderTimeContinuation) pruneDefinitionBinder(pair *syntax.SyntaxPair
 	if !ok {
 		return pair
 	}
-	form := headFormName(p.env, keyword)
+	form := headFormName(p.env, p.defines, keyword)
 	if form != "define" && form != "define-syntax" && form != "define-for-syntax" {
 		return pair
 	}

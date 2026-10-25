@@ -246,7 +246,7 @@ func (p quasiKeywords) headName(v syntax.SyntaxValue) (string, bool) {
 	if p.env == nil {
 		return getSymbolName(v)
 	}
-	name := headFormName(p.env, sym)
+	name := headFormName(p.env, nil, sym)
 	if name == "" {
 		return getSymbolName(v)
 	}

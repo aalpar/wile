@@ -123,10 +123,16 @@ func TestAmbiguousReferenceIsALocatedCompilationError(t *testing.T) {
 		{"begin", "(begin 4)"},
 	}
 	for _, h := range heads {
-		tcs = append(tcs,
-			row{name: "tied head " + h.name, code: tiedHeadTop(h.name, h.ref), want: top},
-			row{name: "local tied head " + h.name, code: tiedHeadLocal(h.name, h.ref), want: local},
-		)
+		tcs = append(tcs, row{name: "local tied head " + h.name, code: tiedHeadLocal(h.name, h.ref), want: local})
+		// No top-level begin row: m's template splices with a begin of its own,
+		// and at top level that head reaches def-m's (define begin ...), whose
+		// define has already expanded, so it is a call and the tie inside it is
+		// never a head (X25). Racket reads it the same way and refuses the
+		// spliced define instead: "define: not allowed in an expression context".
+		if h.name == "begin" {
+			continue
+		}
+		tcs = append(tcs, row{name: "tied head " + h.name, code: tiedHeadTop(h.name, h.ref), want: top})
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

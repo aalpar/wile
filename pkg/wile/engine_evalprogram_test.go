@@ -94,7 +94,7 @@ func TestEngine_EvalProgram_StructuralWrap(t *testing.T) {
 // wrapInBegin's synthetic head.
 //
 // A special form is now shadowable by a top-level define (R7RS §4.3, decided by
-// binding identity in validate.headDenotesSpecialForm rather than by the head's
+// binding identity in validate.HeadDenotesSpecialForm rather than by the head's
 // spelling). That made the program wrapper itself capturable: with (define begin
 // 9) anywhere in the file, the (begin form ...) EvalProgram builds compiled to
 // (9 form ...) — measured, it ran the whole program and then died with

@@ -15,6 +15,7 @@
 package compilation
 
 import (
+	"context"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
@@ -58,7 +59,7 @@ func TestW2HeadFormNameDoesNotRaiseOnAmbiguity(t *testing.T) {
 		defer func() {
 			r = recover()
 		}()
-		got = headFormName(env, stx)
+		got = headFormName(env, nil, stx)
 		return nil
 	}()
 
@@ -84,6 +85,35 @@ func TestW2HeadFormNameStillDenotesUnderNoAmbiguity(t *testing.T) {
 
 	stx := syntax.NewSyntaxSymbol("mylambda", &syntax.SourceContext{Scopes: scopes})
 
-	qt.Assert(t, headFormName(env, stx), qt.Equals, "lambda",
+	qt.Assert(t, headFormName(env, nil, stx), qt.Equals, "lambda",
 		qt.Commentf("a renamed keyword still denotes its form; spelling-only would answer mylambda"))
+}
+
+// TestHeadFormNameFollowsTheShadowRule pins headFormName to head dispatch's
+// rule (X25): a top-level variable the reference reaches denotes no form, a
+// predeclared slot whose define is still ahead denotes the form, and the same
+// slot once its define has expanded denotes no form. Spelling-only answered
+// begin in all three.
+func TestHeadFormNameFollowsTheShadowRule(t *testing.T) {
+	env := environment.NewNamespace().Runtime()
+	sym := values.NewSymbol("begin")
+	stx := syntax.NewSyntaxSymbol("begin", &syntax.SourceContext{})
+
+	predeclareBinding(env, sym, syntax.Scopes{}, nil)
+	p := NewExpanderTimeContinuation(context.Background(), env, nil)
+	qt.Assert(t, headFormName(env, p.defines, stx), qt.Equals, "begin",
+		qt.Commentf("a predeclared slot whose define is ahead still means the form"))
+
+	p.noteDefineExpanded(stx)
+	qt.Assert(t, headFormName(env, p.defines, stx), qt.Equals, "",
+		qt.Commentf("once its define has expanded the slot is the variable"))
+	qt.Assert(t, headFormName(env, nil, stx), qt.Equals, "begin",
+		qt.Commentf("a nil log has expanded no define: the compiler's reading"))
+
+	env.GetBinding(sym, syntax.ScopesOf(syntax.Scopes{})).UpdateMeta(func(m *environment.BindingMeta) bool {
+		m.Predeclared = false
+		return true
+	})
+	qt.Assert(t, headFormName(env, nil, stx), qt.Equals, "",
+		qt.Commentf("a compiled top-level define shadows the form"))
 }

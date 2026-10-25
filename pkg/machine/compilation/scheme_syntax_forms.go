@@ -30,7 +30,7 @@ import (
 // Primitive-typed slot, which lookupMacroBinding (wants BindingTypeSyntax) and
 // LookupPrimitiveExpander (wants a *PrimitiveExpander) both reject; the expander
 // then leaves the head alone and the compiler dispatches the Go syntax compiler
-// by name anyway (headDenotesSpecialForm reads a nil or non-Variable head as the
+// by name anyway (HeadDenotesSpecialForm reads a nil or non-Variable head as the
 // form, validate.go), so the Scheme definition is ignored in SILENCE and every
 // value assertion stays green — measured. That is why the P1 pin is a counter
 // and not a value. It is also the list of rows P3 deletes.

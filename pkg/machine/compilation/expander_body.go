@@ -26,6 +26,7 @@ import (
 	"github.com/aalpar/wile/pkg/machine"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/internal/validate"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
@@ -47,9 +48,9 @@ import (
 // Handles:
 //   - (define name value)
 //   - (define (name args...) body...)
-func extractDefineName(env *environment.EnvironmentFrame, form syntax.SyntaxValue) *syntax.SyntaxSymbol {
+func extractDefineName(env *environment.EnvironmentFrame, defines *expandedDefineLog, form syntax.SyntaxValue) *syntax.SyntaxSymbol {
 	// Only handle define, not define-syntax (macros are handled separately).
-	pair, ok := asFormDenoting(env, form, "define")
+	pair, ok := asFormDenoting(env, defines, form, "define")
 	if !ok {
 		return nil
 	}
@@ -77,6 +78,67 @@ func extractDefineName(env *environment.EnvironmentFrame, form syntax.SyntaxValu
 	return nil
 }
 
+// expandedDefineLog records the predeclared top-level slots whose define one
+// expansion run has already expanded. It is the expander's half of the P1
+// partition HeadDenotesSpecialForm draws: a head that resolves to such a slot
+// comes AFTER its define and is the variable, one whose define is still ahead
+// is the form. The validator reads the same partition off
+// BindingMeta.Predeclared, which compile_define clears; the expander cannot,
+// because ExpandBodyWithDefineSyntax predeclares a whole begin or file before
+// any of it compiles, and clearing the mark here would make a first
+// (define define 3) a call when the validator reaches it.
+//
+// Keyed by spelling only to find candidates: each entry is a *GlobalIndex, and
+// a slot counts only when it reads back as the very binding the head resolved
+// to (Binding Identity). An index, not a *Binding, is what survives the
+// bindings the rest of the run creates. Locals need no entry: a local define's
+// slot is caught ahead of head resolution by hasLocalVariableBinding.
+type expandedDefineLog struct {
+	slots map[string][]*environment.GlobalIndex
+}
+
+// ahead reports whether b is a predeclared slot whose define this run has not
+// expanded yet. A nil log has seen no define, so every predeclared slot is ahead.
+func (p *expandedDefineLog) ahead(sym *values.Symbol, b *environment.Binding) bool {
+	if !validate.IsPredeclared(b) {
+		return false
+	}
+	if p == nil {
+		return true
+	}
+	for _, gi := range p.slots[sym.Key] {
+		if gi.Env.GetOwnGlobalBinding(gi) == b {
+			return false
+		}
+	}
+	return true
+}
+
+// noteDefineExpanded records that the define binding name has expanded, when
+// name binds a predeclared top-level slot. Called once the whole define form
+// has expanded, so the define's own head and right-hand side still read the
+// slot as ahead, as the validator does while the define is uncompiled.
+func (p *ExpanderTimeContinuation) noteDefineExpanded(name *syntax.SyntaxSymbol) {
+	if p.defines == nil || p.env.LocalEnvironment() != nil {
+		return
+	}
+	sym, ok := name.Unwrap().(*values.Symbol)
+	if !ok {
+		return
+	}
+	gi, tied := p.env.TryGetGlobalIndexWithScopes(sym, syntax.ScopesOf(name.Scopes()))
+	if tied || gi == nil || gi.Env == nil {
+		return
+	}
+	if !validate.IsPredeclared(gi.Env.GetOwnGlobalBinding(gi)) {
+		return
+	}
+	if p.defines.slots == nil {
+		p.defines.slots = map[string][]*environment.GlobalIndex{}
+	}
+	p.defines.slots[sym.Key] = append(p.defines.slots[sym.Key], gi)
+}
+
 // ExpandBodyWithDefineSyntax expands a sequence of body forms in order, so a
 // define-syntax binds its keyword (expandDefineSyntax) before the forms after it
 // expand.
@@ -101,7 +163,7 @@ func (p *ExpanderTimeContinuation) ExpandBodyWithDefineSyntax(
 	// bindings live in the expand environment, not the runtime environment
 	// pre-declared here.
 	for _, form := range forms {
-		nameSym := extractDefineName(p.env, form)
+		nameSym := extractDefineName(p.env, p.defines, form)
 		if nameSym != nil {
 			name := nameSym.Unwrap().(*values.Symbol)
 			predeclareBinding(p.env, name, nameSym.Scopes(), nameSym.SourceContext())

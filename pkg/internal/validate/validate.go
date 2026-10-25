@@ -164,7 +164,7 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 				name = denoted
 			}
 			spec := forms.RegistryFor(env).Lookup(name)
-			isForm := !tied && (denoted != "" || headDenotesSpecialForm(env, symVal, sym.Scopes(), b))
+			isForm := !tied && (denoted != "" || HeadDenotesSpecialForm(env, symVal, sym.Scopes(), b, IsPredeclared(b)))
 			if spec != nil && spec.Validate != nil && isForm {
 				expr := spec.Validate(ctx, env, pair, result)
 				if expr != nil {
@@ -187,12 +187,24 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 	return validateCall(ctx, env, pair, result)
 }
 
-// headDenotesSpecialForm reports whether a form head the validator's table
+// HeadDenotesSpecialForm reports whether a form head the validator's table
 // already recognizes BY NAME actually denotes that special form here, rather
 // than an ordinary operator that happens to share the spelling. The caller
 // resolves the head's binding once, via resolveFormHead, and passes the
-// result in as b; a non-nil b implies env and its global environment are
-// non-nil, since resolveFormHead returns nil whenever either is.
+// result in as b.
+//
+// defineAhead reports that b is a slot a letrec* pre-scan minted whose define
+// the reader has not reached yet (the P1 arm below). It is the caller's input
+// because the two readers reach a define at different times: the validator
+// when the define has COMPILED (IsPredeclared), the expander when it has
+// EXPANDED, which in a top-level begin or a file is before anything compiles.
+// Both answer "earlier define: variable, later define: form".
+//
+// It is exported for the expander's head dispatch
+// (compilation.lookupHeadPrimitiveExpander), so a phase-0 variable shadows an
+// expander-consumed form (include, cond-expand, define-syntax, ...) by the same
+// rule, and the same hygiene guard, as it shadows if or begin here. Two
+// predicates would be two answers to one question.
 //
 // R7RS §4.3 makes a variable binding shadow a syntactic one, and §5.3.1 lets a
 // top-level define do it too. A name cannot answer that question; only the
@@ -259,11 +271,12 @@ func validateForm(ctx context.Context, env *environment.EnvironmentFrame, pair *
 // answer 4 where the peers raise. They turn on referenceReachesBinderDirectly's
 // hygiene guard below, which exists to stop a user's (define set! …) capturing a
 // template's set!. Relaxing it is its own arc.
-func headDenotesSpecialForm(
+func HeadDenotesSpecialForm(
 	env *environment.EnvironmentFrame,
 	symVal *values.Symbol,
 	scopes syntax.Scopes,
 	b *environment.Binding,
+	defineAhead bool,
 ) bool {
 	if b == nil {
 		// A miss means the form. Under a registry that binds no keywords
@@ -280,22 +293,32 @@ func headDenotesSpecialForm(
 		return true
 	}
 	// A slot the letrec* pre-scan minted is a LOCATION with no denotation yet:
-	// its define has not been compiled, so the head still means what it meant
+	// its define has not been reached, so the head still means what it meant
 	// before the body. This is the P1 arm — see BindingMeta.Predeclared.
-	m := b.Meta()
-	if m != nil && m.Predeclared {
+	if defineAhead {
 		return true
 	}
 	ge := env.GlobalEnvironment()
-	if b == ge.SealedBindingAt(symVal, syntax.ScopesOf(scopes), env.PhaseLevel()) {
+	if ge != nil && b == ge.SealedBindingAt(symVal, syntax.ScopesOf(scopes), env.PhaseLevel()) {
 		return true
 	}
 	return !referenceReachesBinderDirectly(env, symVal, scopes, b)
 }
 
+// IsPredeclared reports whether b is a slot a letrec* pre-scan minted and no
+// define has compiled into yet (BindingMeta.Predeclared). It is the validator's
+// defineAhead for HeadDenotesSpecialForm. nil is not predeclared.
+func IsPredeclared(b *environment.Binding) bool {
+	if b == nil {
+		return false
+	}
+	m := b.Meta()
+	return m != nil && m.Predeclared
+}
+
 // resolveFormHead resolves a form head at its own phase, or returns nil when there
 // is no environment to resolve in. nil is also the answer for an unbound head;
-// both mean "the spelling decides", which is what headDenotesSpecialForm's nil
+// both mean "the spelling decides", which is what HeadDenotesSpecialForm's nil
 // arm and validateForm's candidacy key already give.
 //
 // A local variable the head reaches decides first: a template's own
@@ -340,7 +363,7 @@ func resolveFormHead(env *environment.EnvironmentFrame, symVal *values.Symbol, s
 // variable binding b at its OWN hygienic footing, rather than only through the
 // scope-set widening a macro expansion produces.
 //
-// It is the hygiene half of headDenotesSpecialForm's identity rule. Subset
+// It is the hygiene half of HeadDenotesSpecialForm's identity rule. Subset
 // resolution (bindingScopes ⊆ useScopes) is deliberately permissive so a
 // template identifier can name an outer global at all; that permissiveness is
 // safe for a name that carries a definition-site pin, and unsafe for one that

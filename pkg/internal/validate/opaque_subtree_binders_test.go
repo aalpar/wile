@@ -142,7 +142,7 @@ func TestRawWalkResolvesHeadsInBinderFrames(t *testing.T) {
 // TestRawWalkDemotedBinderFormIsReadBothWays: a local variable spelled lambda
 // demotes the head, but the compiler may still compile the form (a LATER define
 // of lambda in the same body leaves the slot Predeclared, and
-// headDenotesSpecialForm's Predeclared arm keeps the form). So the walk reads it
+// HeadDenotesSpecialForm's Predeclared arm keeps the form). So the walk reads it
 // both as the form, whose parameter quote covers the body, and as a call. Here
 // the binding is a genuine local, so the form reading over-reports x; that is the
 // safe direction, because an unreported name is a set! target the inliner and the

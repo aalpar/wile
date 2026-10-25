@@ -24,6 +24,7 @@ package compilation
 
 import (
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/internal/validate"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
@@ -323,7 +324,7 @@ func isSyntaxFormWithKeyword(expr syntax.SyntaxValue, keyword string) bool {
 // special form keyword, and returns the pair. It is asSyntaxFormWithKeyword with
 // the head resolved through its binding, so a renamed or prefixed import of the
 // keyword is recognized; see headFormName for the fallback.
-func asFormDenoting(env *environment.EnvironmentFrame, expr syntax.SyntaxValue, keyword string) (*syntax.SyntaxPair, bool) {
+func asFormDenoting(env *environment.EnvironmentFrame, defines *expandedDefineLog, expr syntax.SyntaxValue, keyword string) (*syntax.SyntaxPair, bool) {
 	pair, ok := expr.(*syntax.SyntaxPair)
 	if !ok || syntax.IsSyntaxEmptyList(pair) {
 		return nil, false
@@ -332,7 +333,7 @@ func asFormDenoting(env *environment.EnvironmentFrame, expr syntax.SyntaxValue, 
 	if !ok {
 		return nil, false
 	}
-	if headFormName(env, sym) != keyword {
+	if headFormName(env, defines, sym) != keyword {
 		return nil, false
 	}
 	return pair, true
@@ -340,8 +341,14 @@ func asFormDenoting(env *environment.EnvironmentFrame, expr syntax.SyntaxValue, 
 
 // headFormName returns the special form a head identifier denotes. A head that
 // resolves to no keyword binding answers with its spelling, which keeps every
-// pre-existing answer for unbound heads and variables unchanged; only a keyword
-// bound under another name answers differently.
+// pre-existing answer for unbound heads unchanged; only a keyword bound under
+// another name answers differently.
+//
+// A variable that shadows the form answers "", by the rule head dispatch uses
+// (validate.HeadDenotesSpecialForm, with defines as lookupHeadPrimitiveExpander
+// passes it), so a shadowed begin or cond-expand is not read as a splice, nor a
+// shadowed define as a definition. A nil defines has seen no define expanded:
+// the compiler's own callers, where Predeclared already means "not reached".
 //
 // An incomparable scope-set tie answers with the spelling too, through
 // TryGetBinding rather than GetBinding. This function is asked what a head
@@ -358,7 +365,7 @@ func asFormDenoting(env *environment.EnvironmentFrame, expr syntax.SyntaxValue, 
 // validate.markerName is the same function on the other side
 // of the validate → machine edge and resolves the same way; quasiHeadDepth's
 // doc states the agreement as a requirement.
-func headFormName(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) string {
+func headFormName(env *environment.EnvironmentFrame, defines *expandedDefineLog, sym *syntax.SyntaxSymbol) string {
 	symVal, ok := sym.Unwrap().(*values.Symbol)
 	if !ok {
 		return ""
@@ -374,6 +381,9 @@ func headFormName(env *environment.EnvironmentFrame, sym *syntax.SyntaxSymbol) s
 	denoted = environment.DenotedForm(bnd)
 	if denoted != "" {
 		return denoted
+	}
+	if !validate.HeadDenotesSpecialForm(env, symVal, sym.Scopes(), bnd, defines.ahead(symVal, bnd)) {
+		return ""
 	}
 	return symVal.Key
 }
