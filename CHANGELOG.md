@@ -888,6 +888,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `io.ErrUnexpectedEOF`, is a read error rather than `#<eof>` or a datum cut
   short, and ends only the read it interrupted.
 
+- **`read` reads a byte that is not valid UTF-8 as U+FFFD, as `read-char`
+  does.** It raised a rune error, so `read`, `load`, `include` and `wile -f`
+  rejected input `read-char` read cleanly; racket and petite both substitute.
+  `"a<FF>b"` reads as a three-character string and a comment holding the byte is
+  skipped. U+FFFD is not a Wile identifier character, so a bare `a<FF>b` is a
+  lexical error naming the character, as a written U+FFFD is.
+
 - **BREAKING (Go API): `compilation.ExpandAndCompile` and
   `ExpandAndCompileOptimized` take `(ctx, env, stx)`.** The `resolver`,
   `inlineThreshold` and `maxExpandDepth` parameters are gone: every compile

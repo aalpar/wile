@@ -2463,36 +2463,42 @@ func TestPeculiarIdentifierSpace(t *testing.T) {
 // character 'x' requires peeking one rune past it, and that peek can fail; the
 // old code cleared p.err unconditionally, which (a) erased the io.EOF that ends
 // a source of exactly `#\x`, letting the scanner run on into a phantom failed
-// token, and (b) replaced the specific rune-error diagnostic for a following
-// invalid byte with a generic "expecting token". The sibling letter branch
-// (`#\a`) never cleared and is the control: both spellings must agree.
+// token, and (b) replaced the specific diagnostic for a fault on the following
+// rune with a generic "expecting token". The fault is a reader failure: an
+// invalid byte now reads as U+FFFD and raises nothing. The sibling letter
+// branch (`#\a`) never cleared and is the control: both spellings must agree.
 func TestCharacterXPeekPreservesError(t *testing.T) {
+	closed := werr.WrapForeignErrorf(werr.ErrPortClosed, "string-input-port is closed")
 	tcs := []struct {
 		name string
 		src  string
-		// want is the message the tokenizer must report once the single
-		// character token has been produced; wantEOF selects a clean io.EOF
-		// instead.
-		want    string
-		wantEOF bool
+		// fault fails the read after src instead of ending the input.
+		fault bool
 	}{
-		{name: "x at end of input", src: "#\\x", wantEOF: true},
-		{name: "letter at end of input (control)", src: "#\\a", wantEOF: true},
-		{name: "x then undecodable byte", src: "#\\x\xff", want: MessageRuneError},
-		{name: "letter then undecodable byte (control)", src: "#\\a\xff", want: MessageRuneError},
+		{name: "x at end of input", src: "#\\x"},
+		{name: "letter at end of input (control)", src: "#\\a"},
+		{name: "x then reader fault", src: "#\\x", fault: true},
+		{name: "letter then reader fault (control)", src: "#\\a", fault: true},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			toks, err := Tokenize(tc.src, false)
-			c.Assert(len(toks), qt.Equals, 1)
-			c.Check(toks[0].Type(), qt.Equals, TokenizerStateCharGraphic)
-			c.Check(toks[0].Value(), qt.Equals, tc.src[2:3])
-			if tc.wantEOF {
+			var rdr io.RuneReader = strings.NewReader(tc.src)
+			if tc.fault {
+				rdr = &faultingRuneReader{rdr: strings.NewReader(tc.src), after: len(tc.src), fault: closed}
+			}
+			tok := NewTokenizer(rdr, false)
+			first, err := tok.Next()
+			c.Assert(err, qt.IsNil)
+			c.Check(first.Type(), qt.Equals, TokenizerStateCharGraphic)
+			c.Check(first.Value(), qt.Equals, tc.src[2:3])
+			err = drainTokens(tok)
+			if !tc.fault {
 				c.Check(err, qt.ErrorIs, io.EOF)
 				return
 			}
-			c.Check(err, qt.ErrorIs, NewTokenizerError(tc.want))
+			c.Check(err, qt.ErrorIs, NewTokenizerError(MessageReaderFailed))
+			c.Check(err, qt.ErrorIs, werr.ErrPortClosed)
 		})
 	}
 }

@@ -544,6 +544,13 @@ func TestRunFile(t *testing.T) {
 			content: "; just a comment\n",
 			stdout:  "",
 		},
+		{
+			// An invalid byte reads as U+FFFD, as racket and petite read it;
+			// it used to fail the file with a rune error.
+			name:    "invalid UTF-8 in a comment and a string",
+			content: "; caf\xe9\n(string-length \"a\xffb\")",
+			stdout:  "3\n",
+		},
 	}
 
 	for _, tc := range tcs {

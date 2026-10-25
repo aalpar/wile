@@ -444,6 +444,23 @@ func TestIncludeErrorsKeepTheirLocations(t *testing.T) {
 	}
 }
 
+// TestSourceWithInvalidUTF8ReadsReplacementCharacter pins that include and
+// load read a byte that does not decode as U+FFFD, as read-char does and as
+// racket and petite read it in a loaded or included file; both used to fail
+// the whole file with a rune error.
+func TestSourceWithInvalidUTF8ReadsReplacementCharacter(t *testing.T) {
+	fsys := fstest.MapFS{
+		"bad.scm": &fstest.MapFile{Data: []byte("; caf\xe9\n(vector-set! out 0 (let ((s \"a\xffb\")) (list (string-length s) (char->integer (string-ref s 1)))))\n")},
+	}
+	for _, form := range []string{"include", "load"} {
+		t.Run(form, func(t *testing.T) {
+			got, err := evalIncludeProgram(t, fsys, "(define out (vector #f)) ("+form+" \"bad.scm\") (vector-ref out 0)")
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got, qt.Equals, "(3 65533)")
+		})
+	}
+}
+
 // TestIncludedFormErrorNamesTheInclude pins B29 gap 1: a form spliced from an
 // included file that fails to compile names the include that brought it in, as
 // a macro expansion's error names the macro. The splice leaves no include form
