@@ -221,17 +221,25 @@ Keywords: AC matching, pattern matching, associative, commutative, unification"
   (let ((ac-ops (ac-ops-of theory)))
     (match-rec pattern subject empty-substitution ac-ops proto)))
 
-;; Raise unless every compound subterm of TERM has a proper operand list.
-;; Checked once per public entry, so the recursion below can take operands
-;; with car/cdr unguarded: every term it reaches is a subterm of a checked
-;; input, a binding to one, or an (op . subset) it built from a proper list.
-;; list? also refuses a circular operand spine instead of looping on it.
+;; Raise unless every compound subterm of TERM has a proper operand list and
+;; no compound contains itself. Checked once per public entry, so the
+;; recursion below can take operands with car/cdr unguarded and terminates:
+;; every term it reaches is a subterm of a checked input, a binding to one,
+;; or an (op . subset) it built from a proper list. list? refuses a circular
+;; operand spine; PATH, the compounds from the root down (by eq?), refuses a
+;; term that is its own descendant, such as c = (g c) built by set-car!.
+;; Tracking the path rather than every node visited keeps shared subterms
+;; legal.
 (define (assert-proper-term site term proto)
-  (when (and (not (pattern-var? term)) (term-compound? proto term))
-    (let ((operands (term-get-operands proto term)))
-      (unless (list? operands)
-        (error (string-append site ": operands are not a proper list") term))
-      (for-each (lambda (a) (assert-proper-term site a proto)) operands))))
+  (let walk ((term term) (path '()))
+    (when (and (not (pattern-var? term)) (term-compound? proto term))
+      (when (memq term path)
+        (error (string-append site ": operands are circular") term))
+      (let ((operands (term-get-operands proto term))
+            (path (cons term path)))
+        (unless (list? operands)
+          (error (string-append site ": operands are not a proper list") term))
+        (for-each (lambda (a) (walk a path)) operands)))))
 
 ;; Collapse nested (op ...) applications under an AC operator into a flat
 ;; list of operand terms. Non-compound terms return (list term); compound
@@ -608,9 +616,10 @@ Keywords: AC unification, unify, associative, commutative, Stickel, Robinson"
 
 ;; True iff the ground operand lists XS and YS are equal as multisets modulo
 ;; AC. Compound operands with an equal? partner cancel first, so only the
-;; remainder pays for the AC-aware comparison; atoms are left to term-equal?
-;; so its contract checks still see every atom pair. Cancelling greedily is
-;; complete because AC-equality is an equivalence.
+;; remainder pays for the AC-aware comparison. Top-level atoms are never
+;; cancelled, so term-equal?'s contract checks see each of them; atoms inside
+;; a cancelled compound are not checked. Cancelling greedily is complete
+;; because AC-equality is an equivalence.
 (define (multiset-equal? xs ys ac-ops proto)
   (let cancel ((xs xs) (kept '()) (ys ys))
     (cond
@@ -698,19 +707,23 @@ Keywords: AC unification, unify, associative, commutative, Stickel, Robinson"
             xs)))))
 
 ;; Deduplicate a list of substitutions by binding multiset. Keeps the
-;; first occurrence. Bindings are canonicalised via pattern-var name
-;; (mirrors substitution-compose's identity convention).
+;; first occurrence, in order. Bindings are canonicalised via pattern-var
+;; name (mirrors substitution-compose's identity convention). The seen set
+;; is an equal? table, so the pass is linear in the result count; it runs at
+;; every AC node, where a member scan made it quadratic.
 (define (deduplicate-substitutions subs)
-  (let loop ((subs subs) (seen '()) (acc '()))
-    (cond
-      ((null? subs) (reverse acc))
-      (else
-       (let ((key (sub->canonical (car subs))))
-         (cond
-           ((member key seen)
-            (loop (cdr subs) seen acc))
-           (else
-            (loop (cdr subs) (cons key seen) (cons (car subs) acc)))))))))
+  (let ((seen (make-equal-hashtable)))
+    (let loop ((subs subs) (acc '()))
+      (cond
+        ((null? subs) (reverse acc))
+        (else
+         (let ((key (sub->canonical (car subs))))
+           (cond
+             ((hashtable-contains? seen key)
+              (loop (cdr subs) acc))
+             (else
+              (hashtable-set! seen key #t)
+              (loop (cdr subs) (cons (car subs) acc))))))))))
 
 ;; Canonical representation of a substitution as a sorted assoc list
 ;; keyed by pattern-var-name; used for membership comparison.

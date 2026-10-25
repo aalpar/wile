@@ -361,6 +361,17 @@
     (test u (raised-message (lambda () (ac-unify '(g . a) '(g . b) theory proto))))
     (test u (raised-message (lambda () (ac-unify '(+ a b) '(+ . a) theory proto))))
     (test u (raised-message (lambda () (ac-unify '(f a) '(f (g a . b)) theory proto))))
+    ;; A compound that contains itself is refused, not walked forever; a
+    ;; shared (non-circular) subterm stays legal.
+    (let ((c (list 'g 'b))
+          (shared (list 'g 'b)))
+      (set-car! (cdr c) c)
+      (test "ac-match: operands are circular"
+            (raised-message (lambda () (ac-match '(g a) c theory proto))))
+      (test "ac-unify: operands are circular"
+            (raised-message (lambda () (ac-unify (list 'f c) '(f a) theory proto))))
+      (test 1 (length (ac-unify (list 'f shared shared) '(f (g b) (g b))
+                                theory proto))))
     ;; The irritant is the offending subterm, not the whole input.
     (test '((g . a))
           (guard (e ((error-object? e) (error-object-irritants e)))
