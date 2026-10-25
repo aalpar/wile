@@ -231,6 +231,7 @@ func (p *MachineContext) applyForeign(fcls *ForeignClosure, vs ...values.Value) 
 // owner (supersedingTimerInterrupt). A root not linked to that chain dispatches it
 // as usual (supersedingTimerInterrupt names those roots).
 func bridgeForeignError(p *MachineContext, err error) (*MachineContext, error) {
+	err = p.cancelledFailure(err)
 	interrupt := p.supersedingTimerInterrupt(err)
 	if interrupt != nil {
 		return nil, interrupt

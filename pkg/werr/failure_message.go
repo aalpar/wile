@@ -96,6 +96,12 @@ func messageParts(err error, acc []string) []string {
 	if err == nil || isCategorySentinel(err) {
 		return acc
 	}
+	ending, isEnding := err.(*contextEnding)
+	if isEnding {
+		// Rendered as its cause alone (contextEnding.Error); the other members are
+		// there for errors.Is, like a category sentinel.
+		return messageParts(ending.cause, acc)
+	}
 	fw, ok := err.(foreignWrap)
 	if !ok {
 		multi, isMulti := err.(interface{ Unwrap() []error })

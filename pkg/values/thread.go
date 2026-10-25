@@ -324,7 +324,7 @@ func (p *Thread) Join(ctx context.Context, timeout *time.Duration) (Value, error
 	case <-deadline:
 		return nil, werr.ErrJoinTimeout
 	case <-ctx.Done():
-		return nil, werr.WrapForeignErrorWithCause(werr.ErrOperationCancelled, context.Cause(ctx),
+		return nil, werr.WrapForeignErrorWithCause(werr.ErrOperationCancelled, werr.ContextEnding(ctx, nil),
 			"Thread.Join: the joining thread was cancelled before %s terminated", p.name)
 	}
 

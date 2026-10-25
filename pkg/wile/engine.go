@@ -816,6 +816,10 @@ func setupLibrarySystem(
 // Eval compiles and executes a parsed expression, returning the result.
 // Use [Engine.Parse] to obtain an [Expression] from source code.
 // For evaluating multi-expression strings, use [Engine.EvalMultiple].
+//
+// A run whose ctx ended while it ran returns the cancellation
+// (werr.ErrOperationCancelled), even one that finished just before the ctx
+// ended: its value is discarded.
 func (p *Engine) Eval(ctx context.Context, expr *Expression) (Value, error) {
 	compiled, err := p.Compile(ctx, expr)
 	if err != nil {
@@ -855,6 +859,10 @@ func (p *Engine) EvalIn(ctx context.Context, expr *Expression, ns *environment.N
 }
 
 // EvalMultiple evaluates multiple expressions, returning the last result.
+//
+// A run whose ctx ended while it ran returns the cancellation
+// (werr.ErrOperationCancelled), even one that finished just before the ctx
+// ended: its value is discarded.
 func (p *Engine) EvalMultiple(ctx context.Context, code string) (Value, error) {
 	return p.evalMultiple(ctx, code, "")
 }
@@ -968,6 +976,10 @@ func (p *Engine) Compile(ctx context.Context, expr *Expression) (*CompiledCode, 
 }
 
 // Run executes previously compiled code.
+//
+// A run whose ctx ended while it ran returns the cancellation
+// (werr.ErrOperationCancelled), even one that finished just before the ctx
+// ended: its value is discarded.
 func (p *Engine) Run(ctx context.Context, cc *CompiledCode) (Value, error) {
 	return p.runCompiled(ctx, cc)
 }
@@ -1077,6 +1089,10 @@ func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
 // Supports lambdas, foreign closures, case-lambdas, and parameters.
 // Composable continuations cannot be called from Go
 // (they require the VM winding stack) and return an error.
+//
+// A run whose ctx ended while it ran returns the cancellation
+// (werr.ErrOperationCancelled), even one that finished just before the ctx
+// ended: its value is discarded.
 func (p *Engine) Call(ctx context.Context, proc Value, args ...Value) (Value, error) {
 	unwrappedArgs := make([]values.Value, len(args))
 	for i, arg := range args {
@@ -1546,7 +1562,7 @@ func cancelledAtEnd(ctx context.Context, mc *machine.MachineContext) error {
 	if ctx.Err() == nil {
 		return nil
 	}
-	return mc.CancelledRun(ctx, "Engine: cancelled before the run returned")
+	return mc.CancelledRun(ctx, "Engine: cancelled before the run returned", nil)
 }
 
 // LastCounters returns the VM performance counters from the most recent

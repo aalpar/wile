@@ -243,3 +243,28 @@ func TestUncaughtException_SchemeString(t *testing.T) {
 	// nil-safe.
 	qt.Assert(t, (*values.UncaughtException)(nil).SchemeString(), qt.Equals, "#<uncaught-exception>")
 }
+
+// TestJoinCancelledByHostCauseMatchesBoth pins that a join whose joiner's ctx was
+// cancelled with a cause of the host's own reports ErrOperationCancelled matching
+// that cause AND ctx.Err() (context.Canceled), as the VM poll does. It used to
+// carry context.Cause alone, so errors.Is(err, context.Canceled) was false. The
+// joinee blocks until cleanup, so only the joiner's ctx can end the wait.
+func TestJoinCancelledByHostCauseMatchesBoth(t *testing.T) {
+	c := qt.New(t)
+	release := make(chan struct{})
+	th := values.NewThread(newStubCallable(values.NewSymbol("thunk")), "blocked")
+	th.RunFunc = func(_ context.Context, _ values.Callable) (values.Value, error) {
+		<-release
+		return values.Void, nil
+	}
+	c.Assert(th.Start(context.Background()), qt.IsNil)
+	defer close(release)
+
+	hostCause := werr.NewStaticError("values test: host cancelled the join")
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(hostCause)
+	_, err := th.Join(ctx, nil)
+	c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue, qt.Commentf("got %v", err))
+	c.Assert(errors.Is(err, hostCause), qt.IsTrue, qt.Commentf("got %v", err))
+	c.Assert(errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("got %v", err))
+}

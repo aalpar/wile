@@ -1229,6 +1229,49 @@ func TestVMPollCarriesCauseAndLocation(t *testing.T) {
 	}
 }
 
+// TestEveryRunPathReportsTheCancellation pins the poll's error shape on the other
+// steps that notice a ctx ending outside a wait, each of which used to return the
+// bare ctx.Err(): apply's argument spread (it walks the list and returns straight
+// to the driver), a list walker reached through the foreign-call bridge (length),
+// and the expander (eval of a form after the cancel). site is the text naming the
+// step, so a row cannot pass on the VM poll's report instead. located: the step
+// knows where it stopped.
+func TestEveryRunPathReportsTheCancellation(t *testing.T) {
+	t.Parallel()
+	paths := []struct {
+		name    string
+		code    string
+		site    string
+		located bool
+	}{
+		{"apply's argument spread",
+			`(begin (define l (make-list 5000 0)) (cancel!) (apply + l))`,
+			"apply: cancelled while spreading the argument list", true},
+		{"a walker through the bridge",
+			`(begin (define l (make-list 5000 0)) (cancel!) (length l))`,
+			"cancelled before the primitive returned", true},
+		{"the expander",
+			`(begin (cancel!) (eval '(+ 1 2) (interaction-environment)))`,
+			"expand: cancelled", true},
+	}
+	for _, tc := range paths {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c := qt.New(t)
+			engine, ctx := engineWithCancel(t, errTestCancelCause, WithProfile(KitchenSink))
+			_, err := engine.Eval(ctx, engine.MustParse(ctx, tc.code))
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(err.Error(), qt.Contains, tc.site)
+			c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue, qt.Commentf("got %v", err))
+			c.Assert(errors.Is(err, errTestCancelCause), qt.IsTrue, qt.Commentf("the cause must survive, got %v", err))
+			c.Assert(errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("ctx.Err() must survive, got %v", err))
+			var re *RuntimeError
+			c.Assert(errors.As(err, &re), qt.IsTrue)
+			c.Assert(re.Source != "", qt.Equals, tc.located, qt.Commentf("got %v", err))
+		})
+	}
+}
+
 // TestCancelledProgramNeverFinishesNil pins the Engine's end-of-run ctx check: a
 // program whose ctx ended while it ran reports the cancellation even when it
 // finished normally, because nothing in it noticed: it ended before the next VM

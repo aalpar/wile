@@ -490,7 +490,7 @@ func (p *MachineContext) Run() error {
 				if fired != nil {
 					return &ErrTimerInterrupt{Handler: fired.handler, Tag: fired.tag}
 				}
-				return mc.CancelledRun(mc.ctx, "Run: cancelled at the VM poll")
+				return mc.CancelledRun(mc.ctx, "Run: cancelled at the VM poll", nil)
 			default:
 			}
 		}
@@ -648,10 +648,15 @@ func (p *MachineContext) Run() error {
 				return mc.checkStackSize()
 			})
 			if err != nil {
-				// A resource-limit breach (stack overflow, ctx deadline) is not a
+				// A resource-limit breach (stack overflow, ctx ending) is not a
 				// Scheme condition: it must reach the Go caller, not the in-place
 				// handler that bridgeForeignError would dispatch to. Only the
-				// not-a-proper-list error is a Scheme-level condition.
+				// not-a-proper-list error is a Scheme-level condition. The walker
+				// reports the ctx ending as a bare ctx.Err(); it leaves as the
+				// poll's error, so the cause and the location survive.
+				if CancelledBy(mc.ctx, err) {
+					return mc.CancelledRun(mc.ctx, "apply: cancelled while spreading the argument list", err)
+				}
 				if errors.Is(err, werr.ErrStackOverflow) ||
 					errors.Is(err, context.Canceled) ||
 					errors.Is(err, context.DeadlineExceeded) {

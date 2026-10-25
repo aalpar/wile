@@ -217,8 +217,10 @@ func PrimThreadSleep(mc machine.CallContext) error {
 // waitCancelled reports a blocking primitive in this extension whose context was
 // cancelled before the wait completed. All four waits route through it
 // (thread-sleep!, thread-join!, mutex-lock! and (mutex-unlock! m cv)), and the
-// rule is one: raise ErrOperationCancelled, with the raw ctx cause retained so a
-// host can still tell context.Canceled from context.DeadlineExceeded.
+// rule is one: raise ErrOperationCancelled, with the ctx's ending retained
+// (werr.ContextEnding) so a host can still tell context.Canceled from
+// context.DeadlineExceeded, and match ctx.Err() under a cause of its own, as at
+// the VM poll.
 //
 // The wait does not ask what cancelled it. When a with-timeout timer did, the
 // VM's owner-side rule (supersedingTimerInterrupt in pkg/machine) turns the
@@ -232,7 +234,7 @@ func PrimThreadSleep(mc machine.CallContext) error {
 // and a lock wait that ended a program handed the embedder #f and a nil error
 // after its own cancellation.
 func waitCancelled(mc machine.CallContext, site string) error {
-	return werr.WrapForeignErrorWithCause(werr.ErrOperationCancelled, context.Cause(mc.Context()),
+	return werr.WrapForeignErrorWithCause(werr.ErrOperationCancelled, werr.ContextEnding(mc.Context(), nil),
 		"%s: cancelled before the wait completed", site)
 }
 

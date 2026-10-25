@@ -432,6 +432,9 @@ func evalCancelledOnEngineAfterReady(t *testing.T, engine *wile.Engine, ready <-
 	}
 }
 
+// errHostCancelCause is a cancellation cause no context package error matches.
+var errHostCancelCause = werr.NewStaticError("threads test: cancelled by the host")
+
 // TestCancelledLockWaitRaisesOperationCancelled pins the rule the four blocking
 // waits now share: a wait cancelled by anything other than a with-timeout timer
 // armed in the waiting thread raises ErrOperationCancelled, carrying the raw ctx
@@ -477,6 +480,9 @@ func TestCancelledLockWaitRaisesOperationCancelled(t *testing.T) {
 	}{
 		{"embedder cancel", context.Canceled},
 		{"embedder deadline", context.DeadlineExceeded},
+		// A cause of the host's own differs from ctx.Err() (context.Canceled); both
+		// must match, as at the VM poll.
+		{"host cause", errHostCancelCause},
 	}
 	for _, w := range waits {
 		for _, cs := range causes {
@@ -487,6 +493,8 @@ func TestCancelledLockWaitRaisesOperationCancelled(t *testing.T) {
 					qt.Commentf("a cancelled %s must raise ErrOperationCancelled, got %v", w.name, err))
 				c.Assert(errors.Is(err, cs.cause), qt.IsTrue,
 					qt.Commentf("the raw ctx cause must survive, got %v", err))
+				c.Assert(errors.Is(err, context.Canceled), qt.IsTrue,
+					qt.Commentf("ctx.Err() must survive, got %v", err))
 			})
 		}
 	}
