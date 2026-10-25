@@ -452,10 +452,10 @@ func TestHashtableKindsAreExhaustive(t *testing.T) {
 // reach NewHashtable. A uint8 kind admitted 253 kinds that stored as equal
 // tables while the inspection accessors refused them.
 func TestHashtableKindIsOpaque(t *testing.T) {
-	typ := reflect.TypeOf(values.HashtableKind{})
+	typ := reflect.TypeFor[values.HashtableKind]()
 	qt.Assert(t, typ.Kind(), qt.Equals, reflect.Struct)
-	for i := range typ.NumField() {
-		qt.Assert(t, typ.Field(i).IsExported(), qt.IsFalse, qt.Commentf("field %s is exported", typ.Field(i).Name))
+	for field := range typ.Fields() {
+		qt.Assert(t, field.IsExported(), qt.IsFalse, qt.Commentf("field %s is exported", field.Name))
 	}
 }
 
