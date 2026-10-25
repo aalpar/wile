@@ -17,6 +17,8 @@ package wile_test
 import (
 	"context"
 	"errors"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -29,12 +31,15 @@ import (
 )
 
 // newCallWithExitEngine is newHostCallEngine with esc.scm loadable: it calls the
-// exit procedure stored in gc with 2.
+// exit procedure stored in gc with 2; dw.scm is d2Wind (TestCallWithExitBeforeThunkOfASubContextCapture).
 func newCallWithExitEngine(t *testing.T) *wile.Engine {
 	t.Helper()
 	return newHostCallEngine(t,
 		wile.WithSourceFS(stdlib.FS),
-		wile.WithSourceFS(fstest.MapFS{"esc.scm": &fstest.MapFile{Data: []byte("((vector-ref gc 0) 2)")}}),
+		wile.WithSourceFS(fstest.MapFS{
+			"esc.scm": &fstest.MapFile{Data: []byte("((vector-ref gc 0) 2)")},
+			"dw.scm":  &fstest.MapFile{Data: []byte(d2Wind)},
+		}),
 		wile.WithLibraryPaths("."),
 	)
 }
@@ -386,4 +391,95 @@ func TestCallWithExitPastAnUnlinkedRootKeepsTheOldRule(t *testing.T) {
 			qt.Assert(t, strings.Contains(err.Error(), "no prompt found"), qt.IsTrue, qt.Commentf("got: %v", err))
 		})
 	}
+}
+
+// d2Wind is a dynamic-wind whose before thunk, on its second run, calls the
+// exit procedure in st; its body captures its continuation into st.
+const d2Wind = `(dynamic-wind
+  (lambda () (vector-set! st 2 (+ (vector-ref st 2) 1)) (if (= (vector-ref st 2) 2) ((vector-ref st 0) 'from-before) #f))
+  (lambda () (call/cc (lambda (c) (vector-set! st 1 c) 'first)))
+  (lambda () #f))`
+
+// TestCallWithExitBeforeThunkOfASubContextCapture pins that a before thunk a
+// resume runs still escapes to a live outer extent when the continuation was
+// captured inside a sub-context (eval, load, call-with-output-file) and resumed
+// at the root. Such a segment stops at the sub-context's boundary, so it is not
+// the whole chain being entered and the walk keeps the driver's chain, which
+// holds the exit frame. Green on master; the first version of the rewind rule
+// reported it expired. racket and petite: from-before.
+func TestCallWithExitBeforeThunkOfASubContextCapture(t *testing.T) {
+	t.Parallel()
+
+	out := filepath.Join(t.TempDir(), "out.txt")
+	tcs := []struct {
+		name    string
+		capture string
+	}{
+		{name: "eval", capture: "(eval '" + d2Wind + " (interaction-environment))"},
+		{name: "load", capture: `(load "dw.scm")`},
+		{name: "call-with-output-file", capture: "(call-with-output-file " + strconv.Quote(out) + " (lambda (port) " + d2Wind + "))"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			engine := newCallWithExitEngine(t)
+			src := `(define st (vector #f #f 0))
+			        (call-with-exit (lambda (e)
+			          (vector-set! st 0 e)
+			          (let ((v CAPTURE))
+			            (if (= (vector-ref st 2) 1) ((vector-ref st 1) 'again) (list 'v v)))))`
+			got, err := engine.EvalMultiple(context.Background(), strings.Replace(src, "CAPTURE", tc.capture, 1))
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, got.SchemeString(), qt.Equals, "from-before")
+		})
+	}
+}
+
+// TestCallWithExitNestedRootIsPerRun pins that a root is nested only when its own
+// run descends from another run of the engine: while a SRFI-18 thread is inside a
+// host primitive's nested EvalMultiple, the main goroutine's next top-level run
+// is not nested, so an exit its guard left, called again, is the catchable
+// expired error. An engine-wide count made it opaque, and the call failed with an
+// uncatchable "no prompt found". The thread is held inside the nested run by a
+// channel, not a timer.
+func TestCallWithExitNestedRootIsPerRun(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	engine, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
+	qt.Assert(t, err, qt.IsNil)
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	err = engine.RegisterPrimitive(wile.PrimitiveSpec{
+		Name:       "wait-prim",
+		ParamCount: 0,
+		Impl: func(mc wile.CallContext) error {
+			close(entered)
+			<-release
+			mc.SetValue(wile.NewInteger(1).Internal())
+			return nil
+		},
+	})
+	qt.Assert(t, err, qt.IsNil)
+	err = engine.RegisterPrimitive(wile.PrimitiveSpec{
+		Name:       "host-eval",
+		ParamCount: 0,
+		Impl: func(mc wile.CallContext) error {
+			v, evalErr := engine.EvalMultiple(mc.Context(), "(wait-prim)")
+			if evalErr != nil {
+				return evalErr
+			}
+			mc.SetValue(v.Internal())
+			return nil
+		},
+	})
+	qt.Assert(t, err, qt.IsNil)
+	_, err = engine.EvalMultiple(ctx, `(define s (vector #f)) (define th (make-thread (lambda () (host-eval)))) (thread-start! th)`)
+	qt.Assert(t, err, qt.IsNil)
+	<-entered
+	defer close(release)
+	got, err := engine.EvalMultiple(ctx, `(guard (e (#t #f)) (call-with-exit (lambda (k) (vector-set! s 0 k) (raise 'x))))
+	  (guard (e (#t (list 'caught (error-object? e)))) ((vector-ref s 0) 1))`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, got.SchemeString(), qt.Equals, "(caught #t)")
 }
