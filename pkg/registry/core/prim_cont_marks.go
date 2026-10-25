@@ -262,7 +262,9 @@ func PrimContinuationMarks(mc machine.CallContext) error {
 	case *machine.CapturedContinuation:
 		mc.SetValue(machine.CollectMarksFromCapture(k.ComposableContinuation(), tag))
 	case *machine.ComposableContinuation:
-		// The segment ends at its prompt, so its marks stop there whatever the tag.
+		// The segment ends at its prompt, and the walk at the segment's bottom frame
+		// (even after an invocation grafted it onto a caller), so its marks stop
+		// there whatever the tag.
 		mc.SetValue(machine.CollectMarksFromCapture(k, tag))
 	default:
 		return werr.WrapForeignErrorf(werr.ErrNotAContinuation,

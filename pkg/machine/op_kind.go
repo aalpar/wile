@@ -185,8 +185,6 @@ var (
 	_ InlinedOperation = (*OperationPushWind)(nil)
 	_ InlinedOperation = (*OperationPopWind)(nil)
 	_ InlinedOperation = (*OperationSetContMark)(nil)
-	_ InlinedOperation = (*OperationSaveContMark)(nil)
-	_ InlinedOperation = (*OperationRestoreContMark)(nil)
 	_ InlinedOperation = (*OperationBoxValues)(nil)
 	_ InlinedOperation = (*OperationUnboxValues)(nil)
 	_ InlinedOperation = (*OperationGoReturn)(nil)
@@ -205,14 +203,6 @@ func (*OperationPopWind) OpKind() OpCode {
 }
 
 func (*OperationSetContMark) OpKind() OpCode {
-	return OpComplex
-}
-
-func (*OperationSaveContMark) OpKind() OpCode {
-	return OpComplex
-}
-
-func (*OperationRestoreContMark) OpKind() OpCode {
 	return OpComplex
 }
 

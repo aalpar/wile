@@ -211,8 +211,6 @@ func TestOperationToInstruction_SideTableReturnsFalse(t *testing.T) {
 		{"PushWind", NewOperationPushWind()},
 		{"PopWind", NewOperationPopWind()},
 		{"SetContMark", NewOperationSetContMark()},
-		{"SaveContMark", NewOperationSaveContMark()},
-		{"RestoreContMark", NewOperationRestoreContMark()},
 	}
 
 	for _, tc := range tests {

@@ -273,6 +273,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `call-with-immediate-continuation-mark` after a non-tail call still answers the
   enclosing frame's mark where Racket answers the default; that stays a documented
   divergence, I167 (docs/reference/r7rs-differences.md).
+- **A non-tail `with-continuation-mark` (and so a non-tail `parameterize`) is a
+  frame of its own, and `continuation-marks` takes a composable continuation (A23,
+  B36).** The body's mark used to overwrite the enclosing frame's:
+  `((lambda () (with-continuation-mark 'a 1 (list (with-continuation-mark 'a 2
+  (continuation-mark-set->list #f 'a))))))` is `((2 1))`, as in Racket (was
+  `((2))`). Consequences: `call-with-immediate-continuation-mark` in the key or value
+  position of a non-tail `with-continuation-mark` answers the default where it
+  answered the enclosing frame's mark; each non-tail `with-continuation-mark` or
+  `parameterize` takes one call-depth slot, so a recursion through one reaches
+  `WithMaxCallDepth`'s limit at about half the depth it did. `(continuation-marks k)`
+  accepts a `call-with-composable-continuation` continuation (it raised "expected a
+  continuation") and reports the segment's marks up to its prompt, including after
+  `k` has been invoked.
+- **A closure or `let` made while a saved continuation shares the procedure's frame no
+  longer leaves that frame to be recycled under it.** A non-tail call saves its
+  frame before its arguments evaluate, so `(set! store (cons (lambda () `(,n)) store))`
+  inside a procedure returned the frame to the pool while the closure (which retains
+  it, for the quasiquote) still lived, and a later call read another activation's
+  slot ("unbox: value register holds *values.Integer, not a box"). Giving up the
+  pool's claim now clears it on those continuations too.
 - **`+`/`-` of a BigComplex and `+inf.0`/`+nan.0` keep the imaginary part's
   digits.** `(+ (make-rectangular #m0 #m9.87654321098765432109876543210987) +inf.0)`
   came back with an imaginary part of `9.87654321098765386…`: the imaginary
@@ -977,6 +997,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
+- **BREAKING (Go API): `machine.OperationSaveContMark`, `machine.OperationRestoreContMark`
+  and their constructors.** The compiler stopped emitting them when a non-tail
+  `with-continuation-mark` began pushing a continuation frame (see Fixed); no other
+  caller existed. The unexported sentinel they shared is gone with them.
 - **BREAKING (Go API): `schemeutil.TrimSuffixCI` (I157).** Public since
   v1.18.0 (an exported identifier since v1.0.0, under `internal/tokenizer`, then
   `internal/schemeutil` from v1.6.0), with zero consumers found in the workspace

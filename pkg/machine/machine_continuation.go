@@ -117,6 +117,16 @@ func NewMachineContinuationFromMachineContext(mc *MachineContext, off int) *Mach
 	return q
 }
 
+// isMarkFrame reports whether p is the frame a non-tail with-continuation-mark
+// pushed for its body: its return point is the only one the compiler places right
+// after an OpRestoreContinuation (every call's follows the apply).
+func (p *MachineContinuation) isMarkFrame() bool {
+	if p.template == nil || p.pc < 1 || p.pc > len(p.template.code) {
+		return false
+	}
+	return p.template.code[p.pc-1].Op == OpRestoreContinuation
+}
+
 func (p *MachineContinuation) Parent() *MachineContinuation {
 	return p.parent
 }

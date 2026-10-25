@@ -286,7 +286,7 @@ func fuseCallForeignCached(tpl *NativeTemplate, plan *EditPlan) {
 		return
 	}
 	targets := branchTargets(code)
-	depths := evalStackDepths(code)
+	depths := evalStackDepths(code, tpl.sideTable)
 
 	// Track PullApply indices already claimed by a fusion to prevent
 	// the same PullApply from being matched by both non-tail and tail
@@ -514,7 +514,7 @@ func fuseCallGeneric(tpl *NativeTemplate, plan *EditPlan) {
 		return
 	}
 	targets := branchTargets(code)
-	depths := evalStackDepths(code)
+	depths := evalStackDepths(code, tpl.sideTable)
 
 	for i := range len(code) {
 		// Non-tail pattern: SaveContinuation + PushLocal/PushCachedBinding ... PullApply
@@ -665,7 +665,7 @@ func fusePromotedCompoundArgs(tpl *NativeTemplate, plan *EditPlan) {
 		return
 	}
 	targets := branchTargets(code)
-	depths := evalStackDepths(code)
+	depths := evalStackDepths(code, tpl.sideTable)
 
 	for i := 0; i < len(code); i++ {
 		if code[i].Op != OpPushCachedBinding {

@@ -16,6 +16,7 @@ package core_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -729,6 +730,93 @@ func TestContinuationMarks_NonTailWCMPushesFrame(t *testing.T) {
 	}
 }
 
+// TestNonTailWCMFrameFoldsIntoItsActivationInTraces pins that the frame a non-tail
+// with-continuation-mark pushes is not rendered as a second activation of its
+// procedure: outer appears once, as the call that is in progress there. Activations
+// of one procedure that are really distinct (the recursion through f) stay apart.
+func TestNonTailWCMFrameFoldsIntoItsActivationInTraces(t *testing.T) {
+	t.Parallel()
+
+	const prelude = `(define p (make-parameter 0))
+(define (inner) (vector-ref (vector) 5))
+`
+	tcs := []struct {
+		name  string
+		code  string
+		frame string
+		count int
+	}{
+		{
+			name:  "parameterize in an argument",
+			code:  `(define (outer) (car (list (parameterize ((p 1)) (inner))))) (outer)`,
+			frame: "at outer ",
+			count: 1,
+		},
+		{
+			name:  "recursion through a parameterize body keeps each activation",
+			code:  `(define (f n) (if (= n 0) (inner) (list (parameterize ((p n)) (f (- n 1)))))) (f 2)`,
+			frame: "at f ",
+			count: 2,
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			engine, err := wile.NewEngine(context.Background())
+			qt.Assert(t, err, qt.IsNil)
+			_, err = engine.EvalMultiple(context.Background(), prelude+tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Assert(t, strings.Count(err.Error(), tc.frame), qt.Equals, tc.count, qt.Commentf("%s", err.Error()))
+		})
+	}
+}
+
+// TestSharedFrameContinuationDoesNotReleaseARetainedEnv pins Invariant H across a
+// continuation saved while the procedure's own frame is still live: the non-tail
+// with-continuation-mark frame, and the frame a non-tail call saves before its
+// arguments evaluate. A closure that retains its frame (the quasiquote) or a let
+// parented on it, made after that save, gives up the pool's claim on the frame; the
+// saved continuation must give it up too, or returning through it hands the stale
+// claim back and the frame is recycled under the live closure. churn reacquires the
+// released frames; every stored closure must still read its own n.
+func TestSharedFrameContinuationDoesNotReleaseARetainedEnv(t *testing.T) {
+	t.Parallel()
+
+	const prelude = `(let ((tmp #f) (store '()))
+  (define (churn k) (let loop ((i 0) (acc 0)) (if (= i k) acc (loop (+ i 1) (+ acc ((lambda (a b c) (+ a b c)) i i i))))))
+  (define (run mk) (set! store '()) (let loop ((i 0)) (if (< i 50) (begin (mk i) (loop (+ i 1))))) (churn 1000) (list-tail (map (lambda (f) (f)) store) 47))
+`
+	tcs := []struct {
+		name     string
+		mk       string
+		expected string
+	}{
+		{
+			name:     "closure in a non-tail wcm body",
+			mk:       "(lambda (n) (with-continuation-mark 'a 1 (set! tmp (lambda () `(,n ,(* n 10))))) (set! store (cons tmp store)) n)",
+			expected: "((2 20) (1 10) (0 0))",
+		},
+		{
+			name:     "let in a non-tail wcm body",
+			mk:       "(lambda (n) (with-continuation-mark 'a 1 (let ((y n)) (set! tmp (lambda () `(,y ,n))))) (set! store (cons tmp store)) n)",
+			expected: "((2 2) (1 1) (0 0))",
+		},
+		{
+			name:     "closure in a non-tail call's arguments",
+			mk:       "(lambda (n) (set! store (cons (lambda () `(,n)) store)) n)",
+			expected: "((2) (1) (0))",
+		},
+	}
+	for name, run := range markShapeRunners() {
+		for _, tc := range tcs {
+			t.Run(name+"/"+tc.name, func(t *testing.T) {
+				got, err := run(t, prelude+"(run "+tc.mk+"))")
+				qt.Assert(t, err, qt.IsNil)
+				qt.Assert(t, got, qt.Equals, tc.expected)
+			})
+		}
+	}
+}
+
 // TestContinuationMarksOfComposableContinuation pins B36 row 2: continuation-marks
 // accepts a composable continuation and reports its segment's marks, nearest first,
 // up to the prompt it was captured at. Expected values are Racket's, measured. The
@@ -773,6 +861,15 @@ func TestContinuationMarksOfComposableContinuation(t *testing.T) {
 					(lambda (k) (list (continuation-mark-set->list (continuation-marks k) 'a) (continuation-mark-set->list (continuation-marks k u) 'a))) u))))))
 				u h)))))))`,
 			expected: "((((1) (1))))",
+		},
+		{
+			name: "invoking the continuation does not add the invoker's marks",
+			code: pre + `(let ((kc #f))
+				(call-with-continuation-prompt (lambda () ((lambda () (with-continuation-mark 'a 1 (list (with-continuation-mark 'a 2
+					(call-with-composable-continuation (lambda (k) (set! kc k) 'first) t))))))) t h)
+				((lambda () (with-continuation-mark 'a 9 (list (kc 'x)))))
+				(continuation-mark-set->list (continuation-marks kc) 'a)))`,
+			expected: "(2 1)",
 		},
 	}
 	for name, run := range markShapeRunners() {

@@ -101,7 +101,7 @@ func (p *OperationMakeClosure) Apply(mc *MachineContext) (*MachineContext, error
 	// live path — the inline OpMakeClosure arm in MachineContext.Run — and this
 	// method must not diverge from it.
 	if tpl.RetainsLexicalEnv() {
-		mc.envPooled = false
+		mc.disownEnv()
 	}
 	cls := NewClosureCapturing(tpl, closureLink(mc.env, tpl), free)
 	backPatchSelfSlot(cls, free, p.selfSlot)

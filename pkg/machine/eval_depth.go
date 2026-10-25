@@ -63,6 +63,15 @@ func buildPromotedStackDelta() [opCount]int8 {
 	return q
 }
 
+// evalStackDeltaOperation is a side-table op that states its fixed eval-stack
+// delta, so an OpComplex referring to it does not poison the depths after it.
+// OperationSetContMark is the one that needs it: it sits between a
+// with-continuation-mark's key push and its body, so without it no call in the body
+// could be fused.
+type evalStackDeltaOperation interface {
+	evalStackDelta() int
+}
+
 // stackDelta reports how instr changes the eval stack's height, and whether
 // that is known at all.
 //
@@ -71,11 +80,21 @@ func buildPromotedStackDelta() [opCount]int8 {
 // an apply drains the group and either returns through its continuation — whose
 // return point the enclosing OpSaveContinuation supplies at the caller's own
 // depth — or does not return to this template at all.
-func stackDelta(instr Instruction) (int, bool) {
+func stackDelta(instr Instruction, side []InlinedOperation) (int, bool) {
 	if promotedStackDelta[instr.Op] != 0 {
 		return int(promotedStackDelta[instr.Op]), true
 	}
 	switch instr.Op {
+	case OpComplex:
+		// A side op answers only if it models its own delta; every other one
+		// stays unknown below.
+		if int(instr.Arg) < len(side) {
+			op, ok := side[instr.Arg].(evalStackDeltaOperation)
+			if ok {
+				return op.evalStackDelta(), true
+			}
+		}
+		return 0, false
 	case OpPush, OpPushLiteral, OpPushGlobal, OpPushLocal, OpPushCachedBinding, OpPushFree:
 		return 1, true
 	case OpPop, OpPull, OpDrop, OpStoreLocal, OpStoreGlobal, OpStoreThroughBox, OpStoreFree:
@@ -90,7 +109,7 @@ func stackDelta(instr Instruction) (int, bool) {
 		// Value register or environment only.
 		return 0, true
 	default:
-		// OpComplex, OpUnpackListToStack, OpPushValues and anything added later.
+		// OpUnpackListToStack, OpPushValues and anything added later.
 		return 0, false
 	}
 }
@@ -135,7 +154,7 @@ func opIsTailPromoted(op OpCode) bool {
 // two places and the two must agree before either is trusted. Templates are
 // small and every index is re-queued only when its answer weakens (known ->
 // unknown), so the walk terminates after at most two visits per edge.
-func evalStackDepths(code []Instruction) []int {
+func evalStackDepths(code []Instruction, side []InlinedOperation) []int {
 	q := make([]int, len(code))
 	for i := range q {
 		q[i] = depthUnreached
@@ -188,7 +207,7 @@ func evalStackDepths(code []Instruction) []int {
 			continue
 		}
 
-		delta, known := stackDelta(instr)
+		delta, known := stackDelta(instr, side)
 		next := depthUnknown
 		if known && d != depthUnknown {
 			next = d + delta

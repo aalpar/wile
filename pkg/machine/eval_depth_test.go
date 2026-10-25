@@ -103,7 +103,7 @@ func TestEvalStackDepthsSeparatesGroupStarts(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			qt.Assert(t, evalStackDepths(tc.code), qt.DeepEquals, tc.want)
+			qt.Assert(t, evalStackDepths(tc.code, nil), qt.DeepEquals, tc.want)
 		})
 	}
 }
@@ -118,7 +118,7 @@ func TestEvalStackDepthsMergeDisagreement(t *testing.T) {
 		{Op: OpLoadVoid},
 		{Op: OpPushLocal, Arg: 0},
 	}
-	got := evalStackDepths(code)
+	got := evalStackDepths(code, nil)
 	qt.Assert(t, got[4], qt.Equals, depthUnknown,
 		qt.Commentf("index 4 is reached at height 1 through the consequent and 0 "+
 			"through the alternative; answering either would license a fusion on "+

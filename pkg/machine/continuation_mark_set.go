@@ -99,19 +99,23 @@ func (p *ContinuationMarkSet) ToListStar(keys []values.Value, noneVal values.Val
 
 // appendChainMarks appends a clone of every non-empty mark frame from cont
 // outward, nearest first, stopping at the first frame whose promptTag matches
-// tag (exclusive). Pass DefaultPromptTag for an unbounded walk. It is the one
-// chain walk behind both ContinuationMarkSet collectors.
+// tag (exclusive) or after last (inclusive; nil for no such bound). Pass
+// DefaultPromptTag for an unbounded walk. It is the one chain walk behind both
+// ContinuationMarkSet collectors.
 //
 // The prompt frame's own marks are excluded because they are not inside the
 // prompt: RunBodyUnderFrame moves the marks of the activation that INSTALLED the
 // prompt onto that frame, so they belong to the continuation beyond the delimiter.
-func appendChainMarks(frames [][]markEntry, cont *MachineContinuation, tag *PromptTag) [][]markEntry {
+func appendChainMarks(frames [][]markEntry, cont, last *MachineContinuation, tag *PromptTag) [][]markEntry {
 	for c := cont; c != nil; c = c.parent {
 		if c.promptTag == tag {
 			break
 		}
 		if len(c.marks) > 0 {
 			frames = append(frames, cloneMarks(c.marks))
+		}
+		if c == last {
+			break
 		}
 	}
 	return frames
@@ -126,12 +130,17 @@ func appendChainMarks(frames [][]markEntry, cont *MachineContinuation, tag *Prom
 // nothing is reported twice. Like CollectContinuationMarks, the live marks are never
 // cut by tag: they are inside any prompt the capture is delimited at. liveMarks is
 // already a private clone made at capture and is never mutated, so the set shares it.
+//
+// The walk ends at the segment's bottom frame (inclusive), not at a nil parent: the
+// first invocation hands out the original segment (AcquireSegment) and
+// GraftContinuation hangs its bottom onto the invoker's chain, so walking on would
+// report the invoker's marks as the continuation's own.
 func CollectMarksFromCapture(comp *ComposableContinuation, tag *PromptTag) *ContinuationMarkSet {
 	var frames [][]markEntry
 	if len(comp.liveMarks) > 0 {
 		frames = append(frames, comp.liveMarks)
 	}
-	return &ContinuationMarkSet{frames: appendChainMarks(frames, comp.cont, tag)}
+	return &ContinuationMarkSet{frames: appendChainMarks(frames, comp.cont, comp.bottom, tag)}
 }
 
 // CollectContinuationMarks builds a ContinuationMarkSet snapshot from the
@@ -148,5 +157,5 @@ func (p *MachineContext) CollectContinuationMarks(tag *PromptTag) *ContinuationM
 	if len(p.marks) > 0 {
 		frames = append(frames, cloneMarks(p.marks))
 	}
-	return &ContinuationMarkSet{frames: appendChainMarks(frames, p.cont, tag)}
+	return &ContinuationMarkSet{frames: appendChainMarks(frames, p.cont, nil, tag)}
 }
