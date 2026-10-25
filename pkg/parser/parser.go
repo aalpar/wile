@@ -418,6 +418,9 @@ func (p *Parser) readQuoteForm(keyword string) (syntax.SyntaxValue, tokenizer.To
 	}
 	sym := p.wrapSyntaxSymbol(keyword, t)
 	result := p.listSyntax(t, sym, q)
+	// p.cur is the datum's last token. The datum's own End is not usable: a
+	// #n# reference hands back an earlier node, which ends before the quote.
+	spanTo(result, p.cur.End())
 	return result, p.cur, nil
 }
 
@@ -555,7 +558,9 @@ func (p *Parser) readLabelAssignment() (syntax.SyntaxValue, tokenizer.Token, err
 	// (design C6), which is why refusing cyclic labels at READ time is not an
 	// option.
 	if p.labelBackrefs[labelNum] > backrefsBefore {
-		return p.wrapSyntaxDatumLabelAssignment(labelNum, v, assignTok), p.cur, nil
+		q := p.wrapSyntaxDatumLabelAssignment(labelNum, v, assignTok)
+		spanTo(q, p.cur.End()) // the #n= through its datum's last token
+		return q, p.cur, nil
 	}
 	return v, p.cur, nil
 }
@@ -661,6 +666,7 @@ func (p *Parser) readBoxInto(placeholder *syntax.SyntaxBox) (syntax.SyntaxValue,
 		return nil, tok, err
 	}
 	placeholder.Value = v
+	spanTo(placeholder, p.cur.End()) // the #& through its datum's last token
 	return placeholder, tok, nil
 }
 
@@ -815,6 +821,7 @@ func (p *Parser) readListInto(head *syntax.SyntaxPair, opener tokenizer.Tokenize
 		// Bracket mismatch
 		return nil, p.cur, p.checkDelimiterMatch(opener)
 	}
+	spanTo(q0, p.cur.End())
 	return q0, p.cur, nil
 }
 
@@ -864,6 +871,7 @@ func (p *Parser) readVectorInto(q *syntax.SyntaxVector) (syntax.SyntaxValue, tok
 		return nil, p.cur, NewParserErrorWithWrapf(werr.ErrNotACloseParen, p.cur,
 			"vector closed with %q, expected )", p.cur.String())
 	}
+	spanTo(q, p.cur.End())
 	return q, p.cur, nil
 }
 
@@ -900,7 +908,9 @@ func (p *Parser) readByteVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 	}
 	if p.curr().Type() == tokenizer.TokenizerStateCloseParen {
 		// Empty bytevector case: #u8()
-		return p.wrapSyntax(values.NewByteVector(), p.cur), p.cur, nil
+		q := p.wrapSyntax(values.NewByteVector(), openTok)
+		spanTo(q, p.cur.End())
+		return q, p.cur, nil
 	}
 	cerr := p.checkByteVectorClose(err)
 	if cerr != nil {
@@ -932,7 +942,10 @@ func (p *Parser) readByteVector() (syntax.SyntaxValue, tokenizer.Token, error) {
 		}
 		i, ok = stx.Unwrap().(*values.Integer)
 	}
-	return p.wrapSyntax(values.NewByteVector(bs...), p.cur), p.cur, nil
+	// Located at the opener and spanning to the closer, as lists and vectors are.
+	q := p.wrapSyntax(values.NewByteVector(bs...), openTok)
+	spanTo(q, p.cur.End())
+	return q, p.cur, nil
 }
 
 // parseCharacter parses a character literal from the current token.

@@ -90,6 +90,20 @@ func (p *Parser) processFoldCaseDirective(d *syntax.SyntaxDirective) {
 	}
 }
 
+// spanTo extends a compound datum's source context to end at end, which a
+// caller takes from the form's last token (never from a child node: a #n#
+// reference hands back an earlier one). The context is minted from the opener
+// token, so without this its End is the opener's and syntax-span answers 1 for
+// (a (b c)). The context is fresh per form, so the assignment touches no other
+// datum.
+func spanTo(stx syntax.SyntaxValue, end syntax.SourceIndexes) {
+	sc := stx.SourceContext()
+	if sc == nil {
+		return
+	}
+	sc.End = end
+}
+
 func (p *Parser) listSyntax(t tokenizer.Token, os ...syntax.SyntaxValue) syntax.SyntaxValue {
 	l := len(os)
 	switch l {
