@@ -55,14 +55,6 @@ func TestControlInACompileTimeBody(t *testing.T) {
   (export cell)
   (begin (define cell (vector #f))))`),
 		},
-		"probe/user.sld": &fstest.MapFile{
-			Data: []byte(`(define-library (probe user)
-  (import (scheme base) (probe box))
-  (export used)
-  (begin
-    (define used 'lib-body-finished)
-    ((vector-ref cell 0) 'from-library-body)))`),
-		},
 		"probe/ab.sld": &fstest.MapFile{
 			Data: []byte(`(define-library (probe ab)
   (import (scheme base))
@@ -157,7 +149,7 @@ func TestControlInACompileTimeBody(t *testing.T) {
 			// The expander keeps m1's context alive while it expands m1's output, so
 			// m1's continuation is stale by then although its context is not yet
 			// released: the token closes when the root's run ends, and m2's root
-			// resolves it (m1's remainder expands to (m2) again, now with n = 10).
+			// resolves it (m1's remainder expands to (m2) again, now with n = 11).
 			name: "a continuation from a transformer body resumes when invoked from that transformer's output",
 			src: `(import (for-syntax (scheme base)))
 			      (begin-for-syntax (define saved #f) (define n 0))
@@ -721,10 +713,11 @@ func TestLibraryBodyThatExitedThroughAnAbortIsNotReplayedByLaterImports(t *testi
 	qt.Assert(t, errors.Is(err, werr.ErrContinuationBarrier), qt.IsTrue, qt.Commentf("%v", err))
 	var abortErr *machine.ErrPromptAbort
 	qt.Assert(t, errors.As(err, &abortErr), qt.IsFalse, qt.Commentf("%v", err))
-	qt.Assert(t, err.Error(), qt.Contains, "exited through an abort")
 	var se *compilation.SourcedError
 	qt.Assert(t, errors.As(err, &se), qt.IsTrue, qt.Commentf("%v", err))
 	qt.Assert(t, se.Source.Location(), qt.Equals, "probe/user.sld:1:0")
+	qt.Assert(t, se.Cause.Error(), qt.Equals,
+		"library (probe user): its body exited through an abort to prompt #<continuation-prompt-tag:p> when it was first instantiated: continuation barrier violation")
 }
 
 // TestAbortAtTopLevelExpansionIsAnError is the abort form of the stale-resume
@@ -754,6 +747,12 @@ func TestAbortAtTopLevelExpansionIsAnError(t *testing.T) {
 	qt.Assert(t, errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue, qt.Commentf("%v", err))
 	var abortErr *machine.ErrPromptAbort
 	qt.Assert(t, errors.As(err, &abortErr), qt.IsFalse)
+	// One compile-error layer, the location once, at the begin-for-syntax form.
+	var ce *wile.CompilationError
+	qt.Assert(t, errors.As(err, &ce), qt.IsTrue, qt.Commentf("%v", err))
+	qt.Assert(t, ce.Source, qt.Equals, ":2:41")
+	qt.Assert(t, err.Error(), qt.Equals,
+		"expand/compile error: :2:41: abort-current-continuation: no prompt found for tag #<continuation-prompt-tag:nowhere> at expansion time: invalid argument")
 }
 
 // TestBootstrapBodyHasADriver pins the third expansion-time root: a bootstrap
@@ -816,6 +815,10 @@ func assertRememberedAsCancelled(t *testing.T, eng *wile.Engine, src string) {
 	var se *compilation.SourcedError
 	qt.Assert(t, errors.As(err, &se), qt.IsTrue, qt.Commentf("%s: %v", src, err))
 	qt.Assert(t, se.Source.Location(), qt.Equals, "probe/user.sld:1:0")
+	// The conversion names how the body stopped; the first run's own failure,
+	// with its location and trace, is not pasted into the message.
+	qt.Assert(t, se.Cause.Error(), qt.Equals,
+		"library (probe user): its body was cancelled when it was first instantiated: library instantiation was cancelled")
 	cell, ok := eng.Get("cell")
 	qt.Assert(t, ok, qt.IsTrue)
 	qt.Assert(t, cell.SchemeString(), qt.Matches, `#\(1 .*`, qt.Commentf("%s: the body ran again", src))
