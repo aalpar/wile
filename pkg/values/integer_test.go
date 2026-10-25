@@ -303,6 +303,29 @@ func TestInteger_OverflowPromotion(t *testing.T) {
 	c.Assert(ok, qt.IsTrue, qt.Commentf("5 * 3 should produce Integer, got %T", result))
 }
 
+// TestInteger_DivideMinInt64ByNegOne pins the MinInt64 / -1 quotient: the
+// integer-valued Rational 2^63/1 must descend to a BigInteger, not wrap
+// through int64 back to MinInt64.
+func TestInteger_DivideMinInt64ByNegOne(t *testing.T) {
+	c := qt.New(t)
+
+	expected := new(big.Int).Neg(big.NewInt(math.MinInt64)) // +2^63
+	result, err := values.NewInteger(math.MinInt64).Divide(values.NewInteger(-1))
+	c.Assert(err, qt.IsNil)
+	bi, ok := result.(*values.BigInteger)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("MinInt64 / -1 should produce BigInteger, got %T (%s)", result, result.SchemeString()))
+	c.Assert(bi.BigInt().Cmp(expected), qt.Equals, 0)
+
+	// Controls: an exact quotient that fits stays an Integer; a non-integer stays a Rational.
+	result, err = values.NewInteger(6).Divide(values.NewInteger(3))
+	c.Assert(err, qt.IsNil)
+	c.Assert(result, qt.DeepEquals, values.NewInteger(2))
+	result, err = values.NewInteger(1).Divide(values.NewInteger(3))
+	c.Assert(err, qt.IsNil)
+	_, ok = result.(*values.Rational)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("1 / 3 should stay Rational, got %T", result))
+}
+
 // TestInteger_MultiplyMinInt64ByNegOne pins the -1 * MinInt64 overflow corner.
 // The division-based overflow check (prod/a == b) cannot detect it when a == -1,
 // because the recovery division MinInt64/-1 itself wraps to MinInt64 (Go spec).

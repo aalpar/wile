@@ -226,11 +226,7 @@ func init() {
 
 	integerDivide = makeDivideDispatch(KindInteger, func(p *Integer, o Number) (Number, error) {
 		v := o.(*Integer)
-		result := NewRational(p.Value, v.Value)
-		if result.IsInteger() {
-			return NewInteger(result.NumInt64()), nil
-		}
-		return result, nil
+		return rationalSimplifyDown(NewRational(p.Value, v.Value)), nil
 	})
 
 	registerNumericSpec(KindInteger, NumericTypeSpec{
@@ -317,11 +313,7 @@ func (p *Integer) Divide(o Number) (Number, error) {
 	}
 	v, ok := o.(*Integer)
 	if ok {
-		result := NewRational(p.Value, v.Value)
-		if result.IsInteger() {
-			return NewInteger(result.NumInt64()), nil
-		}
-		return result, nil
+		return rationalSimplifyDown(NewRational(p.Value, v.Value)), nil
 	}
 	return integerDivide[o.Kind()](p, o)
 }
