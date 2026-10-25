@@ -598,7 +598,10 @@ func (p *Parser) readDatumComment() (syntax.SyntaxValue, tokenizer.Token, error)
 		// malformed input rather than a clean end of input.
 		return nil, p.cur, wrapMidParseEOF(err, beginTok, "datum comment")
 	}
-	// Read the syntax value being commented
+	// Read the syntax value being commented. readIntroducedDatum rather than
+	// readSyntax keeps every introducer on one helper; in this
+	// comment-preserving mode each EOF branch of readSyntax already returns a
+	// located error, so its EOF wrap does not fire here today.
 	var v syntax.SyntaxValue
 	v, _, err = p.readIntroducedDatum(beginTok, "datum comment")
 	// "#;)" must be a located error rather than a node whose Value is nil:

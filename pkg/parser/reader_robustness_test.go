@@ -421,3 +421,27 @@ func TestParserErrorLocationEscapesFileName(t *testing.T) {
 		})
 	}
 }
+
+// TestReader_EOFAfterIntroducerInsideAFormNamesTheIntroducer pins the location
+// inside an open form: the innermost introducer, not the enclosing list, is
+// what is cut off (racket: "expected a commented-out element for `#;`").
+func TestReader_EOFAfterIntroducerInsideAFormNamesTheIntroducer(t *testing.T) {
+	tcs := []struct{ src, want string }{
+		{"(1 #;", "in.scm:1:3"},
+		{"(' ;c", "in.scm:1:1"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.src, func(t *testing.T) {
+			env := environment.NewNamespace().Runtime()
+			p := NewParserWithFile(env, true, strings.NewReader(tc.src), "in.scm")
+			_, err := p.ReadSyntax(context.TODO())
+			var perr *ParserError
+			if !errors.As(err, &perr) {
+				t.Fatalf("reader returned %T for %q, want *ParserError: %v", err, tc.src, err)
+			}
+			if perr.Location() != tc.want {
+				t.Errorf("%q located at %q; want %q", tc.src, perr.Location(), tc.want)
+			}
+		})
+	}
+}
