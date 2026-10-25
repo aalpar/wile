@@ -16,6 +16,7 @@ package wile_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,6 +25,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	"github.com/aalpar/wile/pkg/machine/compilation"
 	"github.com/aalpar/wile/pkg/wile"
 )
 
@@ -343,10 +345,13 @@ func TestIncludeInLibraryBeginBody(t *testing.T) {
 // TestIncludeErrorsKeepTheirLocations pins where include errors point: a missing
 // file at the include form's own line, and a form of the file that fails to
 // expand at the file's own line (the includer's coarser location does not
-// replace it).
+// replace it). A read error in the file renders under the include form's prefix,
+// so its own text must name the file its line and column belong to.
 func TestIncludeErrorsKeepTheirLocations(t *testing.T) {
 	fsys := fstest.MapFS{
-		"badexp.scm": &fstest.MapFile{Data: []byte("(define ok 1)\n(syntax-error \"boom\")")},
+		"badexp.scm":  &fstest.MapFile{Data: []byte("(define ok 1)\n(syntax-error \"boom\")")},
+		"badread.scm": &fstest.MapFile{Data: []byte("(define ok 1)\n(define open (\n")},
+		"badlex.scm":  &fstest.MapFile{Data: []byte("(define ok 1)\n#b109\n")},
 	}
 	tcs := []struct {
 		name string
@@ -355,12 +360,66 @@ func TestIncludeErrorsKeepTheirLocations(t *testing.T) {
 	}{
 		{name: "missing file names the include's line", code: "(define a 1)\n(define b 2)\n(include \"absent.scm\")", want: "includer.scm:3:"},
 		{name: "expansion failure keeps the file's line", code: `(include "badexp.scm")`, want: "badexp.scm:2:"},
+		{name: "parse error names the included file's position", code: "(define a 1)\n(include \"badread.scm\")", want: "(at badread.scm:2:13, index 27,"},
+		{name: "lexical error names the included file", code: "(define a 1)\n(include \"badlex.scm\")", want: "(at badlex.scm:2:4, index 18, character '9' (U+0039), tokenizer state unsigned-integer)"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := evalIncludeProgram(t, fsys, tc.code)
 			qt.Assert(t, err, qt.IsNotNil)
 			qt.Assert(t, err.Error(), qt.Contains, tc.want)
+		})
+	}
+}
+
+// TestIncludedFormErrorNamesTheInclude pins B29 gap 1: a form spliced from an
+// included file that fails to compile names the include that brought it in, as
+// a macro expansion's error names the macro. The splice leaves no include form
+// for the compiler to wrap, so the frame rides on the included forms' origin.
+func TestIncludedFormErrorNamesTheInclude(t *testing.T) {
+	fsys := fstest.MapFS{
+		"badcompile.scm": &fstest.MapFile{Data: []byte("(define ok 1)\n(define bad (lambda))\n")},
+		"outer.scm":      &fstest.MapFile{Data: []byte("(define o 1)\n(include \"badcompile.scm\")\n")},
+		"usesmac.scm":    &fstest.MapFile{Data: []byte("(define-syntax badif (syntax-rules () ((_ x) (if x))))\n(badif 1)\n")},
+		"badset.scm":     &fstest.MapFile{Data: []byte("(define ok 1)\n(set! nope 2)\n")},
+	}
+	tcs := []struct {
+		name string
+		code string
+		want []string
+	}{
+		{name: "compile error in an included form", code: "(define a 1)\n(include \"badcompile.scm\")",
+			want: []string{"badcompile.scm:2:13: lambda requires", "expanded from 'include' at includer.scm:2:1\n"}},
+		{name: "compiler-raised error in an included form", code: "(define a 1)\n(include \"badset.scm\")",
+			want: []string{"badset.scm:2:6: no such binding", "expanded from 'include' at includer.scm:2:1\n"}},
+		{name: "include-ci names itself", code: "(define a 1)\n(include-ci \"badcompile.scm\")",
+			want: []string{"expanded from 'include-ci' at includer.scm:2:1\n"}},
+		{name: "nested include names both includes", code: "(include \"outer.scm\")",
+			want: []string{"expanded from 'include' at outer.scm:2:1\n", "expanded from 'include' at includer.scm:1:1\n"}},
+		{name: "macro used in an included file chains to the include", code: "(define a 1)\n(include \"usesmac.scm\")",
+			want: []string{"expanded from 'badif' at usesmac.scm:2:1\n", "expanded from 'include' at includer.scm:2:1\n"}},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := evalIncludeProgram(t, fsys, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+			for _, want := range tc.want {
+				// A chain line ends at a newline or the end of the text, so
+				// includer.scm:2:1 cannot match includer.scm:2:10.
+				qt.Check(t, strings.Count(err.Error()+"\n", want), qt.Equals, 1, qt.Commentf("%s", err.Error()))
+			}
+			// The frame is carried, not only rendered: the failing node's
+			// SourcedError holds the include in its origin chain.
+			var deepest, se *compilation.SourcedError
+			for e := err; errors.As(e, &se); e = se.Cause {
+				deepest = se
+			}
+			qt.Assert(t, deepest, qt.IsNotNil)
+			found := false
+			for o := deepest.Source.Origin; o != nil; o = o.Parent {
+				found = found || strings.HasPrefix(o.Identifier, "include")
+			}
+			qt.Check(t, found, qt.IsTrue, qt.Commentf("no include in the origin chain of %v", deepest))
 		})
 	}
 }

@@ -125,6 +125,20 @@ func TestTokenizerErrorCarriesScannerState(t *testing.T) {
 				c.Check(strings.Contains(rendered, want), qt.IsTrue,
 					qt.Commentf("rendered %q lacks %q", rendered, want))
 			}
+
+			// A reader that knows the file gets the same facts with the
+			// position as file:line:col; without a name the form is Error's.
+			inFile := terr.ErrorInFile("f.scm")
+			for _, want := range []string{
+				tc.wantMess,
+				"(at f.scm:" + strconv.Itoa(tc.wantLine) + ":" + strconv.Itoa(tc.wantCol) +
+					", index " + strconv.Itoa(tc.wantIndex) + ", character ",
+				"tokenizer state " + tc.wantState.String() + ")",
+			} {
+				c.Check(strings.Contains(inFile, want), qt.IsTrue,
+					qt.Commentf("ErrorInFile %q lacks %q", inFile, want))
+			}
+			c.Check(terr.ErrorInFile(""), qt.Equals, rendered)
 		})
 	}
 }
@@ -164,6 +178,7 @@ func TestTokenizerErrorSentinelRendersBare(t *testing.T) {
 
 	sentinel := NewTokenizerError(MessageExpectingNumber)
 	c.Check(sentinel.Error(), qt.Equals, MessageExpectingNumber)
+	c.Check(sentinel.ErrorInFile("f.scm"), qt.Equals, MessageExpectingNumber)
 	_, located := sentinel.At()
 	c.Check(located, qt.IsFalse)
 }

@@ -110,15 +110,20 @@ func TestReadSyntaxFromFilePortNamesTheFile(t *testing.T) {
 }
 
 // I055-a2: a read error from a file port carries the file and the position in
-// it. error-object-source and ParserError.Location carry the file; the
-// rendered message text does not (filed against ParserError.contextSuffix).
+// it, both in error-object-source and in the message text a program displays.
 func TestReadErrorFromFilePortNamesTheFile(t *testing.T) {
 	f := newPortNameFixture(t, map[string]string{"i.scm": "(define x 1)\n(foo ]\n"})
 	got := f.evalString(`(guard (e (#t (error-object-source e)))
 		   (let ((p (open-input-file "i.scm")))
 		     (read p)
 		     (read p)))`)
-	qt.New(t).Assert(got, qt.Equals, filepath.Join(f.dir, "i.scm")+":2:5")
+	loc := filepath.Join(f.dir, "i.scm") + ":2:5"
+	qt.New(t).Assert(got, qt.Equals, loc)
+	msg := f.evalString(`(guard (e (#t (error-object-message e)))
+		   (let ((p (open-input-file "i.scm")))
+		     (read p)
+		     (read p)))`)
+	qt.New(t).Assert(msg, qt.Contains, "(at "+loc+",")
 }
 
 // Every way of opening a file port names it with the engine-resolved absolute

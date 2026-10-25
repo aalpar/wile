@@ -644,6 +644,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **A read error's text names the file it failed in.** `ParserError.Error()`
+  rendered index, line, column, token and state but never the file, so a read
+  error inside an included file printed the include form's file with the
+  included file's line, and a file port's read error named no file at all. A
+  read error from a named input now renders its position as `F:line:col`: `(at
+  F:line:col, index N, token "...", tokenizer state S)` for a parser-level
+  fault, `(at F:line:col, index N, character 'c' (U+XXXX), tokenizer state S)`
+  for a lexical one. Unnamed input keeps `line N, column N`. Because the
+  text now carries the location, a top-level parse error from a named input no
+  longer repeats it as a `CompilationError` prefix (`Source` is unchanged), and
+  `ParserError.SchemeString` drops its `at <loc>` prefix for named input.
+
+- **A compile error in an included form names the include.** The forms an
+  `(include ...)` or `(include-ci ...)` splices carry the include as their
+  expansion origin, so their errors end with `expanded from 'include' at F:L:C`,
+  nested for an include inside an included file, and as the parent of a macro
+  used in the file. The frame is carried on the failing node's `SourcedError`
+  (`Source.Origin`), not only rendered.
+
 - **`values.HashtableKind` is opaque (Go API, breaking).** It was `uint8` with
   `const` kinds, so `values.NewHashtable(values.HashtableKind(7))` compiled and
   built a table that stored as an `equal?` table while
@@ -2122,6 +2141,8 @@ and Removed before upgrading.
   read. A **parse** error keeps its prefix — its location comes from
   `parser.ParserError`, which renders position in its own `at index N, line L`
   form rather than as `file:line:col`, so there is nothing to duplicate.
+  (Superseded for named input: a read error's text now names its file, and the
+  prefix yields to it; see Unreleased, Changed.)
 
 - **`TestRuleguardRules` passed exactly once per `golangci-lint cache clean`
   and failed every run after.** golangci-lint caches by file content, and these
