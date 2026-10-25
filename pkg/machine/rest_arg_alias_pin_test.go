@@ -19,9 +19,11 @@
 // This is green on master by construction. It records the current aliasing as a
 // ratchet against a future change, not a bug fix. The exploit does not reproduce in
 // anything checked: PrimList copies the rest spine rather than returning it, and the
-// buffer is documented as safe only because the frame is used synchronously. The other
-// variadic primitives (126 specs carry IsVariadic) were NOT audited for retention, so
-// "no primitive retains its rest list" is unproven, not established.
+// buffer is documented as safe only because the frame is used synchronously. The 129
+// variadic primitives and the variadic finalizer closures were audited for retention on
+// 2026-10-24 and none retains its rest list; the audited set is pinned by
+// TestVariadicRestRetentionReviewed and TestVariadicForeignClosureSitesReviewed
+// (pkg/wile/variadic_rest_retention_guard_test.go), which pin the set, not the property.
 //
 // Mutation that reddens it: make buildRestArg allocate fresh, for example
 // `return make(values.PairBlock, n).LinkWith(vs[start:])`. Every aliasing subtest then
