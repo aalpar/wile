@@ -816,6 +816,10 @@ func setupLibrarySystem(
 // Eval compiles and executes a parsed expression, returning the result.
 // Use [Engine.Parse] to obtain an [Expression] from source code.
 // For evaluating multi-expression strings, use [Engine.EvalMultiple].
+//
+// A run whose ctx ended while it ran returns the cancellation
+// (werr.ErrOperationCancelled), even one that finished just before the ctx
+// ended: its value is discarded.
 func (p *Engine) Eval(ctx context.Context, expr *Expression) (Value, error) {
 	compiled, err := p.Compile(ctx, expr)
 	if err != nil {
@@ -855,6 +859,10 @@ func (p *Engine) EvalIn(ctx context.Context, expr *Expression, ns *environment.N
 }
 
 // EvalMultiple evaluates multiple expressions, returning the last result.
+//
+// A run whose ctx ended while it ran returns the cancellation
+// (werr.ErrOperationCancelled), even one that finished just before the ctx
+// ended: its value is discarded.
 func (p *Engine) EvalMultiple(ctx context.Context, code string) (Value, error) {
 	return p.evalMultiple(ctx, code, "")
 }
@@ -968,6 +976,10 @@ func (p *Engine) Compile(ctx context.Context, expr *Expression) (*CompiledCode, 
 }
 
 // Run executes previously compiled code.
+//
+// A run whose ctx ended while it ran returns the cancellation
+// (werr.ErrOperationCancelled), even one that finished just before the ctx
+// ended: its value is discarded.
 func (p *Engine) Run(ctx context.Context, cc *CompiledCode) (Value, error) {
 	return p.runCompiled(ctx, cc)
 }
@@ -1077,6 +1089,10 @@ func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
 // Supports lambdas, foreign closures, case-lambdas, and parameters.
 // Composable continuations cannot be called from Go
 // (they require the VM winding stack) and return an error.
+//
+// A run whose ctx ended while it ran returns the cancellation
+// (werr.ErrOperationCancelled), even one that finished just before the ctx
+// ended: its value is discarded.
 func (p *Engine) Call(ctx context.Context, proc Value, args ...Value) (Value, error) {
 	unwrappedArgs := make([]values.Value, len(args))
 	for i, arg := range args {
@@ -1131,6 +1147,9 @@ func (p *Engine) callCallable(ctx context.Context, callable values.Callable, arg
 
 	// Run the VM loop; escape continuations are caught and converted.
 	err = sub.RunWithEscapeHandling()
+	if err == nil {
+		err = cancelledAtEnd(ctx, sub)
+	}
 	if err != nil {
 		return nil, p.wrapRuntimeError(err)
 	}
@@ -1519,10 +1538,31 @@ func (p *Engine) runCompiled(ctx context.Context, cc *CompiledCode) (Value, erro
 	err := mc.RunWithEscapeHandling()
 	p.lastCounters = mc.Counters()
 	val := mc.GetValue()
+	if err == nil {
+		err = cancelledAtEnd(ctx, mc)
+	}
 	if err != nil {
 		return nil, p.wrapRuntimeError(err)
 	}
 	return wrapValue(val), nil
+}
+
+// cancelledAtEnd is the end-of-run ctx check: the cancellation of a run that
+// finished normally although ctx ended while it ran, nil while ctx is live.
+// Nothing in such a run noticed: it ended before the next VM poll, its only
+// cancellation-aware step completed without waiting (an uncontended
+// mutex-lock!), or a guard caught the wait's raise and finished. Reporting its
+// value would tell the embedder a cancelled program succeeded.
+//
+// ctx is the caller's, not mc's current one: a with-timeout cancels only the ctx
+// it derives, so a timer that fired and whose handler answered leaves ctx live.
+// The cost accepted: a computation that genuinely finished as ctx ended reports
+// the cancellation too, as it would had the poll been one op earlier.
+func cancelledAtEnd(ctx context.Context, mc *machine.MachineContext) error {
+	if ctx.Err() == nil {
+		return nil
+	}
+	return mc.CancelledRun(ctx, "Engine: cancelled before the run returned", nil)
 }
 
 // LastCounters returns the VM performance counters from the most recent
@@ -1629,19 +1669,20 @@ func (p *Engine) wrapRuntimeError(err error) *RuntimeError {
 // evaluation, or returns nil when err carries none.
 //
 // This covers every error the VM raises that is deliberately NOT a Scheme
-// condition, and there are two such classes: an authorizer denial (see
-// applyCallableError) and a recovered host-fault panic (see
-// MachineContext.RunResumable). Both travel as a *machine.SchemeError rather
+// condition, and there are three such classes: an authorizer denial (see
+// applyCallableError), a recovered host-fault panic (see
+// MachineContext.RunResumable), and a run stopped because its ctx ended outside
+// any wait (MachineContext.CancelledRun). Each travels as a *machine.SchemeError rather
 // than as the exception-escape carrier the branch above unpacks, and the VM has
 // already stamped each with a source location and a continuation-chain trace.
 //
 // Without this arm those survive only flattened into the cause's text:
 // RuntimeError.Source and .StackTrace came back empty and Message was the
-// generic "runtime error" — for the two error classes an embedder most needs to
-// localise, since neither is catchable from Scheme and the Go-side diagnostic is
-// therefore the only channel it has. Condition stays nil — there is no
-// condition, which is the whole point — so IsSchemeException correctly reports
-// false for both.
+// generic "runtime error" — for the error classes an embedder most needs to
+// localise, since none is catchable from Scheme at the top level and the Go-side
+// diagnostic is therefore the only channel it has. Condition stays nil — there is
+// no condition, which is the whole point — so IsSchemeException correctly reports
+// false for each.
 func (*Engine) wrapSchemeError(err error) *RuntimeError {
 	var se *machine.SchemeError
 	if !errors.As(err, &se) {

@@ -721,9 +721,10 @@ as they are.
    part.
 2. **The VM's own cancellation poll.** When the engine's `context.Context` is
    cancelled or its deadline expires, `MachineContext.Run` returns
-   `mc.ctx.Err()` directly. The host receives a `*wile.RuntimeError` for which
-   `errors.Is(err, context.Canceled)` is true, and the Scheme program's `guard`
-   never sees it. Deliberate for now, and separately owned; see
+   `ErrOperationCancelled` carrying the ctx's cause, located at the instruction it
+   stopped. The host receives a `*wile.RuntimeError` for which
+   `errors.Is(err, context.Cause(ctx))` and `errors.Is(err, ctx.Err())` are both
+   true, and the Scheme program's `guard` never sees it. Deliberate for now, and separately owned; see
    [Blocking synchronization primitives and VM cancellation](../concurrency/cancellation.md)
    for what the surrounding machinery does and does not promise.
 3. **Panics**, per the section above — contained, not converted, by design.

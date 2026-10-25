@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"math/big"
+	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
@@ -27,6 +28,7 @@ import (
 	"github.com/aalpar/wile/pkg/registry"
 	"github.com/aalpar/wile/pkg/registry/core"
 	"github.com/aalpar/wile/pkg/testutil"
+	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
@@ -1161,6 +1163,239 @@ func TestEval_CancelNestedCalls(t *testing.T) {
 	`)
 	c.Assert(err, qt.IsNotNil)
 	c.Assert(errors.Is(err, context.DeadlineExceeded), qt.IsTrue)
+}
+
+// errTestCancelCause is a cancellation cause no context package error matches, so
+// a pin can tell "the cause survived" from "ctx.Err() survived".
+var errTestCancelCause = werr.NewStaticError("wile test: cancelled by the host")
+
+// engineWithCancel returns an engine, a ctx, and a `cancel!` primitive that
+// cancels that ctx with cause when the program calls it. Cancelling from inside
+// the run injects the cancellation at a known point: before cancel! the ctx is
+// live, after it every check sees it ended.
+func engineWithCancel(t *testing.T, cause error, opts ...EngineOption) (*Engine, context.Context) {
+	t.Helper()
+	engine, err := NewEngine(context.Background(), opts...)
+	qt.Assert(t, err, qt.IsNil)
+	ctx, cancel := context.WithCancelCause(context.Background())
+	t.Cleanup(func() {
+		cancel(nil)
+	})
+	err = engine.RegisterPrimitive(PrimitiveSpec{
+		Name:       "cancel!",
+		ParamCount: 0,
+		Impl: func(mc CallContext) error {
+			cancel(cause)
+			mc.SetValue(values.Void)
+			return nil
+		},
+	})
+	qt.Assert(t, err, qt.IsNil)
+	return engine, ctx
+}
+
+// TestVMPollCarriesCauseAndLocation pins that a computation stopped at the VM's
+// poll reports what a parked wait reports: ErrOperationCancelled carrying the
+// ctx's cause, located. The poll used to return the bare ctx.Err(), so a cancel
+// whose cause is context.DeadlineExceeded read as context.Canceled with no
+// position. ctx.Err() stays matchable too: an embedder testing
+// errors.Is(err, context.Canceled) after its own cancel must still see it.
+func TestVMPollCarriesCauseAndLocation(t *testing.T) {
+	t.Parallel()
+	causes := []struct {
+		name  string
+		cause error // passed to the CancelCauseFunc
+		want  error // what context.Cause reports for it
+	}{
+		{"no cause", nil, context.Canceled},
+		{"deadline", context.DeadlineExceeded, context.DeadlineExceeded},
+		{"host cause", errTestCancelCause, errTestCancelCause},
+	}
+	for _, tc := range causes {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c := qt.New(t)
+			engine, ctx := engineWithCancel(t, tc.cause)
+			_, err := engine.Eval(ctx, engine.MustParse(ctx, "(begin (cancel!) (let loop ((i 0)) (loop (+ i 1))))"))
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue, qt.Commentf("got %v", err))
+			c.Assert(errors.Is(err, tc.want), qt.IsTrue, qt.Commentf("the cause must survive, got %v", err))
+			c.Assert(errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("ctx.Err() must survive, got %v", err))
+			c.Assert(err.Error(), qt.Contains, tc.want.Error())
+			var re *RuntimeError
+			c.Assert(errors.As(err, &re), qt.IsTrue)
+			c.Assert(re.Source, qt.Not(qt.Equals), "", qt.Commentf("the poll must locate its stop, got %v", err))
+		})
+	}
+}
+
+// TestEveryRunPathReportsTheCancellation pins the poll's error shape on the other
+// steps that notice a ctx ending outside a wait, each of which used to return the
+// bare ctx.Err(): apply's argument spread (it walks the list and returns straight
+// to the driver), a list walker reached through the foreign-call bridge (length),
+// a host primitive returning its own wrap of the ctx error (its text must
+// survive the conversion), and the expander (eval of a form after the cancel).
+// site is the text naming the step, so a row cannot pass on the VM poll's report
+// instead. source is where the error is located. eval converts its datum under
+// a zero source context (extensions/eval PrimEval), so its expansion has no
+// position of its own and the bridge's raise locates it at the eval call;
+// TestCompileUnderCancelledCtxLeadsWithTheLocation pins a located expansion.
+func TestEveryRunPathReportsTheCancellation(t *testing.T) {
+	t.Parallel()
+	paths := []struct {
+		name   string
+		code   string
+		site   string
+		source string
+	}{
+		{"apply's argument spread",
+			`(begin (define l (make-list 5000 0)) (cancel!) (apply + l))`,
+			"apply: cancelled while spreading the argument list", ":1:48"},
+		{"a walker through the bridge",
+			`(begin (define l (make-list 5000 0)) (cancel!) (length l))`,
+			"cancelled before the primitive returned", ":1:48"},
+		{"a host primitive's own wrap",
+			`(begin (cancel!) (fetch!))`,
+			"cancelled before the primitive returned: host: fetch http://x failed: context canceled", ":1:18"},
+		{"the expander",
+			`(begin (cancel!) (eval '(+ 1 2) (interaction-environment)))`,
+			"expansion: cancelled", ":1:18"},
+	}
+	for _, tc := range paths {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c := qt.New(t)
+			engine, ctx := engineWithCancel(t, errTestCancelCause, WithProfile(KitchenSink))
+			registerHostFetch(t, engine)
+			_, err := engine.Eval(ctx, engine.MustParse(ctx, tc.code))
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(err.Error(), qt.Contains, tc.site)
+			c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue, qt.Commentf("got %v", err))
+			c.Assert(errors.Is(err, errTestCancelCause), qt.IsTrue, qt.Commentf("the cause must survive, got %v", err))
+			c.Assert(errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("ctx.Err() must survive, got %v", err))
+			var re *RuntimeError
+			c.Assert(errors.As(err, &re), qt.IsTrue)
+			c.Assert(re.Source, qt.Equals, tc.source, qt.Commentf("got %v", err))
+		})
+	}
+}
+
+// registerHostFetch binds fetch!, a host primitive that fails the way an
+// embedder's I/O does once its ctx has ended: its own text around ctx.Err().
+func registerHostFetch(t *testing.T, engine *Engine) {
+	t.Helper()
+	err := engine.RegisterPrimitive(PrimitiveSpec{
+		Name:       "fetch!",
+		ParamCount: 0,
+		Impl: func(mc CallContext) error {
+			return werr.WrapForeignErrorf(mc.Context().Err(), "host: fetch http://x failed")
+		},
+	})
+	qt.Assert(t, err, qt.IsNil)
+}
+
+// TestCaughtHostFailureKeepsItsText pins that a guard catching a host
+// primitive's cancelled failure sees the primitive's own text in the condition
+// message, not only the cancellation class.
+func TestCaughtHostFailureKeepsItsText(t *testing.T) {
+	t.Parallel()
+	c := qt.New(t)
+	engine, ctx := engineWithCancel(t, nil)
+	registerHostFetch(t, engine)
+	_, err := engine.Eval(ctx, engine.MustParse(ctx,
+		`(begin (define seen #f) (cancel!) (guard (e (#t (set! seen (error-object-message e)))) (fetch!)))`))
+	c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue, qt.Commentf("got %v", err))
+	v, ok := engine.Get("seen")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(v.SchemeString(), qt.Equals,
+		`"cancelled before the primitive returned: host: fetch http://x failed: context canceled"`)
+}
+
+// TestCompileUnderCancelledCtxLeadsWithTheLocation pins the expander's
+// cancellation as a compile error: ErrOperationCancelled with the ctx's ending,
+// the form's location leading the text once and the phase named once.
+func TestCompileUnderCancelledCtxLeadsWithTheLocation(t *testing.T) {
+	t.Parallel()
+	c := qt.New(t)
+	engine, err := NewEngine(context.Background())
+	c.Assert(err, qt.IsNil)
+	expr := engine.MustParse(context.Background(), "(+ 1 2)")
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(errTestCancelCause)
+	_, err = engine.Compile(ctx, expr)
+	c.Assert(err, qt.ErrorMatches,
+		`expand/compile error: :1:0: expansion: cancelled: synchronization operation cancelled: wile test: cancelled by the host`)
+	var ce *CompilationError
+	c.Assert(errors.As(err, &ce), qt.IsTrue)
+	c.Assert(ce.Source, qt.Equals, ":1:0")
+	c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue)
+	c.Assert(errors.Is(err, errTestCancelCause), qt.IsTrue)
+	c.Assert(errors.Is(err, context.Canceled), qt.IsTrue)
+}
+
+// TestCancelledProgramNeverFinishesNil pins the Engine's end-of-run ctx check: a
+// program whose ctx ended while it ran reports the cancellation even when it
+// finished normally, because nothing in it noticed: it ended before the next VM
+// poll, its only cancellation-aware step acquired without waiting, or a guard
+// caught the wait's raise. cancel! ends the ctx at a known point inside the run.
+// The controls finish nil: a live ctx, and a with-timeout whose own timer fired
+// and whose handler answered, which cancels only the timer's derived ctx.
+func TestCancelledProgramNeverFinishesNil(t *testing.T) {
+	t.Parallel()
+	_, sleepErr := exec.LookPath("sleep")
+	programs := []struct {
+		name      string
+		code      string
+		cancelled bool
+		process   bool // needs a child process
+	}{
+		{"ends before the poll", `(begin (cancel!) 42)`, true, false},
+		{"uncontended mutex-lock!", `(begin (define m (make-mutex)) (cancel!) (mutex-lock! m))`, true, false},
+		{"guard catches the cancelled wait",
+			`(begin (define m (make-mutex)) (mutex-lock! m #f #f) (cancel!) (guard (e (#t 'caught)) (mutex-lock! m)))`,
+			true, false},
+		// A child spawned under the run's ctx is killed by the cancel, and
+		// process-wait answers without reading the ctx.
+		{"process-wait on a killed child",
+			`(begin (define p (process-spawn "sleep" "30")) (cancel!) (process-wait p))`, true, true},
+		{"live ctx", `(begin (define m (make-mutex)) (mutex-lock! m) 42)`, false, false},
+		{"with-timeout handler answered",
+			`(with-timeout 1 (lambda (k) 'timeout) (lambda () (let loop () (loop))))`, false, false},
+	}
+	for _, tc := range programs {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if tc.process && sleepErr != nil {
+				t.Skip("no sleep binary on PATH")
+			}
+			c := qt.New(t)
+			engine, ctx := engineWithCancel(t, context.DeadlineExceeded, WithProfile(KitchenSink))
+			v, err := engine.Eval(ctx, engine.MustParse(ctx, tc.code))
+			if !tc.cancelled {
+				c.Assert(err, qt.IsNil)
+				c.Assert(v, qt.IsNotNil)
+				return
+			}
+			c.Assert(err, qt.IsNotNil, qt.Commentf("a cancelled run finished with %v", v))
+			c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue, qt.Commentf("got %v", err))
+			c.Assert(errors.Is(err, context.DeadlineExceeded), qt.IsTrue, qt.Commentf("the cause must survive, got %v", err))
+			c.Assert(errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("ctx.Err() must survive, got %v", err))
+		})
+	}
+}
+
+// TestCancelledCallNeverFinishesNil is the same check on Engine.Call, whose run
+// is a sub-context of a throwaway root rather than a compiled program.
+func TestCancelledCallNeverFinishesNil(t *testing.T) {
+	t.Parallel()
+	c := qt.New(t)
+	engine, ctx := engineWithCancel(t, nil)
+	proc, err := engine.Eval(ctx, engine.MustParse(ctx, `(lambda () (cancel!) 42)`))
+	c.Assert(err, qt.IsNil)
+	v, err := engine.Call(ctx, proc)
+	c.Assert(err, qt.IsNotNil, qt.Commentf("a cancelled call finished with %v", v))
+	c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue, qt.Commentf("got %v", err))
+	c.Assert(errors.Is(err, context.Canceled), qt.IsTrue, qt.Commentf("got %v", err))
 }
 
 // errTestCloser is the sentinel a failing test closer returns, so the assertion

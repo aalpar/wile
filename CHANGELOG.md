@@ -663,6 +663,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   used in the file. The frame is carried on the failing node's `SourcedError`
   (`Source.Origin`), not only rendered.
 
+- **A cancelled run reports the cancellation, in one shape (Go API, behavior).**
+  `Engine.Eval`, `EvalIn`, `EvalMultiple`, `EvalMultipleWithSource`,
+  `EvalProgram`, `Run` and `Call` now return an error where they returned a
+  value and nil when the caller's ctx ended during the run and nothing in the
+  program noticed (it ended before the next VM poll, an uncontended
+  `mutex-lock!`, a `guard` that caught a cancelled wait, a `process-wait` on a
+  killed child). A program that finished just before the ctx ended is reported
+  cancelled too, and its value discarded. The VM poll, `apply`'s argument
+  spread, a list walker's failure through the foreign-call bridge and the
+  expander now report `werr.ErrOperationCancelled` carrying the ctx's cause, as
+  the SRFI-18 waits do, instead of the bare `ctx.Err()`; the poll and the spread
+  are located. Every cancellation, the waits' included, still matches
+  `errors.Is(err, ctx.Err())` and now also `errors.Is(err, context.Cause(ctx))`,
+  including under a `CancelCauseFunc` given a host error. New exports:
+  `werr.ContextEnding` and `machine.MachineContext.CancelledRun`.
+
 - **`values.HashtableKind` is opaque (Go API, breaking).** It was `uint8` with
   `const` kinds, so `values.NewHashtable(values.HashtableKind(7))` compiled and
   built a table that stored as an `equal?` table while

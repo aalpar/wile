@@ -208,12 +208,17 @@ func (p *ExpanderTimeContinuation) ExpandTopLevelExpression(expr syntax.SyntaxVa
 // overflow. See expandDepthGuard and DefaultMaxExpandDepth.
 func (p *ExpanderTimeContinuation) ExpandExpression(expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	// Context cancellation takes precedence over the depth bound: an explicitly
-	// canceled run reports ctx.Err(), not ErrExpandDepthExceeded, even when both
-	// conditions are live at this entry. Checked before touching the depth
-	// counter so the increment/decrement stays symmetric on the cancel path.
+	// canceled run reports its cancellation, not ErrExpandDepthExceeded, even when
+	// both conditions are live at this entry. Checked before touching the depth
+	// counter so the increment/decrement stays symmetric on the cancel path. The
+	// class is the VM poll's (ErrOperationCancelled with the ctx's ending, which
+	// still matches ctx.Err()). Unlocated: the expansion's entry stamps its form
+	// (expandAndCompileScoped), so the location leads the rendered error once,
+	// after which "expansion: cancelled" reads as one phrase.
 	select {
 	case <-p.ctx.Done():
-		return nil, p.ctx.Err()
+		return nil, werr.WrapForeignErrorWithCause(werr.ErrOperationCancelled, werr.ContextEnding(p.ctx, nil),
+			"cancelled")
 	default:
 	}
 	g := p.depthGuard
