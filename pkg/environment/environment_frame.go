@@ -1338,10 +1338,19 @@ func (p *EnvironmentFrame) GetGlobalBinding(key *GlobalIndex) *Binding {
 
 // GetGlobalIndexAcrossPhases searches for a global binding across phases
 // (runtime → expand → compile) using read-only phase access. Returns the
-// first GlobalIndex found, or nil if not found in any phase.
+// first GlobalIndex found, or nil if not found in any phase or if the first hit
+// is a mutable variable above the template's use phase (below).
 //
-// This is used during macro compilation to resolve free identifiers that may
-// be defined in any phase (e.g., define in runtime, define-syntax in expand).
+// This is used during macro compilation to pin a template's free identifiers,
+// which the receiver (a define-syntax right-hand side or a transformer body)
+// compiles one phase above the code they land in. A keyword bound there is
+// stored one phase up (define-syntax writes through NextPhase), so the walk
+// must reach above the use phase; a mutable VARIABLE above it is another
+// phase's state and is not pinned (templateUsePhase, isMutableVariable). A pin
+// there would alias live compile-time state from runtime code (a phase-1 set!
+// after the macro's definition is visible at phase 0); unpinned, the identifier
+// refuses at its use with the direct reference's "(bound at phase N)", as
+// Racket and Chez refuse it.
 //
 // scopes is the REFERENCE's scope set and each phase is searched hygienically
 // (maximal subset match), not by bare name. Nil means the empty set, not "any" —
@@ -1413,13 +1422,46 @@ func (p *EnvironmentFrame) tryGetGlobalIndexAcrossPhases(key *values.Symbol, sco
 	// which phase it probes at, so this is the same resolution without minting a
 	// view as a side effect of a search.
 	q := syntax.ScopesOf(scopes)
+	use := p.templateUsePhase()
 	for _, phase := range p.PresentPhases() {
 		gi, ambiguity := p.globalIndexAtPhase(key, q, phase)
-		if ambiguity != nil || gi != nil {
-			return gi, ambiguity
+		if ambiguity != nil {
+			return nil, ambiguity
 		}
+		if gi == nil {
+			continue
+		}
+		if phase > use && p.isMutableVariable(gi) {
+			return nil, nil
+		}
+		return gi, nil
 	}
 	return nil, nil
+}
+
+// templateUsePhase is the phase at which the identifiers this frame's template
+// produces are referenced. A define-syntax right-hand side and a transformer
+// body compile one phase above the code their output lands in, so the use phase
+// is one below the receiver's own. A template compiled at the runtime phase
+// itself (syntax-rules in expression position) has no lower phase to land in,
+// so the clamp keeps its own phase rather than ruling out every phase-0 pin.
+func (p *EnvironmentFrame) templateUsePhase() Phase {
+	if p.phaseLevel <= PhaseRuntime {
+		return PhaseRuntime
+	}
+	return p.phaseLevel - 1
+}
+
+// isMutableVariable reports whether gi pins a variable outside the sealed tier:
+// one visible at its own phase only. A keyword is stored one phase above the
+// phase it is bound at, and a primitive or a sealed (bootstrap) binding is
+// immutable and therefore ambient, so a lower phase may pin those.
+func (p *EnvironmentFrame) isMutableVariable(gi *GlobalIndex) bool {
+	if gi.Sealed() {
+		return false
+	}
+	b := gi.Env.GetOwnGlobalBinding(gi)
+	return b != nil && b.BindingType() == BindingTypeVariable
 }
 
 // globalIndexAtPhase is TryGetGlobalIndexWithScopes with the probe phase supplied
@@ -1575,9 +1617,11 @@ func (p *EnvironmentFrame) PresentPhases() []Phase {
 // why narrowing it alone would have stranded every begin-for-syntax body in
 // every library (design E4).
 //
-// The other GetGlobalIndexAcrossPhases caller (compile_syntax_rules.go) is untouched:
-// it carries the R7RS §4.3 free-template-identifier carve-out, and the
-// jabberwocky/march-hare case reaches it through that caller, not this one.
+// The GetGlobalIndexAcrossPhases callers (the template producers in
+// compile_syntax_rules.go and compile_quote_syntax.go) are a separate search:
+// they carry the R7RS §4.3 free-template-identifier pin, reaching the runtime
+// frame and the keyword one phase up, and the jabberwocky/march-hare case
+// reaches it through them, not this one.
 func (p *EnvironmentFrame) GetGlobalIndexFromLibraryScopes(key *values.Symbol, scopes syntax.Scopes) *GlobalIndex {
 	gi, ambiguity := p.tryGetGlobalIndexFromLibraryScopes(key, scopes)
 	if ambiguity != nil {

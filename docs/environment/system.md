@@ -203,7 +203,9 @@ and a shift that leaves `int8` is rejected (`for-meta: phase 200 out of range
 `GetGlobalIndexAcrossPhases` (`pkg/environment/environment_frame.go`, the R7RS §4.3
 macro-generating-macro carve-out for free template identifiers) derives its probe
 set from `EnvironmentFrame.PresentPhases()`, ascending, `PhaseTemplate` excluded,
-and is not hard-wired to `{0, 1, 2}`. `findLibraryBinding`
+and is not hard-wired to `{0, 1, 2}`. Above the phase the expansion lands in it
+pins only a keyword, a primitive or a sealed binding: a mutable variable there
+belongs to another phase and is left unpinned, so the use refuses it. `findLibraryBinding`
 (`pkg/machine/compilation/library_bindings.go`, which decides what a library can
 export) probes only the export's declared phase, plus the phase above it for a
 keyword, and only where `PresentPhases()` lists them: a name a library binds at

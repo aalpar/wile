@@ -466,7 +466,14 @@ reach, `GetGlobalIndexAcrossPhases`, resolves a free template identifier to a
 single binding location *per reference scope set* (the R7RS §4.3 carve-out). The
 name alone does not name a location: since globals became scope-keyed, two
 expansions of a macro-generating macro each bind under their own intro scope and
-resolve to their own slot. A `set!` of a resolved location is still
+resolve to their own slot. The pin is made at the phase the expansion lands
+in: it reaches a keyword one phase up (where `define-syntax` stores it), a
+primitive or a sealed binding, but not a mutable variable bound only above that
+phase. Until 2026-10-25 it did, so a `syntax-rules` template naming a
+`begin-for-syntax` define returned that define's live value at runtime (a later
+phase-1 `set!` showed through); it now refuses at the use with
+`(bound at phase 1)`, as Racket and Chez do (`TestTemplatePinRefusesAHigherPhaseVariable`,
+`pkg/wile/template_pin_phase_test.go`). A `set!` of a resolved location is still
 observed coherently, with no per-phase divergence
 (`TestClimbingTower_MarchHareMutatedIsCoherent` — mutated `march-hare` still
 yields its mutated value). So no `ErrCrossPhaseMutation` check is needed: the

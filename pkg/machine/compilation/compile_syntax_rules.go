@@ -426,10 +426,11 @@ func collectFreeIdentifiersWithEllipsis(env *environment.EnvironmentFrame, templ
 					}
 				}
 
-				// Use cross-phase lookup to find bindings in any phase the owner's
-				// registry has actually instantiated (PresentPhases()): runtime,
-				// expand, and any higher tower phase a nested transformer created,
-				// not a fixed three-phase set.
+				// Cross-phase lookup over every phase the owner holds
+				// (PresentPhases()), pinning at the phase the expansion lands in: a
+				// keyword one phase up is reached, a mutable variable bound only
+				// above the use phase is not, so it refuses at the use like a
+				// direct reference (GetGlobalIndexAcrossPhases).
 				// The reference's own scope set decides WHICH same-named binding:
 				// a template identifier introduced by an enclosing macro carries that
 				// expansion's intro scope, and so does the binder it means, so a second
