@@ -265,12 +265,13 @@
 ;; one twice answers the same frame. Built on continuation-mark-set->list*.
 (define (continuation-mark-set->iterator cms keys . args)
   "Return an iterator over continuation mark set CMS (or the current\ncontinuation's marks when CMS is #f). Calling the iterator returns two\nvalues: a vector of the mark values for KEYS from the next frame, or #f\nwhen no frame is left, and the iterator for the frames after it. An\niterator holds no state, so calling it again answers the same frame.\nThe optional third argument supplies the value used for frames that\nlack a given key (defaults to #f).\n\nExamples:\n  (with-continuation-mark 'k 1\n    (let ((it (continuation-mark-set->iterator\n                (current-continuation-marks) '(k))))\n      (call-with-values it (lambda (v next) v))))  => #(1)\n\nParameters:\n  cms : any\n  keys : list\nReturns: procedure\nCategory: control\n\nSee also: `continuation-mark-set->context', `continuation-mark-set->list*'."
+  (define (iterator-over remaining)
+    (lambda ()
+      (if (null? remaining)
+          (values #f (iterator-over remaining))
+          (values (car remaining) (iterator-over (cdr remaining))))))
   (let ((none-v (if (pair? args) (car args) #f)))
-    (let iterator ((remaining (continuation-mark-set->list* cms keys none-v)))
-      (lambda ()
-        (if (null? remaining)
-            (values #f (iterator remaining))
-            (values (car remaining) (iterator (cdr remaining))))))))
+    (iterator-over (continuation-mark-set->list* cms keys none-v))))
 
 ;; continuation-mark-set->context extracts source-location marks using the
 ;; well-known key 'wile/source-location. Users can install marks with this
