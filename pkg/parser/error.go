@@ -140,19 +140,25 @@ func (p *ParserError) Error() string {
 // A parser error faults on a token rather than on a rune, so the token is the
 // analogue of the tokenizer's offending character: its start index is where the
 // failure is, its text is what failed, and its type is the state the reader was
-// in. It returns "" when a located tokenizer error is already in the chain,
-// because causeText has then rendered a more precise position — the exact rune,
-// not the token containing it — and repeating a coarser one would only mislead.
+// in. When a located tokenizer error is already in the chain it renders no
+// position, because causeText has then rendered a more precise one (the exact
+// rune, not the token containing it) and repeating a coarser one would only
+// mislead.
+//
+// The file is rendered whenever the parser has one. The text is often all a
+// reader of the error gets: an included file's read error renders under the
+// include form's prefix and a file port's under none, so without the file here
+// the line and column point into a file the message never names.
 func (p *ParserError) contextSuffix() string {
 	var terr *tokenizer.TokenizerError
 	if errors.As(p.err, &terr) {
 		_, located := terr.At()
 		if located {
-			return ""
+			return p.fileSuffix()
 		}
 	}
 	if p.tok == nil {
-		return ""
+		return p.fileSuffix()
 	}
 	// Line is 1-based, so 0 means the token carries no position. The tokenizer
 	// seeds line 1 and never emits such a token, so this only fires for a
@@ -161,10 +167,23 @@ func (p *ParserError) contextSuffix() string {
 	// omits it.
 	start := p.tok.Start()
 	if start.Line() == 0 {
-		return ""
+		return p.fileSuffix()
+	}
+	if p.file != "" {
+		return fmt.Sprintf(" (at %s, index %d, token %q, tokenizer state %s)",
+			p.Location(), start.Index(), p.tok.String(), p.tok.Type())
 	}
 	return fmt.Sprintf(" (at index %d, line %d, column %d, token %q, tokenizer state %s)",
 		start.Index(), start.Line(), start.Column(), p.tok.String(), p.tok.Type())
+}
+
+// fileSuffix names the file alone, for a suffix that carries no position of its
+// own: the position is the tokenizer's, already in the text, or there is none.
+func (p *ParserError) fileSuffix() string {
+	if p.file == "" {
+		return ""
+	}
+	return fmt.Sprintf(" (in file %s)", values.DisplayFileName(p.file))
 }
 
 // causeText renders the most specific cause in the chain.
@@ -232,12 +251,13 @@ func (p *ParserError) startIndexes() (syntax.SourceIndexes, bool) {
 // the cause's diagnostic reaches this surface too — a Scheme program that
 // displays a read error must not see less than a Go caller does.
 //
-// Only the location is added, and only because it is the one fact Error() does
-// not carry: Error() reports index/line/column but not the file name. The
+// Only the location is added, and only for unnamed input, where it is the
+// "line:col" form Error() does not use. Input with a file name has the file in
+// Error()'s own suffix (contextSuffix), so a prefix would repeat it. The
 // offending token is deliberately NOT repeated here — Error() already names it.
 func (p *ParserError) SchemeString() string {
 	loc := p.Location()
-	if loc == "" {
+	if loc == "" || p.file != "" {
 		return fmt.Sprintf("ParserError: %s", p.Error())
 	}
 	return fmt.Sprintf("ParserError at %s: %s", loc, p.Error())

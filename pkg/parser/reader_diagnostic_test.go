@@ -97,7 +97,7 @@ func TestReadErrorNamesPositionCharacterAndState(t *testing.T) {
 		wantLoc: "in.scm:1:0",
 		wantText: []string{
 			"unknown character mnemonic",
-			"index 0", "line 1", "column 0",
+			"at in.scm:1:0", "index 0",
 			`#\\qqq`, "char-mnemonic",
 		},
 	}, {
@@ -142,6 +142,56 @@ func TestReadErrorNamesPositionCharacterAndState(t *testing.T) {
 			// The generic phrase must never be the whole diagnostic: if the
 			// specific cause is missing, the text is back to "malformed input".
 			c.Check(rendered, qt.Not(qt.Equals), messageReadFailed)
+		})
+	}
+}
+
+// TestReadErrorTextNamesTheFile pins that a read error's text names the file it
+// failed in, not only its line and column: an error raised inside an included
+// file or on a file port is rendered under some other file's prefix, or none,
+// so the text is the only place the reader's own file can appear.
+//
+// A parser-level fault renders file:line:col in its suffix. A lexical fault
+// yields its position to the tokenizer's located rune and adds only the file
+// name, so the position is not reported twice. Unnamed input renders as before.
+func TestReadErrorTextNamesTheFile(t *testing.T) {
+	tcs := []struct {
+		name    string
+		file    string
+		src     string
+		want    []string
+		mustNot []string
+	}{{
+		name: "parser_fault_names_file_line_col", file: "in.scm", src: "(a b)\n(foo ]",
+		want:    []string{`(at in.scm:2:5, index 11, token "]", tokenizer state close-bracket)`},
+		mustNot: []string{"line 2", "column 5"},
+	}, {
+		name: "lexical_fault_names_the_file_once", file: "in.scm", src: "(a b)\n#b19",
+		want:    []string{"index 9, line 2, column 3", "(in file in.scm)"},
+		mustNot: []string{"in.scm:2:3"},
+	}, {
+		name: "unnamed_input_is_unchanged", file: "", src: "(a b)\n(foo ]",
+		want:    []string{`(at index 11, line 2, column 5, token "]", tokenizer state close-bracket)`},
+		mustNot: []string{"in file"},
+	}}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewNamespace().Runtime()
+			p := NewParserWithFile(env, true, strings.NewReader(tc.src), tc.file)
+			var err error
+			for err == nil {
+				_, err = p.ReadSyntax(context.TODO())
+			}
+			rendered := err.Error()
+			for _, want := range tc.want {
+				c.Check(strings.Contains(rendered, want), qt.IsTrue,
+					qt.Commentf("rendered %q lacks %q", rendered, want))
+			}
+			for _, bad := range tc.mustNot {
+				c.Check(strings.Contains(rendered, bad), qt.IsFalse,
+					qt.Commentf("rendered %q repeats %q", rendered, bad))
+			}
 		})
 	}
 }

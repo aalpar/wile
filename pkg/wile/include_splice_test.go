@@ -343,10 +343,13 @@ func TestIncludeInLibraryBeginBody(t *testing.T) {
 // TestIncludeErrorsKeepTheirLocations pins where include errors point: a missing
 // file at the include form's own line, and a form of the file that fails to
 // expand at the file's own line (the includer's coarser location does not
-// replace it).
+// replace it). A read error in the file renders under the include form's prefix,
+// so its own text must name the file its line and column belong to.
 func TestIncludeErrorsKeepTheirLocations(t *testing.T) {
 	fsys := fstest.MapFS{
-		"badexp.scm": &fstest.MapFile{Data: []byte("(define ok 1)\n(syntax-error \"boom\")")},
+		"badexp.scm":  &fstest.MapFile{Data: []byte("(define ok 1)\n(syntax-error \"boom\")")},
+		"badread.scm": &fstest.MapFile{Data: []byte("(define ok 1)\n(define open (\n")},
+		"badlex.scm":  &fstest.MapFile{Data: []byte("(define ok 1)\n#b109\n")},
 	}
 	tcs := []struct {
 		name string
@@ -355,6 +358,8 @@ func TestIncludeErrorsKeepTheirLocations(t *testing.T) {
 	}{
 		{name: "missing file names the include's line", code: "(define a 1)\n(define b 2)\n(include \"absent.scm\")", want: "includer.scm:3:"},
 		{name: "expansion failure keeps the file's line", code: `(include "badexp.scm")`, want: "badexp.scm:2:"},
+		{name: "parse error names the included file's position", code: "(define a 1)\n(include \"badread.scm\")", want: "(at badread.scm:2:13, index 27,"},
+		{name: "lexical error names the included file", code: "(define a 1)\n(include \"badlex.scm\")", want: "column 4, character '9' (U+0039), tokenizer state unsigned-integer) (in file badlex.scm)"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
