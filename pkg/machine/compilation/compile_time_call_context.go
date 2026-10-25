@@ -70,6 +70,13 @@ type CompileTimeCallContext struct {
 	// entry to a nested body, never merely dropped. nil means "no group known",
 	// which refuses.
 	enclosingDefines []validate.ValidatedExpr
+	// keyword is the head identifier of the Tier 2 form being compiled, as
+	// written; syntaxCompiler sets it, and NotInTail drops it so it never
+	// outlives the form. Its scopes are the form's lexical context, which a
+	// compound node's own scopes are not (they go stale as scopes are added and
+	// flipped). er-macro-transformer reads it: a rename means what the name
+	// means where the keyword was written. nil means NONE.
+	keyword *syntax.SyntaxSymbol
 }
 
 // frameReuseKind discriminates how a depth-0 tail call may reuse the parameter
@@ -145,6 +152,14 @@ func NewCompileTimeCallContext(ctx context.Context, inTail bool) CompileTimeCall
 		ctx:    ctx,
 		inTail: inTail,
 	}
+}
+
+// withKeyword returns a copy carrying the head identifier of the Tier 2 form
+// about to be compiled (see the keyword field).
+func (p CompileTimeCallContext) withKeyword(keyword *syntax.SyntaxSymbol) CompileTimeCallContext {
+	q := p
+	q.keyword = keyword
+	return q
 }
 
 // Context returns the context associated with this compile-time call context.

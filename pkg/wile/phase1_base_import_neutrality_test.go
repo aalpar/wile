@@ -107,7 +107,7 @@ func TestPhase1BaseImportIsBehaviourNeutral(t *testing.T) {
 		},
 		{
 			// TestP2_ERRenameResolvesAtDefinitionSite's contract, at top level.
-			// resolveRenamedSymbol's own output is byte-identical in both arms —
+			// renameSymbol's own output is byte-identical in both arms —
 			// the capture is the empty-scoped use-site binder above, not a moved pin.
 			name: "an ER rename resolves at the definition site",
 			body: `(define (helper) 'def)

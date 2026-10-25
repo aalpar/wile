@@ -55,7 +55,7 @@ func pushOrigin(macroName string, keywordCtx, pairCtx *syntax.SourceContext) *sy
 }
 
 // isRenameContext reports whether ctx is the position-less context the ER
-// rename closure gives its identifiers (resolveRenamedSymbol). Source text
+// rename closure gives its identifiers (renameSymbol). Source text
 // positions start at line 1, so a zero start never belongs to read source.
 func isRenameContext(ctx *syntax.SourceContext) bool {
 	if ctx == nil {

@@ -550,14 +550,89 @@ func TestP2_ERRenameIsFreshPerInvocation(t *testing.T) {
 // TestP2_ERRenameResolvesAtDefinitionSite is the pin for design §3.5's rename
 // contract on a definition-site LOCAL: the renamed identifier carries #'k's
 // scopes, so the macro's own binder wins over a use-site binder of the same
-// name. On the Go layer the rename is empty+intro scoped and this is a compile
-// error (`no such binding "helper" with compatible scopes`).
+// name. When the Go layer's rename was empty+intro scoped this was a compile
+// error there (`no such binding "helper" with compatible scopes`).
 func TestP2_ERRenameResolvesAtDefinitionSite(t *testing.T) {
-	c := qt.New(t)
-	got := evalSyntaxForms(t, `(let ((helper (lambda () 'def)))
+	src := `(let ((helper (lambda () 'def)))
   (define-syntax er-h (er-macro-transformer (lambda (f r c) (list (r 'helper)))))
-  (let ((helper (lambda () 'use))) (er-h)))`, wile.WithSchemeSyntaxForms())
-	c.Assert(got, qt.Equals, "def")
+  (let ((helper (lambda () 'use))) (er-h)))`
+	for _, l := range syntaxLayers {
+		t.Run(l.name, func(t *testing.T) {
+			qt.Assert(t, evalSyntaxForms(t, src, l.opt), qt.Equals, "def")
+		})
+	}
+}
+
+// TestP2_ERRenameReachesABodyLocalMacro: a rename denotes what the name means
+// where the er-macro-transformer keyword was written, so it reaches a macro
+// defined in the same body. A body-local define-syntax is a phase-1 binding keyed
+// by the body's scopes; a rename that carries only an intro scope cannot reach it
+// (no such binding "def5"), and one resolved by name alone would take whichever
+// body's def5 the store holds. Racket's syntax-case twin answers (5 6).
+func TestP2_ERRenameReachesABodyLocalMacro(t *testing.T) {
+	const via = `(define-syntax via (er-macro-transformer (lambda (f r c) (list (r 'def5) (cadr f)))))`
+	src := `(import (for-syntax (scheme base)))  ; cadr
+(define (p)
+  (define-syntax def5 (syntax-rules () ((_ n) (define n 5))))
+  ` + via + `
+  (via zz)
+  zz)
+(define (q)
+  (define-syntax def5 (syntax-rules () ((_ n) (define n 6))))
+  ` + via + `
+  (via zz)
+  zz)
+(list (p) (q))`
+	for _, l := range syntaxLayers {
+		t.Run(l.name, func(t *testing.T) {
+			qt.Assert(t, evalSyntaxForms(t, src, withStdlibResolver(l.opt)...), qt.Equals, "(5 6)")
+		})
+	}
+}
+
+// TestP2_ERRenameIsHygienicAsABinder: every rename takes the invocation's intro
+// scope, a name bound at the definition site included, so a renamed binder binds
+// only the macro's own references. Pinned to the global tmp with no intro scope,
+// (r 'tmp) captured the user's tmp and swap! answered (1 2). Racket and petite
+// (syntax-rules twin) answer (2 1) in every row. The top level is mutable so
+// that set! of a global is legal.
+func TestP2_ERRenameIsHygienicAsABinder(t *testing.T) {
+	const swap = `(import (for-syntax (scheme base)) (for-syntax (scheme cxr)))  ; cadr / caddr
+(define-syntax swap!
+  (er-macro-transformer
+    (lambda (f r c)
+      (let ((a (cadr f)) (b (caddr f)) (tmp (r 'tmp)))
+        (list (r 'let) (list (list tmp a)) (list (r 'set!) a b) (list (r 'set!) b tmp))))))
+`
+	tcs := []struct{ name, use string }{
+		{"global tmp", `(define tmp 1) (define y 2) (swap! tmp y) (list tmp y)`},
+		{"local tmp", `(let ((tmp 1) (y 2)) (swap! tmp y) (list tmp y))`},
+		{"through syntax-rules", `(define-syntax sw (syntax-rules () ((_ a b) (swap! a b))))
+(define tmp 1) (define y 2) (sw tmp y) (list tmp y)`},
+	}
+	for _, tc := range tcs {
+		for _, l := range syntaxLayers {
+			t.Run(tc.name+"/"+l.name, func(t *testing.T) {
+				opts := withStdlibResolver(l.opt, wile.WithMutableTopLevel())
+				qt.Assert(t, evalSyntaxForms(t, swap+tc.use, opts...), qt.Equals, "(2 1)")
+			})
+		}
+	}
+}
+
+// TestP2_ERRenamedDefineIsTheMacros: a renamed define of a name the definition
+// site binds globally defines the macro's own variable, not the user's, for the
+// same reason a renamed let binder does not capture. The Go layer answered
+// (5 5), overwriting x; racket -I r5rs and petite (syntax-rules twin) answer (5 1).
+func TestP2_ERRenamedDefineIsTheMacros(t *testing.T) {
+	src := `(define x 1)
+(define-syntax def-x (er-macro-transformer (lambda (f r c) (list (r 'begin) (list (r 'define) (r 'x) 5) (r 'x)))))
+(list (def-x) x)`
+	for _, l := range syntaxLayers {
+		t.Run(l.name, func(t *testing.T) {
+			qt.Assert(t, evalSyntaxForms(t, src, l.opt), qt.Equals, "(5 1)")
+		})
+	}
 }
 
 // TestP2_ERCompareRequiresIdentifiers pins the compare contract (design §3.5):

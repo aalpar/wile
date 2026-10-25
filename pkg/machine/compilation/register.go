@@ -66,6 +66,7 @@ func init() {
 
 // syntaxCompiler adapts a SyntaxCompilerFunc into a CompilerFunc by asserting the
 // ValidatedLiteral it receives, then unwrapping ValidatedLiteral -> SyntaxPair -> CDR.
+// The form's head rides along on ctctx (CompileTimeCallContext.keyword).
 func syntaxCompiler(fn SyntaxCompilerFunc) CompilerFunc {
 	return func(ctc *CompileTimeContinuation, ctctx CompileTimeCallContext, expr forms.ValidatedExpr) error {
 		lit, ok := expr.(*validate.ValidatedLiteral)
@@ -83,6 +84,9 @@ func syntaxCompiler(fn SyntaxCompilerFunc) CompilerFunc {
 			return werr.WrapForeignErrorf(werr.ErrInvalidArgument,
 				"syntaxCompiler: expected SyntaxValue CDR, got %T", pair.Cdr())
 		}
-		return fn(ctc, ctctx, args)
+		// The head is an identifier for every form the registry dispatches by
+		// name; anything else leaves keyword nil.
+		keyword, _ := pair.Car().(*syntax.SyntaxSymbol)
+		return fn(ctc, ctctx.withKeyword(keyword), args)
 	}
 }
