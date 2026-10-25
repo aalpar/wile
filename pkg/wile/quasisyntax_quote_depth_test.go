@@ -314,6 +314,8 @@ func TestDottedQuasiquoteTailIsOneLevelDeeper(t *testing.T) {
 	runQuasisyntaxRows(t, []innerPositionRow{
 		row("list under a quote", "`(a . `(b ,'(,"+b+")))"),
 		row("vector under a quote", "`(a . `(b ,'#(,"+b+")))"),
+		// Read element-wise, the vector sat at depth 0, a self-evaluating literal.
+		row("vector under the unquote", "`(a . `(b ,#(,"+b+")))"),
 		row("quasisyntax dialect", `(quasisyntax (a . (quasisyntax (b #,(quote (#,`+b+`))))))`),
 	})
 }

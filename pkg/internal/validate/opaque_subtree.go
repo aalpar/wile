@@ -605,6 +605,11 @@ func forEachRawBinderForm(env *environment.EnvironmentFrame, p *syntax.SyntaxPai
 	if env == nil {
 		return false
 	}
+	switch key {
+	case "lambda", "case-lambda", "let", "let*", "letrec", "letrec*":
+	default:
+		return false
+	}
 	elems, improper := collectList(p)
 	if improper || len(elems) < 2 {
 		return false
@@ -698,11 +703,14 @@ func rawBodyDefines(env *environment.EnvironmentFrame, body []syntax.SyntaxValue
 		if !ok {
 			continue
 		}
+		key, _ := headKey(env, head, quasiDepthCode)
+		if key != "begin" && key != "define" {
+			continue
+		}
 		elems, improper := collectList(pair)
 		if improper || len(elems) < 2 {
 			continue
 		}
-		key, _ := headKey(env, head, quasiDepthCode)
 		switch key {
 		case "begin":
 			q = rawBodyDefines(env, elems[1:], q)
