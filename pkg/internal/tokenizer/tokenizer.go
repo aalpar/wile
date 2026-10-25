@@ -327,6 +327,23 @@ func (p *Tokenizer) SeekTo(origin syntax.SourceIndexes, prev rune) bool {
 	return true
 }
 
+// byteOrderMark is U+FEFF. Encoded in UTF-8 at the start of a file it marks
+// the encoding and is not part of the text.
+const byteOrderMark = '\uFEFF'
+
+// SkipByteOrderMark consumes the current rune when it is a byte order mark. The
+// caller decides when that is right: only at the very start of a source, so a
+// U+FEFF anywhere else still reaches the scanner. It is not whitespace (R7RS
+// whitespace is Zs, U+FEFF is Cf), and the reader that owns the port still
+// delivers it to read-char; only the datum reader steps over it. Positions
+// count it like any other character.
+func (p *Tokenizer) SkipByteOrderMark() {
+	if p.err != nil || p.cur != byteOrderMark {
+		return
+	}
+	p.readNextRune()
+}
+
 // Text returns the text of the current token.
 func (p *Tokenizer) Text() string {
 	return string(p.text)

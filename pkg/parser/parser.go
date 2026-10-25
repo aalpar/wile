@@ -215,6 +215,13 @@ func (p *Parser) ReadSyntax(ctx context.Context) (syntax.SyntaxValue, error) {
 	}
 	if p.toks == nil {
 		p.toks = tokenizer.NewTokenizerAt(p.rdr, false, p.origin, p.originPrev)
+		// A UTF-8 byte order mark opening the source (a file saved by an
+		// editor that writes one) is skipped, as racket and petite both do
+		// when loading or reading such a file. Only at the origin: a parser
+		// built mid-stream (a port read after read-char) starts past it.
+		if p.origin.Index() == 0 {
+			p.toks.SkipByteOrderMark()
+		}
 	}
 	// R7RS §2.4: a datum label's scope is the datum in which it appears. Carrying
 	// the table across calls let a #n# in one top-level form resolve to a #n=

@@ -132,6 +132,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A source that opens with a UTF-8 byte order mark reads.** A file an editor
+  saved with a BOM failed at 1:0 with "unknown token type ... character U+FEFF"
+  under `wile file.scm`, `-f`, `load`, `include`, `include-ci`, library import,
+  and `read`/`read-syntax` on a fresh port. The reader now skips one U+FEFF at
+  the start of its input (racket and petite both load such a file); positions
+  count it, so the first datum is at column 1, as racket reports. `read-char`
+  still returns `#\xFEFF`. The skip applies at the start of each parsed input, so each REPL entry and each `Parse`/`EvalMultiple` string skips its own leading BOM; a U+FEFF anywhere else is the read error it was.
 - **A use-site identifier inside a box loses a macro's intro scope.**
   `AddScope` descended into a syntax box but `FlipScope` and the expander's
   stamp walk did not, and `AddScopeToSyntax` skipped a top-level box, so an
