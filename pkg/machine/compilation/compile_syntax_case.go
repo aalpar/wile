@@ -323,7 +323,7 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 		if err != nil {
 			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "error expanding fender"))
 		}
-		err = bodyCompiler.CompileExpression(ctctx.NotInTail(), expandedFender)
+		err = bodyCompiler.CompileExpression(ctctx.NotInTail().atExpressionRoot(true), expandedFender)
 		if err != nil {
 			return p.wrapCompilationError(werr.WrapForeignErrorf(err, "error compiling fender"))
 		}
@@ -338,7 +338,9 @@ func (p *CompileTimeContinuation) compileSyntaxCaseClause(
 	if err != nil {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "error expanding body"))
 	}
-	err = bodyCompiler.CompileExpression(ctctx, expandedBody)
+	// A clause's output is an expression (R6RS §12.4), wherever the
+	// syntax-case sits.
+	err = bodyCompiler.CompileExpression(ctctx.atExpressionRoot(true), expandedBody)
 	if err != nil {
 		return p.wrapCompilationError(werr.WrapForeignErrorf(err, "error compiling body"))
 	}

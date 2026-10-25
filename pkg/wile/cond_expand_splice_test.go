@@ -81,6 +81,11 @@ func TestCondExpandInExpressionPosition(t *testing.T) {
 		{name: "selected clause value is the or's", code: `(or (cond-expand (r7rs 3) (else #f)) 5)`, want: "3"},
 		{name: "last body form is the value", code: `(+ 1 (cond-expand (else 2 3)))`, want: "4"},
 		{name: "empty selected body is a void between forms", code: `(begin (cond-expand (else)) 1)`, want: "1"},
+		// A define in the clause shadows for the forms after it (X25), in body
+		// position now that a define in expression position is refused. It does
+		// not tell body expansion from per-form expansion; nothing does (see
+		// expandCondExpandForm).
+		{name: "a define in a body clause shadows for the forms after it", code: `(let () (cond-expand (else (define include (lambda a 'mine)) (include "v.scm"))))`, want: "mine"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

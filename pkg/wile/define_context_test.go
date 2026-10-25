@@ -31,9 +31,13 @@ import (
 // belongs at top level, at the start of a body, or in a begin spliced into one
 // of those. Anywhere else it is refused with a located ErrInvalidSyntax; Wile
 // used to accept it as a void-valued expression, so (list (define x 1) x) was
-// (#<void> 1). Racket ("define: not allowed in an expression context") and Chez
-// ("invalid context for definition") refuse every row. want is the location of
-// the refused form.
+// (#<void> 1). racket -I r5rs ("define: not allowed in an expression context")
+// and petite ("invalid context for definition") refuse every row but
+// define-record-type, which neither reads in R7RS syntax (R7RS §5.5 makes it a
+// definition), and syntax-case, which r5rs lacks (racket/base refuses it too).
+// Plain racket/base is not the oracle: it accepts a define in a when body. want
+// is the location of the refused form, on the CompilationError and on the
+// deepest SourcedError.
 func TestDefinitionInExpressionContextIsRefused(t *testing.T) {
 	tcs := []struct {
 		name string
@@ -51,6 +55,12 @@ func TestDefinitionInExpressionContextIsRefused(t *testing.T) {
 		{name: "define-values", code: `(list (define-values (a b) (values 1 2)))`, want: "includer.scm:1:7"},
 		{name: "define-record-type", code: `(list (define-record-type p (mk) p?))`, want: "includer.scm:1:7"},
 		{name: "define-syntax", code: `(list (define-syntax m (syntax-rules () ((_) 1))) 2)`, want: "includer.scm:1:7"},
+		// Forms compiled as trees of their own, whose root is the expression
+		// slot they stand in.
+		{name: "unquote in a call argument", code: "(list `,(define qq1 1) 2)", want: "includer.scm:1:9"},
+		{name: "unquote in a template", code: "`(1 ,(define x 1))", want: "includer.scm:1:6"},
+		{name: "eval-when in a call argument", code: `(list (eval-when (compile load eval) (define ewx 3)) 1)`, want: "includer.scm:1:38"},
+		{name: "syntax-case clause output", code: `(list (syntax-case #'a () (_ (define scx 1))))`, want: "includer.scm:1:30"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -74,8 +84,9 @@ func TestDefinitionInExpressionContextIsRefused(t *testing.T) {
 
 // TestDefinitionInDefinitionContextIsAccepted: the controls for the refusal.
 // Each places a definition where R7RS allows one, including the bodies the
-// stdlib's derived forms produce (parameterize's had been a bare begin, under
-// with-continuation-mark or, with no bindings, alone). A user procedure named
+// stdlib's derived forms produce (parameterize's, let-optionals*'s and
+// let-keywords*'s had been a bare begin, which refused a body definition or,
+// at top level with no bindings, made it global). A user procedure named
 // define is a call, not a definition, so its argument position is not checked.
 func TestDefinitionInDefinitionContextIsAccepted(t *testing.T) {
 	fsys := fstest.MapFS{
@@ -109,6 +120,12 @@ func TestDefinitionInDefinitionContextIsAccepted(t *testing.T) {
 		{name: "parameterize body is local", code: `(define z 'top) (parameterize () (define z 3) z) z`, want: "top"},
 		{name: "define-values at top level", code: `(define-values (a b) (values 1 2)) (+ a b)`, want: "3"},
 		{name: "user procedure named define", code: `(define (define x) (* x 2)) (list (define 4))`, want: "(8)"},
+		{name: "unquote at top level", code: "`,(define qqx 1) qqx", want: "1"},
+		{name: "eval-when at top level", code: `(eval-when (compile load eval) (define ewx 3)) ewx`, want: "3"},
+		{name: "eval-when in a body", code: `(let () (eval-when (compile load eval) (define ewx 3)) ewx)`, want: "3"},
+		{name: "empty let-optionals* body", code: `(import (chibi optional)) (list (let-optionals* '() () (define b 2) b))`, want: "(2)", opts: withStdlibResolver()},
+		{name: "empty let-keywords* body", code: `(import (chibi optional)) (list (let-keywords* '() () (define b 2) b))`, want: "(2)", opts: withStdlibResolver()},
+		{name: "let-optionals* body is local", code: `(import (chibi optional)) (define b 'top) (let-optionals* '() () (define b 2) b) b`, want: "top", opts: withStdlibResolver()},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -117,4 +134,16 @@ func TestDefinitionInDefinitionContextIsAccepted(t *testing.T) {
 			qt.Assert(t, got, qt.Equals, tc.want)
 		})
 	}
+}
+
+// TestParameterizeWithoutABodyNamesParameterize: (parameterize ((p 2))) has no
+// body, which R7RS §4.2.6 requires. It is refused as parameterize's own error;
+// once the body became (let () ...) it surfaced as let's arity, and before that
+// it returned 2 from a stale value register.
+func TestParameterizeWithoutABodyNamesParameterize(t *testing.T) {
+	_, err := evalIncludeProgram(t, fstest.MapFS{}, `(define p (make-parameter 1)) (parameterize ((p 2)))`)
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Check(t, errors.Is(err, werr.ErrInvalidSyntax), qt.IsTrue, qt.Commentf("%v", err))
+	qt.Check(t, err.Error(), qt.Contains, "parameterize: no body expression")
+	qt.Check(t, err.Error(), qt.Contains, "includer.scm:1:31")
 }

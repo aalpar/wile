@@ -31,17 +31,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **BREAKING (behavior): a definition in an expression context is refused.**
   `(list (define x 1) x)` answered `(#<void> 1)`, and a `define` in an `if` arm,
-  a `when` body, a `do` command, a call argument inside a body or an
-  expression-position `begin` was accepted the same way. Each is now a located
-  compile error ("definition not allowed in an expression context"), as R7RS
-  §5.3 places definitions only at top level, at the start of a body, or in a
-  `begin` spliced into one; racket and petite refuse each of these. The rule
-  covers `define-values`, `define-record-type` and `define-syntax`. A top-level
-  `(begin (define w 4) w)`, a body-level `begin` or `cond-expand` splice, `eval`,
-  `load` and library bodies are unchanged. `parameterize`'s body is now a body
-  (R7RS §4.2.6): its definitions stay local, where
-  `(parameterize () (define z 3) z)` at top level used to define a global `z`
-  (racket and petite keep it local).
+  a `when` body, a `do` command, a call argument inside a body, an
+  expression-position `begin`, an `eval-when` or `` `,( ) `` in a call argument,
+  or a `syntax-case` clause's output was accepted the same way. Each is now a
+  located compile error ("definition not allowed in an expression context"), as
+  R7RS §5.3 places definitions only at top level, at the start of a body, or in
+  a `begin` spliced into one; `racket -I r5rs` and petite refuse each of these.
+  The rule covers `define-values`, `define-record-type` and `define-syntax`. A
+  top-level `(begin (define w 4) w)`, a body-level `begin` or `cond-expand`
+  splice, `eval-when` at top level or in a body, `eval`, `load` and library
+  bodies are unchanged. The bodies of `parameterize`, `let-optionals*` and
+  `let-keywords*` are now bodies: their definitions are accepted and local,
+  where with no bindings at top level they used to define globals (racket and
+  petite keep a `parameterize` body's local). `(let () e ...)` whose body defines
+  nothing pushes no frame, so this costs nothing at run time. An empty
+  `(parameterize ((p 2)))` is refused as "parameterize: no body expression"
+  (R7RS §4.2.6 requires a body); it used to answer 2.
 
 - **BREAKING (behavior): `char-ready?` requires a textual input port.** It
   answered `#t` without looking at its argument, so `(char-ready? 5)`, a binary

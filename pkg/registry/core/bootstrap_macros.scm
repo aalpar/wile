@@ -140,8 +140,10 @@
 ;; expression, where a define is refused.
 (define-syntax parameterize
   (syntax-rules (%bind %mark)
-    ((parameterize ((p v) ...) body ...)
-     (parameterize %bind ((p v) ...) () (body ...)))
+    ((parameterize ((p v) ...) body1 body ...)
+     (parameterize %bind ((p v) ...) () (body1 body ...)))
+    ((parameterize bindings)
+     (syntax-error "parameterize: no body expression" bindings))
     ((parameterize %bind ((p v) rest ...) (acc ...) bw)
      (let* ((pt p) (vt (%parameter-convert pt v)))   ; let* — vt's init reads pt
        (parameterize %bind (rest ...) (acc ... (pt vt)) bw)))

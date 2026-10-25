@@ -115,7 +115,7 @@ func (p *CompileTimeContinuation) compileValidated(ctctx CompileTimeCallContext,
 		}
 		compile := p.compilerFor(v.FormName())
 		if compile != nil {
-			return compile(p, ctctx, v)
+			return compile(p, ctctx.atExpressionRoot(v.InExpressionContext()), v)
 		}
 		// A registered form with no compiler (let-syntax, letrec-syntax,
 		// syntax-rules) should have been consumed during expansion; reaching
@@ -469,8 +469,10 @@ func CompileValidatedQuote(p *CompileTimeContinuation, _ CompileTimeCallContext,
 // Quasiquote has complex runtime semantics, so we delegate to the existing compiler.
 func CompileValidatedQuasiquote(p *CompileTimeContinuation, ctctx CompileTimeCallContext, expr forms.ValidatedExpr) error {
 	v := expr.(*validate.ValidatedQuasiquote)
-	// The existing quasiquote compiler expects the raw syntax template
-	err := p.compileQuasiquoteDatum(ctctx, v.Template, 1)
+	// The existing quasiquote compiler expects the raw syntax template. Its
+	// expansion is compiled as a tree of its own, which takes the quasiquote's
+	// place: `,(define x 1) is a definition only where one may stand.
+	err := p.compileQuasiquoteDatum(ctctx.atExpressionRoot(v.InExpressionContext()), v.Template, 1)
 	if err != nil {
 		return err
 	}
