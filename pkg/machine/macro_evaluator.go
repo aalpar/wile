@@ -59,10 +59,16 @@ func NewVMMacroEvaluator() MacroEvaluator {
 func (p *vmMacroEvaluator) EvalTemplate(ctx context.Context, tpl *NativeTemplate, env *environment.EnvironmentFrame) (values.Value, error) {
 	cont := NewMachineContinuation(nil, tpl, env)
 	mc := NewMachineContext(ctx, cont)
+	inherited := mc.inheritCallerHandlers(ctx)
 	err := mc.RunWithinBoundary()
 	if err != nil {
+		raised := mc.raisedToCaller
 		ReleaseSubContext(mc)
-		return nil, markExpansionRootEscape(ctx, err)
+		err = markExpansionRootEscape(ctx, inherited, err)
+		if raised != nil {
+			err = &raisedToCallerError{err: err, raise: raised}
+		}
+		return nil, err
 	}
 	q := mc.GetValue()
 	ReleaseSubContext(mc)
@@ -71,11 +77,17 @@ func (p *vmMacroEvaluator) EvalTemplate(ctx context.Context, tpl *NativeTemplate
 
 // markExpansionRootEscape marks err as an unlinked root's uncaught raise: every
 // root this evaluator runs (a transformer, a phase-1 expression, a library body)
-// runs synchronously for whoever is expanding but holds none of its handlers. A
-// cancellation is the caller's own ctx ending and stays uncaught everywhere.
-func markExpansionRootEscape(ctx context.Context, err error) error {
+// runs synchronously for whoever is expanding, with no chain to its handlers. A
+// root that inherited them (inherited, inheritCallerHandlers) has run them on the
+// raise already, so its escape is settled; one that did not leaves them to the
+// caller's bridge. A cancellation is the caller's own ctx ending and stays
+// uncaught everywhere.
+func markExpansionRootEscape(ctx context.Context, inherited bool, err error) error {
 	if CancelledBy(ctx, err) {
 		return err
+	}
+	if inherited {
+		return settleRootEscape(err)
 	}
 	return MarkUnlinkedRootEscape(err)
 }
@@ -98,6 +110,7 @@ func invokeTransformerClosure(ctx context.Context, cls Closure, expanderCtx Expa
 	switch c := cls.(type) {
 	case *MachineClosure:
 		mc = acquireMacroContext(ctx, c)
+		inherited := mc.inheritCallerHandlers(ctx)
 		if expanderCtx != nil {
 			mc.SetExpanderContext(expanderCtx)
 		}
@@ -109,7 +122,7 @@ func invokeTransformerClosure(ctx context.Context, cls Closure, expanderCtx Expa
 		err = mc.RunWithinBoundary()
 		if err != nil {
 			ReleaseSubContext(mc)
-			return nil, markExpansionRootEscape(ctx, err)
+			return nil, markExpansionRootEscape(ctx, inherited, err)
 		}
 	case *ForeignClosure:
 		mc = acquireSubContext()
@@ -127,7 +140,7 @@ func invokeTransformerClosure(ctx context.Context, cls Closure, expanderCtx Expa
 			ReleaseSubContext(mc)
 			// mc has no handlers, so a failure applyForeign's bridge converts is an
 			// uncaught raise; one it does not (an arity mismatch) passes unmarked.
-			return nil, markExpansionRootEscape(ctx, werr.WrapForeignErrorf(err, "failed to apply transformer"))
+			return nil, markExpansionRootEscape(ctx, false, werr.WrapForeignErrorf(err, "failed to apply transformer"))
 		}
 	default:
 		return nil, werr.WrapForeignErrorf(werr.ErrNotAClosure, "unexpected closure type: %T", cls)

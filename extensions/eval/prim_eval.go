@@ -137,7 +137,7 @@ func PrimEval(cc machine.CallContext) error {
 		return werr.WrapForeignErrorf(err, "eval")
 	}
 
-	tpl, err := compilation.ExpandAndCompile(mc.Context(), env, stx)
+	tpl, err := compilation.ExpandAndCompile(mc.ExpansionContext(), env, stx)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "eval")
 	}
@@ -211,7 +211,7 @@ func PrimLoad(cc machine.CallContext) error {
 	// in the engine. Two threads each loading a file that includes the same
 	// basename from different directories interleaved their pushes and one
 	// compiled the other's file — a source substitution, so -race cannot see it.
-	loadCtx := mc.Context()
+	loadCtx := mc.ExpansionContext()
 	stack := sourceload.LoadStackFromContext(loadCtx)
 	if stack == nil {
 		stack = sourceload.NewLoadStack()
@@ -508,7 +508,7 @@ func PrimEnvironment(cc machine.CallContext) error {
 
 	// Process each import spec
 	err = helpers.ForEachList(mc.Context(), args, "environment", func(_ context.Context, _ int, _ bool, specVal values.Value) error {
-		return compilation.ImportSpecInto(mc.Context(), specVal, callerEnv, newEnv, machine.NewVMMacroEvaluator(), "environment")
+		return compilation.ImportSpecInto(mc.ExpansionContext(), specVal, callerEnv, newEnv, machine.NewVMMacroEvaluator(), "environment")
 	})
 	if err != nil {
 		return err
@@ -561,7 +561,7 @@ func PrimExpand(cc machine.CallContext) error {
 
 	// Not in expansion phase - create temporary expander
 	env := mc.EnvironmentFrame()
-	expander := compilation.NewExpanderTimeContinuation(mc.Context(), env, machine.NewVMMacroEvaluator())
+	expander := compilation.NewExpanderTimeContinuation(mc.ExpansionContext(), env, machine.NewVMMacroEvaluator())
 	expanded, err := expander.ExpandExpression(syntaxVal)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "expand: expansion failed")
@@ -614,7 +614,7 @@ func PrimExpandOnce(cc machine.CallContext) error {
 
 	// Not in expansion phase - create temporary expander
 	env := mc.EnvironmentFrame()
-	expander := compilation.NewExpanderTimeContinuation(mc.Context(), env, machine.NewVMMacroEvaluator())
+	expander := compilation.NewExpanderTimeContinuation(mc.ExpansionContext(), env, machine.NewVMMacroEvaluator())
 	expanded, didExpand, err := expander.ExpandOnce(syntaxVal)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "expand-once: expansion failed")

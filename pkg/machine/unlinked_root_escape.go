@@ -100,3 +100,134 @@ func (p *unlinkedRootEscape) raiseIn(mc *MachineContext, err error) error {
 	}
 	return mc.raiseToHandlers(p.escape.Condition, false, handlers, returned)
 }
+
+// callerHandlersKey carries, on the ctx an expansion runs under, the
+// expansionCaller of the runtime call that started it (ExpansionContext).
+type callerHandlersKey struct{}
+
+// expansionCaller is what an expansion-time root takes from the runtime call
+// that started its expansion: that call's handler stack, and its thread, on
+// whose goroutine the root runs, so that a handler escaping from the root to the
+// caller's continuation is not refused as a cross-thread escape.
+type expansionCaller struct {
+	handlers values.Value
+	thread   *values.Thread
+	threadID uint64
+}
+
+// ExpansionContext returns the ctx for an expansion a primitive running on p
+// starts (eval, load, environment, ...): p's ctx, carrying p's handler stack.
+// Each expansion-time root the expansion runs inherits that stack below its own
+// (inheritCallerHandlers), so a raise its own handlers do not take is handled
+// in its dynamic extent, while its dynamic-winds are live, as when the
+// expansion shares the caller's stack (R7RS 6.11; Chez, Racket). Without it, a
+// root raises in no handlers and the caller's are consulted only after the root
+// has ended (MarkUnlinkedRootEscape).
+func (p *MachineContext) ExpansionContext() context.Context {
+	return context.WithValue(p.ctx, callerHandlersKey{}, &expansionCaller{
+		handlers: p.ResolveParameterValue(exceptionHandlerParam),
+		thread:   p.thread,
+		threadID: p.threadID,
+	})
+}
+
+// inheritCallerHandlers gives p, an expansion-time root, the handler stack and
+// thread identity ctx carries (ExpansionContext), if any, and reports whether it
+// did.
+func (p *MachineContext) inheritCallerHandlers(ctx context.Context) bool {
+	caller, ok := ctx.Value(callerHandlersKey{}).(*expansionCaller)
+	if !ok {
+		return false
+	}
+	p.callerHandlers = []markEntry{{key: exceptionHandlerParam, val: caller.handlers}}
+	p.thread = caller.thread
+	p.threadID = caller.threadID
+	return true
+}
+
+// rootOf returns the context at the end of p's parentMC links.
+func (p *MachineContext) rootOf() *MachineContext {
+	q := p
+	for q.parentMC != nil {
+		q = q.parentMC
+	}
+	return q
+}
+
+// inheritingRoot returns the expansion-time root p runs under when handlers is
+// the stack that root inherited from its caller, so a raise to handlers has
+// left the root's own; nil otherwise.
+func (p *MachineContext) inheritingRoot(handlers values.Value) *MachineContext {
+	root := p.rootOf()
+	if len(root.callerHandlers) == 0 || !values.Eqv(root.callerHandlers[0].val, handlers) {
+		return nil
+	}
+	return root
+}
+
+// ownHandlers is p's handler stack less the part its expansion-time root
+// inherited from its caller: the handlers a raise of the caller's own ctx
+// ending is given (applyCallableError). The caller's handlers do not see that
+// ending raised inside an expansion: it is the caller's, and it ends the
+// caller's run. A stack that does not end in the inherited one (rebound
+// wholesale) is returned whole.
+func (p *MachineContext) ownHandlers() values.Value {
+	handlers := p.ResolveParameterValue(exceptionHandlerParam)
+	root := p.rootOf()
+	if len(root.callerHandlers) == 0 {
+		return handlers
+	}
+	inherited := root.callerHandlers[0].val
+	var own []values.Value
+	for h := handlers; !values.Eqv(h, inherited); {
+		pair, ok := h.(*values.Pair)
+		if !ok {
+			return handlers
+		}
+		own = append(own, pair.Car())
+		h = pair.Cdr()
+	}
+	return values.List(own...)
+}
+
+// settleRootEscape is the mark of an uncaught raise out of a root that
+// inherited its caller's handlers (inheritCallerHandlers): they have run on it
+// already, so it is uncaught from here out, and no bridge raises it again.
+func settleRootEscape(err error) error {
+	var escape *ErrExceptionEscape
+	if !errors.As(err, &escape) {
+		return err
+	}
+	return &unlinkedRootEscape{err: err}
+}
+
+// raisedToCallerError is an expansion-time root's failure with the last raise
+// its own handlers did not take (MachineContext.raisedToCaller).
+type raisedToCallerError struct {
+	err   error
+	raise *ErrExceptionEscape
+}
+
+// Error implements the error interface.
+func (p *raisedToCallerError) Error() string {
+	return p.err.Error()
+}
+
+// Unwrap returns the root's failure.
+func (p *raisedToCallerError) Unwrap() error {
+	return p.err
+}
+
+// RaisedToCaller returns the last raise an expansion-time root's own handlers
+// did not take, if err, the root's failure (EvalTemplate), records one, marked
+// for the next caller's handlers (MarkUnlinkedRootEscape); nil otherwise. A
+// library body ended by a raise its importer's handler escaped from fails with
+// that escape, a control signal, which later importers must not receive
+// (memoizableInstantiateError): they get the raise.
+func RaisedToCaller(err error) error {
+	var raised *raisedToCallerError
+	if !errors.As(err, &raised) {
+		return nil
+	}
+	return MarkUnlinkedRootEscape(raised.raise)
+}

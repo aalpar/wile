@@ -488,6 +488,9 @@ func (p *MachineContext) collectMarksOutsideSegment(prompt *MachineContinuation)
 		}
 		if mc.isolatedMarks {
 			add(mc.capturedMarks)
+		}
+		add(mc.callerHandlers)
+		if mc.isolatedMarks {
 			return q
 		}
 	}
