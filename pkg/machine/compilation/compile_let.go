@@ -110,6 +110,21 @@ func CompileValidatedLet(p *CompileTimeContinuation, ctctx CompileTimeCallContex
 
 	n := len(v.Bindings)
 
+	// (let () e ...) with no definitions in its body binds nothing, so it is a
+	// sequence and pushes no frame: the derived forms whose <body> may open with
+	// definitions (parameterize, let-optionals*) expand to it, and a frame for
+	// every use cost a frame push and pop at run time. With no compile-time frame
+	// either, every reference in the body resolves at the depth it would in the
+	// enclosing code, so there is no depth to adjust.
+	if n == 0 && validate.BodyBindsNothing(v.Body()) {
+		savedInBody := p.inProcedureBody
+		p.inProcedureBody = true
+		defer func() {
+			p.inProcedureBody = savedInBody
+		}()
+		return p.compileValidatedSequence(ctctx, v.Body())
+	}
+
 	// let* pushes its frame BEFORE its inits run, so a continuation captured in
 	// an init resumes after the push and stores into the frame an earlier pass
 	// still reads. Where that can happen, compile the nested lets R7RS §4.2.2

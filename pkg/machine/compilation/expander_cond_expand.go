@@ -53,11 +53,12 @@ import (
 // capture the macro's own binders. The head is a FRESH-scope begin for the
 // reason spliceBegin gives.
 //
-// The body treatment is observable through its pre-scan: a define in the
-// clause shadows a special form for the forms after it only when it was
-// predeclared, and a reference compiled before such a define in a library
-// begin body reads it. TestCondExpandInExpressionPosition and
-// TestImportShadowedBySpliceInALibrary each redden under per-form expansion.
+// No test tells the body treatment from per-form expansion: replacing this
+// call with an ExpandExpression per form leaves every suite green, on master
+// too (checked 2026-10-25). A define in the clause registers its variable when
+// it is expanded, before the form after it, so the pre-scan adds nothing a
+// following use can see; the expression-position row that was meant to show
+// it now refuses its define.
 func (p *ExpanderTimeContinuation) expandCondExpandForm(sym *syntax.SyntaxSymbol, expr syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	srcCtx := expr.SourceContext()
 	if srcCtx == nil || syntax.IsSyntaxEmptyList(expr) {

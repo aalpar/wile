@@ -28,7 +28,7 @@
       (define-syntax let-optionals*
         (syntax-rules ()
           ((let-optionals* opt-ls () . body)
-           (begin . body))
+           (let () . body))
           ((let-optionals* (op . args) vars . body)
            (let ((tmp (op . args)))
              (let-optionals* tmp vars . body)))

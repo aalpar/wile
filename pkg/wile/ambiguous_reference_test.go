@@ -120,15 +120,12 @@ func TestAmbiguousReferenceIsALocatedCompilationError(t *testing.T) {
 		{"set!", "(let ((z 1)) (set! z 5) z)"},
 		{"let-syntax", "(let-syntax () 9)"},
 		{"when", "(when #t 3)"},
-		{"begin", "(begin 4)"},
 	}
+	// The begin rows are TestTiedBeginHeadIsACall: that tie is never a head.
 	for _, h := range heads {
-		tcs = append(tcs, row{name: "local tied head " + h.name, code: tiedHeadLocal(h.name, h.ref), want: local})
-		// The top-level begin row is TestTiedBeginHeadIsACallAtTopLevel.
-		if h.name == "begin" {
-			continue
-		}
-		tcs = append(tcs, row{name: "tied head " + h.name, code: tiedHeadTop(h.name, h.ref), want: top})
+		tcs = append(tcs,
+			row{name: "local tied head " + h.name, code: tiedHeadLocal(h.name, h.ref), want: local},
+			row{name: "tied head " + h.name, code: tiedHeadTop(h.name, h.ref), want: top})
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -172,16 +169,33 @@ func TestQuoteSyntaxOfAnAmbiguousIdentifierIsSyntax(t *testing.T) {
 	}
 }
 
-// TestTiedBeginHeadIsACallAtTopLevel replaces the top-level "tied head begin"
-// row above, pinning today's answer. m's template splices with a begin of its
-// own, and at top level that head reaches def-m's (define begin ...), whose
-// define has already expanded, so it is a call to that procedure and the tie
-// inside it is never a head (X25). The spliced (define given-x ...) is then an
-// argument, which Wile accepts; Racket refuses it ("define: not allowed in an
-// expression context"), a separate leniency that is filed. EvalProgram is the
+// TestTiedBeginHeadIsACall replaces the "tied head begin" rows above. m's
+// template splices with a begin of its own, and that head reaches def-m's
+// (define begin ...), whose define has already expanded, so it is a call to
+// that procedure and the tie inside it is never a head (X25). The spliced
+// (define given-x ...) is then an argument, so the program is refused as a
+// definition in an expression context, at top level and in a body alike; Racket
+// ("define: not allowed in an expression context") and Chez ("invalid context
+// for definition") refuse it the same way. The refusal is what shows the head
+// was read as a call: as a splice, the define would have been accepted and the
+// tied (begin 4) head would have raised ErrAmbiguousBinding. EvalProgram is the
 // path both wile -e and wile --file take.
-func TestTiedBeginHeadIsACallAtTopLevel(t *testing.T) {
-	got, err := evalIncludeProgram(t, fstest.MapFS{}, tiedHeadTop("begin", "(begin 4)"))
-	qt.Assert(t, err, qt.IsNil)
-	qt.Assert(t, got, qt.Equals, "1")
+func TestTiedBeginHeadIsACall(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+		want string
+	}{
+		{name: "top level", code: tiedHeadTop("begin", "(begin 4)"), want: "includer.scm:10:1: "},
+		{name: "procedure body", code: tiedHeadLocal("begin", "(begin 4)"), want: "includer.scm:11:1: "},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := evalIncludeProgram(t, fstest.MapFS{}, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Check(t, errors.Is(err, werr.ErrInvalidSyntax), qt.IsTrue, qt.Commentf("%v", err))
+			qt.Check(t, errors.Is(err, werr.ErrAmbiguousBinding), qt.IsFalse, qt.Commentf("%v", err))
+			qt.Check(t, err.Error(), qt.Contains, tc.want+"definition not allowed in an expression context in define form")
+		})
+	}
 }

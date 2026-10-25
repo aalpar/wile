@@ -16,6 +16,7 @@ package wile_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,6 +25,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/pkg/stdlib"
+	"github.com/aalpar/wile/pkg/werr"
 	"github.com/aalpar/wile/pkg/wile"
 )
 
@@ -79,21 +81,43 @@ func TestCondExpandInExpressionPosition(t *testing.T) {
 		{name: "selected clause value is the or's", code: `(or (cond-expand (r7rs 3) (else #f)) 5)`, want: "3"},
 		{name: "last body form is the value", code: `(+ 1 (cond-expand (else 2 3)))`, want: "4"},
 		{name: "empty selected body is a void between forms", code: `(begin (cond-expand (else)) 1)`, want: "1"},
-		// The row that tells the body treatment from expanding each form alone:
-		// only ExpandBodyWithDefineSyntax predeclares the define, so only it lets
-		// the use after the define read the shadowing variable (X25). An
-		// expression-position begin answers the same; per-form expansion answers
-		// (5). A define-syntax and its use do not discriminate: expandDefineSyntax
-		// binds the keyword when it is reached either way. Neither oracle reads a
-		// cond-expand in expression position.
-		{name: "a define in the clause shadows for the forms after it", code: `(list (cond-expand (else (define include (lambda a 'mine)) (include "v.scm"))))`, want: "(mine)"},
-		{name: "control: the same body in an expression-position begin", code: `(list (begin (define include (lambda a 'mine)) (include "v.scm")))`, want: "(mine)"},
+		// A define in the clause shadows for the forms after it (X25), in body
+		// position now that a define in expression position is refused. It does
+		// not tell body expansion from per-form expansion; nothing does (see
+		// expandCondExpandForm).
+		{name: "a define in a body clause shadows for the forms after it", code: `(let () (cond-expand (else (define include (lambda a 'mine)) (include "v.scm"))))`, want: "mine"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := evalIncludeProgram(t, fstest.MapFS{"v.scm": &fstest.MapFile{Data: []byte(`5`)}}, tc.code)
 			qt.Assert(t, err, qt.IsNil)
 			qt.Assert(t, got, qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestCondExpandInExpressionPositionRefusesADefine: the selected clause's forms
+// are expressions there, as an expression-position begin's are, so a define in
+// one is refused rather than defining a variable. Both rows answered (mine)
+// before, the define shadowing include for the form after it (X25). Neither
+// oracle reads a cond-expand in expression position; both refuse the begin row
+// ("define: not allowed in an expression context", "invalid context for
+// definition").
+func TestCondExpandInExpressionPositionRefusesADefine(t *testing.T) {
+	tcs := []struct {
+		name string
+		code string
+	}{
+		{name: "a define in the clause", code: `(list (cond-expand (else (define include (lambda a 'mine)) (include "v.scm"))))`},
+		{name: "control: the same body in an expression-position begin", code: `(list (begin (define include (lambda a 'mine)) (include "v.scm")))`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := evalIncludeProgram(t, fstest.MapFS{"v.scm": &fstest.MapFile{Data: []byte(`5`)}}, tc.code)
+			qt.Assert(t, err, qt.IsNotNil)
+			qt.Check(t, errors.Is(err, werr.ErrInvalidSyntax), qt.IsTrue, qt.Commentf("%v", err))
+			qt.Check(t, err.Error(), qt.Contains, "includer.scm:1:")
+			qt.Check(t, err.Error(), qt.Contains, "definition not allowed in an expression context")
 		})
 	}
 }

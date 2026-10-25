@@ -135,16 +135,21 @@
 ;; A two-helper-macro split (one macro accumulating the temporaries, another
 ;; emitting the marks) expands correctly too; this single self-recursive form
 ;; just keeps the threading in one definition.
+;; The body is a <body> (R7RS §4.2.6) that may open with definitions, so it
+;; expands to (let () b ...): a begin under with-continuation-mark is an
+;; expression, where a define is refused.
 (define-syntax parameterize
   (syntax-rules (%bind %mark)
-    ((parameterize ((p v) ...) body ...)
-     (parameterize %bind ((p v) ...) () (body ...)))
+    ((parameterize ((p v) ...) body1 body ...)
+     (parameterize %bind ((p v) ...) () (body1 body ...)))
+    ((parameterize bindings)
+     (syntax-error "parameterize: no body expression" bindings))
     ((parameterize %bind ((p v) rest ...) (acc ...) bw)
      (let* ((pt p) (vt (%parameter-convert pt v)))   ; let* — vt's init reads pt
        (parameterize %bind (rest ...) (acc ... (pt vt)) bw)))
     ((parameterize %bind () (acc ...) bw)
      (parameterize %mark (acc ...) bw))
-    ((parameterize %mark () (b ...)) (begin b ...))
+    ((parameterize %mark () (b ...)) (let () b ...))
     ((parameterize %mark ((pt vt) rest ...) bw)
      (with-continuation-mark pt vt (parameterize %mark (rest ...) bw)))))
 

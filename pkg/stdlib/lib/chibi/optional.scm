@@ -257,7 +257,7 @@
 (define-syntax let-keywords*
   (syntax-rules ()
     ((let-keywords* opt-ls () . body)
-     (begin . body))
+     (let () . body))
     ((let-keywords* (op . args) vars . body)
      (let ((tmp (op . args)))
        (let-keywords* tmp vars . body)))

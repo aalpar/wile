@@ -871,7 +871,7 @@ func (p *CompileTimeContinuation) CompileExpression(ctctx CompileTimeCallContext
 	// Validate the expression first
 	// Pass the environment so validation can check for local variable shadowing
 	// of special forms (R7RS §4.2.2)
-	result := validate.ValidateExpression(ctctx.ctx, p.env, expr)
+	result := validate.ValidateExpressionIn(ctctx.ctx, p.env, expr, !ctctx.expressionRoot)
 	if !result.Ok() {
 		return p.wrapCompilationError(validationFailure(result))
 	}

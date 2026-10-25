@@ -135,5 +135,10 @@ func WalkSubExprs(expr ValidatedExpr, fn func(child ValidatedExpr, role ChildRol
 		//   2. Update WalkBindingRefs's switch (walk_binding_refs.go)
 		//      if the new form needs role-tagging beyond the default.
 		//   3. Add the form to walk_sub_exprs_test.go's shape table.
+		//   4. If the form has a <body> that RoleClosureBody does not label
+		//      (as ValidatedLet's body is RoleNormal here), add a case to
+		//      checkDefinitionContexts (definition_context.go). Otherwise
+		//      a definition in that body is refused as one in an expression
+		//      context.
 	}
 }

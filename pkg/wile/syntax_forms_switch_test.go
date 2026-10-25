@@ -648,10 +648,13 @@ func TestP2_ERRenameIsHygienicAsABinder(t *testing.T) {
 // site binds globally defines the macro's own variable, not the user's, for the
 // same reason a renamed let binder does not capture. The Go layer answered
 // (5 5), overwriting x; racket -I r5rs and petite (syntax-rules twin) answer (5 1).
+// got, the user's name, reads the macro's x: the expansion is a top-level
+// begin, since a define inside (list (def-x) x) is in an expression context.
 func TestP2_ERRenamedDefineIsTheMacros(t *testing.T) {
 	src := `(define x 1)
-(define-syntax def-x (er-macro-transformer (lambda (f r c) (list (r 'begin) (list (r 'define) (r 'x) 5) (r 'x)))))
-(list (def-x) x)`
+(define-syntax def-x (er-macro-transformer (lambda (f r c) (list (r 'begin) (list (r 'define) (r 'x) 5) (list (r 'define) (car (cdr f)) (r 'x))))))
+(def-x got)
+(list got x)`
 	for _, l := range syntaxLayers {
 		t.Run(l.name, func(t *testing.T) {
 			qt.Assert(t, evalSyntaxForms(t, src, l.opt), qt.Equals, "(5 1)")

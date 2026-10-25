@@ -77,6 +77,14 @@ type CompileTimeCallContext struct {
 	// flipped). er-macro-transformer reads it: a rename means what the name
 	// means where the keyword was written. nil means NONE.
 	keyword *syntax.SyntaxSymbol
+	// expressionRoot says the form the next CompileExpression is handed sits in
+	// an expression context, so a definition at its root is refused. A form
+	// compiled on its own (an eval-when body, a quasiquote's expansion) is
+	// validated as a fresh tree whose root the validator cannot place. The zero
+	// value is a definition context: a unit's own root. Set at the passthrough
+	// literal dispatch from what validation found there, and by the re-entries
+	// that always compile an expression.
+	expressionRoot bool
 }
 
 // frameReuseKind discriminates how a depth-0 tail call may reuse the parameter
@@ -192,7 +200,16 @@ func (p CompileTimeCallContext) NotInTail() CompileTimeCallContext {
 		// internal define unable to name its own siblings, which is precisely the
 		// bug this preserves against.
 		enclosingDefines: p.enclosingDefines,
+		expressionRoot:   p.expressionRoot,
 	}
+}
+
+// atExpressionRoot returns a copy whose next CompileExpression validates its
+// root as being in an expression context or not (see expressionRoot).
+func (p CompileTimeCallContext) atExpressionRoot(expression bool) CompileTimeCallContext {
+	q := p
+	q.expressionRoot = expression
+	return q
 }
 
 // WithFrameReuse returns a copy armed with the given frame-reuse disposition.

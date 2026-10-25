@@ -30,8 +30,19 @@ import (
 // The env parameter provides the environment context for checking local variable
 // shadowing of special forms (R7RS §4.2.2).
 func ValidateExpression(ctx context.Context, env *environment.EnvironmentFrame, expr syntax.SyntaxValue) *ValidationResult {
+	return ValidateExpressionIn(ctx, env, expr, true)
+}
+
+// ValidateExpressionIn is ValidateExpression for a form whose position the
+// caller knows: definitionContext is false for a form compiled on its own from
+// an expression position (an eval-when argument, a quasiquote's expansion), so
+// a definition at its root is refused as one nested in an expression is.
+func ValidateExpressionIn(ctx context.Context, env *environment.EnvironmentFrame, expr syntax.SyntaxValue, definitionContext bool) *ValidationResult {
 	result := &ValidationResult{}
 	validated := validateExpr(ctx, env, expr, result)
+	if validated != nil && result.Ok() {
+		checkDefinitionContexts(validated, definitionContext, result)
+	}
 	result.Expr = validated
 	result.finalizeStability()
 	return result

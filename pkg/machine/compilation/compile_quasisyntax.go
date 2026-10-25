@@ -73,7 +73,7 @@ func (p *CompileTimeContinuation) compileQuasisyntaxTemplate(ctctx CompileTimeCa
 		syntax.NewSyntaxObject(values.FalseValue, srcCtx),
 		expanded,
 	)
-	return p.CompileExpression(ctctx, wrapped)
+	return p.CompileExpression(ctctx.atExpressionRoot(true), wrapped)
 }
 
 // quasisyntaxNeedsRuntime checks if a quasisyntax template contains unsyntax at

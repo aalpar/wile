@@ -68,6 +68,18 @@ func (p *validatedProcBase) Docstring() string {
 type validatedBase struct {
 	formName string
 	source   *syntax.SourceContext
+	// inExpression is set by checkDefinitionContexts on a node it finds in an
+	// expression context, for the forms whose code is compiled later as a tree
+	// of its own (a passthrough literal's body, a quasiquote's expansion): that
+	// tree's root learns where it sits from InExpressionContext.
+	inExpression bool
+}
+
+// InExpressionContext reports whether checkDefinitionContexts found the node
+// in an expression context (R7RS §5.3). It is recorded only on passthrough
+// literals and quasiquotes, and is false before that pass has run.
+func (p *validatedBase) InExpressionContext() bool {
+	return p.inExpression
 }
 
 // FormName returns the name of the form for error messages.
@@ -205,6 +217,11 @@ type ValidatedLiteral struct {
 	validatedBase
 	Value syntax.SyntaxValue
 	Env   *environment.EnvironmentFrame
+	// definesSyntax marks a define-syntax, a definition that passes through
+	// as a literal, so checkDefinitionContexts can refuse it in an expression.
+	// Unexported: its readers (that pass and BodyBindsNothing) are in this
+	// package, and the compiler asks BodyBindsNothing rather than the flag.
+	definesSyntax bool
 }
 
 // newLiteralExpr creates a ValidatedLiteral wrapping a syntax value as a
