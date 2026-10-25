@@ -1,7 +1,7 @@
 TODO
 ----
 
-**Last Updated**: 2026-10-25: the crosscheck backlog run (X1–X57, `plans/2026-10-24-crosscheck-backlog-triage.md` §7.9) is executed; Layout counts re-taken. Before that, 2026-10-24: `todo/` became a tracked symlink into `../wile-memoplans/todo/` (same arrangement as `plans/` and `memory/`; row edits now show in that repo's `git status`); the crosscheck-filed rows moved from the tier files into thirteen `todo/crosscheck-*.md` files, each row with its resolution block, ranked by the 2026-10-24 triage (see **Layout**); Layout counts re-measured. Previous: 2026-10-17: split into `TODO.md` (hub) plus `todo/*.md` (one file per tier, plus
+**Last Updated**: 2026-10-25: owner decisions on the run's open rows (N26, N20 row J, two N32 reader rows, `setRecognizedPrimitive`) landed; `todo/wile-goast.md` added for sibling-repo rows; Layout counts re-taken. Earlier the same day: the crosscheck backlog run (X1–X57, `plans/2026-10-24-crosscheck-backlog-triage.md` §7.9) is executed; Layout counts re-taken. Before that, 2026-10-24: `todo/` became a tracked symlink into `../wile-memoplans/todo/` (same arrangement as `plans/` and `memory/`; row edits now show in that repo's `git status`); the crosscheck-filed rows moved from the tier files into thirteen `todo/crosscheck-*.md` files, each row with its resolution block, ranked by the 2026-10-24 triage (see **Layout**); Layout counts re-measured. Previous: 2026-10-17: split into `TODO.md` (hub) plus `todo/*.md` (one file per tier, plus
 `exceptions-and-rejected.md` and `closed.md`); every row moved verbatim, see **Layout** below. Previous: 2026-10-16: every open row and the Plan Index re-verified against `956604f0`
 (repros rerun, citations resolved, fixing commits found): 13 rows closed that had already shipped,
 the `if` section and Top Priority table updated, drifted citations repointed, two unindexed plans
@@ -36,19 +36,20 @@ from the split to 2026-10-24, `git log -p todo/<file>` in `wile`; after that, th
 | [`todo/tier4-performance.md`](todo/tier4-performance.md) | Measured perf levers; unboxed arithmetic is the largest | 9 | 11 | 145 |
 | [`todo/tier5-tech-debt.md`](todo/tier5-tech-debt.md) | Simplification, dedup, postponed items | 43 | 48 | 753 |
 | [`todo/tier6-nice-to-haves.md`](todo/tier6-nice-to-haves.md) | Unranked wants | 14 | 7 | 58 |
-| [`todo/crosscheck-numeric.md`](todo/crosscheck-numeric.md) | Crosscheck backlog: big-precision results, special-float contagion (A1, A4, A6–A8, C-precision) | 20 | 12 | 171 |
-| [`todo/crosscheck-numeric-reader.md`](todo/crosscheck-numeric-reader.md) | Crosscheck backlog: `#z`/`#m` literals, `l` marker, `#` terminator, `string->number` (B31–B34, C ×2) | 13 | 9 | 143 |
-| [`todo/crosscheck-reader-ports.md`](todo/crosscheck-reader-ports.md) | Crosscheck backlog: `read` on failing ports, port serialisation, UTF-8, tokenizer diagnostics (A2, A17, B25–B41) | 9 | 9 | 161 |
+| [`todo/crosscheck-numeric.md`](todo/crosscheck-numeric.md) | Crosscheck backlog: big-precision results, special-float contagion (A1, A4, A6–A8, C-precision) | 21 | 14 | 181 |
+| [`todo/crosscheck-numeric-reader.md`](todo/crosscheck-numeric-reader.md) | Crosscheck backlog: `#z`/`#m` literals, `l` marker, `#` terminator, `string->number` (B31–B34, C ×2) | 13 | 9 | 144 |
+| [`todo/crosscheck-reader-ports.md`](todo/crosscheck-reader-ports.md) | Crosscheck backlog: `read` on failing ports, port serialisation, UTF-8, tokenizer diagnostics (A2, A17, B25–B41) | 12 | 11 | 175 |
 | [`todo/crosscheck-hygiene-syntax.md`](todo/crosscheck-hygiene-syntax.md) | Crosscheck backlog: scope duals, opaque-subtree binders, cyclic syntax, ER contract (A3, A5, A13, A14, A20, A22, B38, B46, C ×2) | 17 | 16 | 257 |
 | [`todo/crosscheck-expander-phases.md`](todo/crosscheck-expander-phases.md) | Crosscheck backlog: `define` failure leaves `#<void>`, cross-phase lookup, head-position shadowing (A9, A24, B44, B45, C) | 12 | 6 | 142 |
 | [`todo/crosscheck-include-library.md`](todo/crosscheck-include-library.md) | Crosscheck backlog: include cycles and resolution, resolver chains, nested `define-library` (A10–A12, A16, A21, B29, B43, C ×2) | 16 | 12 | 233 |
-| [`todo/crosscheck-algebra-dataflow.md`](todo/crosscheck-algebra-dataflow.md) | Crosscheck backlog: AC unification, backward dataflow seeding (A18, A19, B42, B48) | 5 | 8 | 115 |
+| [`todo/crosscheck-algebra-dataflow.md`](todo/crosscheck-algebra-dataflow.md) | Crosscheck backlog: AC unification, backward dataflow seeding (A18, A19, B42, B48) | 2 | 9 | 113 |
 | [`todo/crosscheck-vm-errors.md`](todo/crosscheck-vm-errors.md) | Crosscheck backlog: variadic retention, continuation marks, hashtable kind, process-kill (A15, A23, B36, B37, C ×3) | 6 | 11 | 163 |
 | [`todo/crosscheck-error-classification.md`](todo/crosscheck-error-classification.md) | Crosscheck backlog: index-keyed classification, carried origin chain, `%T` in diagnostics (B26, B30, B47) | 9 | 6 | 90 |
-| [`todo/crosscheck-p317-correctness.md`](todo/crosscheck-p317-correctness.md) | Crosscheck backlog: the P3.17 cancellation / `with-timeout` correctness rows (P3.17-a–h, B28) | 20 | 12 | 255 |
+| [`todo/crosscheck-p317-correctness.md`](todo/crosscheck-p317-correctness.md) | Crosscheck backlog: the P3.17 cancellation / `with-timeout` correctness rows (P3.17-a–h, B28) | 23 | 13 | 266 |
 | [`todo/crosscheck-p317-residue.md`](todo/crosscheck-p317-residue.md) | Crosscheck backlog: the rest of the P3.17 heading, open and closed, in filing order | 7 | 30 | 469 |
 | [`todo/crosscheck-d-tests-windows.md`](todo/crosscheck-d-tests-windows.md) | Crosscheck backlog Band D: Windows-unverifiable rows, test debt | 11 | 19 | 318 |
-| [`todo/crosscheck-d-docs-tooling-debt.md`](todo/crosscheck-d-docs-tooling-debt.md) | Crosscheck backlog Band D: docs, tooling, tech debt, perf, information disclosure | 8 | 22 | 363 |
+| [`todo/crosscheck-d-docs-tooling-debt.md`](todo/crosscheck-d-docs-tooling-debt.md) | Crosscheck backlog Band D: docs, tooling, tech debt, perf, information disclosure | 6 | 24 | 367 |
+| [`todo/wile-goast.md`](todo/wile-goast.md) | Rows that land in the sibling repo `wile-goast` (adopting wile v1.20.1, the `make-context` import conflict) | 4 | 0 | 14 |
 | [`todo/exceptions-and-rejected.md`](todo/exceptions-and-rejected.md) | Documented R7RS exceptions, rejected proposals, the FCA coupling assessment | 0 | 10 | 89 |
 | [`todo/closed.md`](todo/closed.md) | Archive form of closed rows; read for traps and deciding measurements | 0 | 90 | 815 |
 
