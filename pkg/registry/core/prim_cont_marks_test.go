@@ -729,6 +729,63 @@ func TestContinuationMarks_NonTailWCMPushesFrame(t *testing.T) {
 	}
 }
 
+// TestContinuationMarksOfComposableContinuation pins B36 row 2: continuation-marks
+// accepts a composable continuation and reports its segment's marks, nearest first,
+// up to the prompt it was captured at. Expected values are Racket's, measured. The
+// tail row needs the capture to record the activation's live marks, which sit in the
+// registers and on no segment frame.
+func TestContinuationMarksOfComposableContinuation(t *testing.T) {
+	t.Parallel()
+
+	const (
+		pre   = `(let ((h (lambda a a)) (t (default-continuation-prompt-tag))) `
+		marks = `(lambda (k) (continuation-mark-set->list (continuation-marks k) 'a))`
+	)
+	tcs := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			name:     "captured in tail position of a wcm body",
+			code:     pre + `(call-with-continuation-prompt (lambda () ((lambda () (with-continuation-mark 'a 2 (call-with-composable-continuation ` + marks + ` t))))) t h))`,
+			expected: "(2)",
+		},
+		{
+			name:     "captured in a non-tail wcm body",
+			code:     pre + `(call-with-continuation-prompt (lambda () ((lambda () (with-continuation-mark 'a 1 (list (with-continuation-mark 'a 2 (call-with-composable-continuation ` + marks + ` t))))))) t h))`,
+			expected: "((2 1))",
+		},
+		{
+			name:     "captured in non-tail position",
+			code:     pre + `(call-with-continuation-prompt (lambda () ((lambda () (with-continuation-mark 'a 1 (list (call-with-composable-continuation ` + marks + ` t)))))) t h))`,
+			expected: "((1))",
+		},
+		{
+			name:     "marks outside the prompt are not in the segment",
+			code:     pre + `((lambda () (with-continuation-mark 'a 0 (list (call-with-continuation-prompt (lambda () ((lambda () (with-continuation-mark 'a 2 (call-with-composable-continuation ` + marks + ` t))))) t h))))))`,
+			expected: "((2))",
+		},
+		{
+			name: "a named tag delimits with or without the tag argument",
+			code: pre + `(let ((u (make-continuation-prompt-tag 'u))) ((lambda () (with-continuation-mark 'a 0 (list (call-with-continuation-prompt
+				(lambda () ((lambda () (with-continuation-mark 'a 1 (list (call-with-composable-continuation
+					(lambda (k) (list (continuation-mark-set->list (continuation-marks k) 'a) (continuation-mark-set->list (continuation-marks k u) 'a))) u))))))
+				u h)))))))`,
+			expected: "((((1) (1))))",
+		},
+	}
+	for name, run := range markShapeRunners() {
+		for _, tc := range tcs {
+			t.Run(name+"/"+tc.name, func(t *testing.T) {
+				got, err := run(t, tc.code)
+				qt.Assert(t, err, qt.IsNil)
+				qt.Assert(t, got, qt.Equals, tc.expected)
+			})
+		}
+	}
+}
+
 // TestContinuationMarkSetToContextStaysStrict pins that (wile control)'s
 // continuation-mark-set->context, which delegates to ->list, does not inherit the
 // #f alias: Racket raises a contract violation there, and Wile raises the located

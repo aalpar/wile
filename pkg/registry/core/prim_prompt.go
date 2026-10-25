@@ -211,6 +211,9 @@ func PrimCallWithComposableContinuation(cc machine.CallContext) error {
 	// Create the composable continuation value, recording the barrier context at
 	// capture time so applyComposableContinuation can detect barrier crossings.
 	comp := machine.NewComposableContinuation(segment, windingStack, mc.WindingDepthAt(prompt), mc.ThreadID(), mc.BarrierValid())
+	// A capture in tail position of a with-continuation-mark body has its marks in
+	// the live registers, not on a segment frame; (continuation-marks k) needs them.
+	mc.RecordLiveMarksInto(comp)
 
 	// Apply proc with the composable continuation in place, as call/cc applies
 	// its procedure (prim_control.go) — NOT an abort. Racket's

@@ -465,6 +465,15 @@ func (p *MachineContext) collectReachableMarks() []markEntry {
 // capture sites (PrimCallCC).
 func (p *MachineContext) SnapshotReachableMarksInto(comp *ComposableContinuation) {
 	comp.capturedMarks = p.collectReachableMarks()
+	p.RecordLiveMarksInto(comp)
+}
+
+// RecordLiveMarksInto keeps the capturing activation's own live marks on comp, and
+// only those, for (continuation-marks k). A composable capture
+// (PrimCallWithComposableContinuation) takes this half alone: applying a composable
+// continuation extends the live chain and must not install the reachable-marks
+// snapshot that a call/cc resume falls back to.
+func (p *MachineContext) RecordLiveMarksInto(comp *ComposableContinuation) {
 	comp.liveMarks = cloneMarks(p.marks)
 }
 
