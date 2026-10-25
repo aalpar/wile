@@ -146,6 +146,61 @@ func TestDriverAppliedHandlerFailureIsCatchable(t *testing.T) {
 	}
 }
 
+// TestTimerHandlerRunsOutsideTheAbandonedThunk pins the marks half of the hard
+// suspension: the handler, and a failure of its application, see the handlers
+// and parameterizations of the with-timeout's own chain, not those the timed-out
+// thunk installed, as an abort's prompt handler does. A resumed thunk still sees
+// its own (the marks travel in the resumable). The failing handler is the arity
+// mismatch of TestDriverAppliedHandlerFailureIsCatchable.
+func TestTimerHandlerRunsOutsideTheAbandonedThunk(t *testing.T) {
+	t.Parallel()
+
+	tcs := []testhelpers.SchemeCodeTestCase{
+		{
+			Name: "handler failure skips a handler the thunk installed",
+			Code: `(call/cc (lambda (out)
+  (with-exception-handler (lambda (e) (out 'outer))
+    (lambda ()
+      (with-timeout 20 (lambda () 'x)
+        (lambda ()
+          (call/cc (lambda (in)
+            (with-exception-handler (lambda (e) (in 'inner))
+              (lambda () (let loop () (loop))))))))))))`,
+			Expected: values.NewSymbol("outer"),
+		},
+		{
+			Name: "handler failure does not pass through an escalating handler of the thunk",
+			Code: `(guard (e (#t (list 'outer (error-object? e))))
+  (with-timeout 20 (lambda () 'x)
+    (lambda ()
+      (with-exception-handler (lambda (e) (raise 'inner))
+        (lambda () (let loop () (loop)))))))`,
+			Expected: values.List(values.NewSymbol("outer"), values.TrueValue),
+		},
+		{
+			Name: "handler sees the parameterization outside the thunk",
+			Code: `(let ((p (make-parameter 'outer)))
+  (with-timeout 20 (lambda (k) (p))
+    (lambda () (parameterize ((p 'inner)) (let loop () (loop))))))`,
+			Expected: values.NewSymbol("outer"),
+		},
+		{
+			Name: "resumed thunk sees its own parameterization",
+			Code: `(let ((p (make-parameter 'outer)))
+  (with-timeout 1 (lambda (k) (list (p) (k)))
+    (lambda () (parameterize ((p 'inner)) (let loop ((n 0)) (if (< n 2000000) (loop (+ n 1)) (p)))))))`,
+			Expected: values.List(values.NewSymbol("outer"), values.NewSymbol("inner")),
+		},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.Name, func(t *testing.T) {
+			result, err := testhelpers.RunSchemeCodeWithTimeout(t, tc.Code, 5*time.Second)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, result, valuestest.SchemeEquals, tc.Expected)
+		})
+	}
+}
+
 // TestFiredTimerIsTornDownBeforeItsHandlerRuns pins the order inside the timer
 // arm: the fired timer is torn down before its handler is applied, so a failure
 // of that application is not claimed by the same timer as a second interrupt.

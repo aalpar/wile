@@ -2338,8 +2338,11 @@ func (p *MachineContext) resolveAbort(abortErr *ErrPromptAbort, prompt *MachineC
 		if applyErr != nil {
 			// The driver applies the handler, not an OpApply, so its failure
 			// (an arity mismatch) has crossed no bridge yet: bridge it here, or
-			// it reaches the embedder raw, past every guard on the chain.
-			return false, p.bridgeDriverApplyError(applyErr)
+			// it reaches the embedder raw, past every guard on the chain. A nil
+			// result means it was raised in place and p continues into the
+			// Scheme handler; the driver's loop runs p.
+			_, bridged := bridgeForeignError(p, applyErr)
+			return false, bridged
 		}
 		return false, nil
 	}
@@ -2510,8 +2513,12 @@ func (p *MachineContext) resolveTimerInterrupt(timerErr *ErrTimerInterrupt, boun
 	// own among them, are dropped.
 	// The thunk's mid-expression operand stack is already deep-copied into `segment`, so
 	// the dirty eval stack is released and a fresh one acquired for the handler.
+	// The live frame's marks (the thunk's handlers and parameterizations) are in
+	// `segment` too, and dropped here: the handler, and a failure of its application,
+	// see the marks of the boundary's chain, not those of the abandoned thunk.
 	p.cont = boundary
 	p.windingStack = boundary.windingStack
+	p.marks = nil
 	oldEvals := p.evals
 	p.evals = p.acquireStack()
 	p.releaseStack(oldEvals)
@@ -2545,19 +2552,10 @@ func (p *MachineContext) resolveTimerInterrupt(timerErr *ErrTimerInterrupt, boun
 	// would run again (TestFiredTimerIsTornDownBeforeItsHandlerRuns).
 	_, applyErr := p.ApplyCallable(timerErr.Handler, resumable)
 	if applyErr != nil {
-		return p.bridgeDriverApplyError(applyErr)
+		_, bridged := bridgeForeignError(p, applyErr)
+		return bridged
 	}
 	return nil
-}
-
-// bridgeDriverApplyError sends the failure of a handler a driver applied itself
-// (resolveAbort, resolveTimerInterrupt) through bridgeForeignError, as every
-// OpApply failure is sent. A nil return means the failure was raised in place and
-// p now continues into the Scheme handler; a control signal, or a failure a
-// timer claims, is returned for the driver to dispatch or pass up.
-func (p *MachineContext) bridgeDriverApplyError(err error) error {
-	_, bridged := bridgeForeignError(p, err)
-	return bridged
 }
 
 // resolveBreakInterrupt is the shared debugger-break arm of RunResumable and
