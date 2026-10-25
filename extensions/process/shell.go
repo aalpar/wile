@@ -18,6 +18,8 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // shellSpec is the host shell and the flag that makes it run one command string.
@@ -91,11 +93,6 @@ func hostShell() shellSpec {
 	return shellFor(runtime.GOOS)
 }
 
-// hostSignals returns the signals for the running GOOS.
-func hostSignals() []signalSpec {
-	return signalsFor(runtime.GOOS)
-}
-
 // lookupSignal finds name among specs.
 func lookupSignal(specs []signalSpec, name string) (syscall.Signal, bool) {
 	for _, s := range specs {
@@ -106,8 +103,30 @@ func lookupSignal(specs []signalSpec, name string) (syscall.Signal, bool) {
 	return 0, false
 }
 
-// signalNames renders specs as "a", "a or b" or "a, b, or c" for the
-// unknown-signal message.
+// resolveSignal finds name among the signals process-kill offers on goos. A
+// name the default table knows but goos cannot deliver (term, int, hup on
+// Windows) is reported as unsupported there rather than as unknown; both wrap
+// werr.ErrInvalidArgument. Keyed on goos, not runtime.GOOS, so either message
+// is testable on any host.
+func resolveSignal(goos, name string) (syscall.Signal, error) {
+	signals := signalsFor(goos)
+	sig, ok := lookupSignal(signals, name)
+	if ok {
+		return sig, nil
+	}
+	_, known := lookupSignal(defaultSignals, name)
+	if known {
+		return 0, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+			"process-kill: signal '%s' is not supported on %s (expected %s)",
+			name, goos, signalNames(signals))
+	}
+	return 0, werr.WrapForeignErrorf(werr.ErrInvalidArgument,
+		"process-kill: unknown signal '%s' on %s (expected %s)",
+		name, goos, signalNames(signals))
+}
+
+// signalNames renders specs as "a", "a or b" or "a, b, or c" for
+// resolveSignal's messages.
 func signalNames(specs []signalSpec) string {
 	names := make([]string, len(specs))
 	for i, s := range specs {

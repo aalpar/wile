@@ -15,10 +15,13 @@
 package process
 
 import (
+	"errors"
 	"syscall"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 func TestShellFor(t *testing.T) {
@@ -100,4 +103,29 @@ func TestSignalNames(t *testing.T) {
 			c.Assert(signalNames(tc.specs), qt.Equals, tc.want)
 		})
 	}
+}
+
+// TestResolveSignalNamesUnsupportedApartFromUnknown pins the two refusals: a
+// real signal name the platform cannot deliver (term on Windows) says it is not
+// supported there, a bogus name says unknown, and both wrap ErrInvalidArgument.
+func TestResolveSignalNamesUnsupportedApartFromUnknown(t *testing.T) {
+	tcs := []struct {
+		goos, name, wantText string
+	}{
+		{"windows", "term", "process-kill: signal 'term' is not supported on windows (expected kill)"},
+		{"windows", "hup", "process-kill: signal 'hup' is not supported on windows (expected kill)"},
+		{"windows", "bogus", "process-kill: unknown signal 'bogus' on windows (expected kill)"},
+		{"linux", "bogus", "process-kill: unknown signal 'bogus' on linux (expected term, kill, int, or hup)"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.goos+"/"+tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			_, err := resolveSignal(tc.goos, tc.name)
+			c.Assert(errors.Is(err, werr.ErrInvalidArgument), qt.IsTrue, qt.Commentf("err: %v", err))
+			c.Assert(err.Error(), qt.Contains, tc.wantText)
+		})
+	}
+	sig, err := resolveSignal("windows", "kill")
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, sig, qt.Equals, syscall.SIGKILL)
 }
