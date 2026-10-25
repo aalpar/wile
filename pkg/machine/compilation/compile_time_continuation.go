@@ -387,7 +387,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 			// (e.g., the undefined variable), not the enclosing form".
 			return wrapSourcedError(expr.SourceContext(),
 				werr.WrapForeignErrorf(werr.ErrNoSuchBinding,
-					"no such local or global binding %q%s", sym.Key, p.unboundSuffix(sym, symbolScopes, false)))
+					"%s", p.unboundMessage(sym, symbolScopes, false, "")))
 		}
 
 		bd := p.env.GetGlobalBinding(gi)
@@ -540,7 +540,7 @@ func (p *CompileTimeContinuation) CompileSymbol(ctctx CompileTimeCallContext, ex
 	// the empty-scope arm above: this is the scoped half of one defect.
 	return wrapSourcedError(expr.SourceContext(),
 		werr.WrapForeignErrorf(werr.ErrNoSuchBinding,
-			"no such binding %q with compatible scopes%s", sym.Key, p.unboundSuffix(sym, symbolScopes, true)))
+			"%s", p.unboundMessage(sym, symbolScopes, true, "")))
 }
 
 // ambiguousReference refuses a reference to id whose scope set has no maximal
@@ -554,16 +554,37 @@ func ambiguousReference(id *syntax.SyntaxSymbol, suffix string) error {
 			"identifier %q resolves ambiguously among incomparable hygienic scope sets%s", id.Key(), suffix))
 }
 
+// unboundMessage renders the text of an unbound-binding diagnostic for sym; form
+// names the form after the identifier (" for set!"), or is empty. scoped is the
+// raising arm's claim that a scope set refused the reference. The message makes
+// that claim, "with compatible scopes", only when a same-named binding exists
+// somewhere: for a name bound at no phase under any scope set, no scope set would
+// have found it, so the text is the empty-scope arm's, and the absence clause
+// agrees with it instead of contradicting it. The "local" it denies is the
+// compile phase's: a local of an enclosing lower phase (a let around a
+// define-syntax) is read from phase 1 or above, so the phase sentence always
+// follows the name and qualifies the claim. The three answers stay apart: a
+// tie never reaches here (ambiguousReference), a miss with a same-named binding
+// keeps the scope wording, a miss with none does not.
+func (p *CompileTimeContinuation) unboundMessage(sym *values.Symbol, scopes syntax.Scopes, scoped bool, form string) string {
+	suffix, exists := p.unboundSuffix(sym, scopes, scoped)
+	if scoped && exists {
+		return fmt.Sprintf("no such binding %q with compatible scopes%s%s", sym.Key, form, suffix)
+	}
+	return fmt.Sprintf("no such local or global binding %q%s%s", sym.Key, form, suffix)
+}
+
 // unboundSuffix renders what an unbound-binding diagnostic can say about WHY a
 // name did not resolve: the compile phase, then at most one clause that
-// discriminates phase, hygiene and global absence.
+// discriminates phase, hygiene and global absence. exists reports whether any
+// same-named binding was found, at any phase or under any scope set, which is
+// what unboundMessage keys its prefix on.
 //
 // Under the Flatt binding model "bound at phase 0, referenced at phase 1" is a
 // ROUTINE failure for code that reads as correct — a procedural transformer body
 // calling cadr is the canonical case — so a message carrying only the name sends
-// the reader hunting for a typo that is not there. Conversely the scoped arms
-// word their failure as "with compatible scopes", which blamed scopes for a name
-// no scope set would have found.
+// the reader hunting for a typo that is not there. Conversely "with compatible
+// scopes" alone blamed scopes for a name no scope set would have found.
 //
 // The phase sentence is the number in EnvironmentFrame.PhaseLevel, which its
 // own doc calls "a base to compute from ... not a stage tag": it is this OWNER's
@@ -583,10 +604,10 @@ func ambiguousReference(id *syntax.SyntaxSymbol, suffix string) error {
 //     about the store, so a phase-0 reference to a begin-for-syntax-only name can
 //     legitimately name phase 1. Every such phase is listed, not the nearest.
 //   - "(a same-named binding here is hygienically distinct)": only when
-//     claimsScopeRefusal, i.e. the message being suffixed says "compatible
-//     scopes", and the spelling resolves under syntax.AllScopes() at the compile
-//     phase (a local binder, or a global at that phase) yet not under the use's
-//     own scopes. "here" is that phase. When the only same-named binding is at
+//     claimsScopeRefusal (the message then says "compatible scopes", by
+//     unboundMessage), and the spelling resolves under syntax.AllScopes() at the
+//     compile phase (a local binder, or a global at that phase) yet not under
+//     the use's own scopes. "here" is that phase. When the only same-named binding is at
 //     other phases the clause names them instead: "(a same-named binding at
 //     phase 0 is hygienically distinct)". Either way the wildcard found a binding
 //     the use's scopes could not reach, which is a hygiene refusal.
@@ -614,7 +635,7 @@ func ambiguousReference(id *syntax.SyntaxSymbol, suffix string) error {
 // NOT taken here: nothing consumes it, it is provenance for a human reader.
 //
 // Pinned by pkg/wile/unbound_phase_diagnostic_test.go.
-func (p *CompileTimeContinuation) unboundSuffix(sym *values.Symbol, scopes syntax.Scopes, claimsScopeRefusal bool) string {
+func (p *CompileTimeContinuation) unboundSuffix(sym *values.Symbol, scopes syntax.Scopes, claimsScopeRefusal bool) (string, bool) {
 	var q strings.Builder
 	level := p.env.PhaseLevel()
 	if level != environment.PhaseRuntime {
@@ -626,7 +647,7 @@ func (p *CompileTimeContinuation) unboundSuffix(sym *values.Symbol, scopes synta
 		q.WriteString(" (bound at ")
 		q.WriteString(phaseList(bound))
 		q.WriteString(")")
-		return q.String()
+		return q.String(), true
 	}
 
 	local, _ := p.env.TryGetBinding(sym, syntax.AllScopes())
@@ -635,17 +656,17 @@ func (p *CompileTimeContinuation) unboundSuffix(sym *values.Symbol, scopes synta
 	if exists && claimsScopeRefusal {
 		if local != nil || slices.Contains(elsewhere, level) {
 			q.WriteString(" (a same-named binding here is hygienically distinct)")
-			return q.String()
+			return q.String(), true
 		}
 		q.WriteString(" (a same-named binding at ")
 		q.WriteString(phaseList(elsewhere))
 		q.WriteString(" is hygienically distinct)")
-		return q.String()
+		return q.String(), true
 	}
 	if !exists {
 		q.WriteString(" (no global binding of that name at any phase)")
 	}
-	return q.String()
+	return q.String(), exists
 }
 
 // phaseList renders "phase N" or "phases N, M" for a non-empty ascending list.

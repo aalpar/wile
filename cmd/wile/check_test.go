@@ -51,7 +51,7 @@ func TestCheckFlag(t *testing.T) {
 		path := writeTempScheme(t, "(define (g) (nope 1))\n")
 		result := runCLI(t, "-q", "--check", path)
 		c.Assert(result.exitCode, qt.Equals, 1)
-		c.Assert(strings.Contains(result.stderr, `no such binding "nope"`), qt.IsTrue,
+		c.Assert(strings.Contains(result.stderr, `no such local or global binding "nope"`), qt.IsTrue,
 			qt.Commentf("stderr: %q", result.stderr))
 		c.Assert(strings.Contains(result.stderr, "test.scm:"), qt.IsTrue,
 			qt.Commentf("stderr must carry file:line:col — stderr: %q", result.stderr))
@@ -71,7 +71,7 @@ func TestCheckFlag(t *testing.T) {
 		c := qt.New(t)
 		result := runCLI(t, "-q", "--check", "-e", "(define (g) (nope 1))")
 		c.Assert(result.exitCode, qt.Equals, 1)
-		c.Assert(strings.Contains(result.stderr, `no such binding "nope"`), qt.IsTrue,
+		c.Assert(strings.Contains(result.stderr, `no such local or global binding "nope"`), qt.IsTrue,
 			qt.Commentf("stderr: %q", result.stderr))
 	})
 
@@ -128,7 +128,7 @@ func TestCheckFlag(t *testing.T) {
 		second := writeTempSchemeNamed(t, dir, "second.scm", "(define (k) (alsonope 1))\n")
 		result := runCLI(t, "-q", "--check", "-f", first, "-f", second)
 		c.Assert(result.exitCode, qt.Equals, 1)
-		c.Assert(strings.Contains(result.stderr, `no such binding "nope"`), qt.IsTrue,
+		c.Assert(strings.Contains(result.stderr, `no such local or global binding "nope"`), qt.IsTrue,
 			qt.Commentf("stderr: %q", result.stderr))
 		c.Assert(strings.Contains(result.stderr, "alsonope"), qt.IsFalse,
 			qt.Commentf("checking stops at the first failure — stderr: %q", result.stderr))
@@ -138,7 +138,7 @@ func TestCheckFlag(t *testing.T) {
 		c := qt.New(t)
 		result := runCLIStdin(t, "(define (g) (nope 1))\n", "-q", "--check", "-")
 		c.Assert(result.exitCode, qt.Equals, 1)
-		c.Assert(strings.Contains(result.stderr, `no such binding "nope"`), qt.IsTrue,
+		c.Assert(strings.Contains(result.stderr, `no such local or global binding "nope"`), qt.IsTrue,
 			qt.Commentf("stderr: %q", result.stderr))
 	})
 

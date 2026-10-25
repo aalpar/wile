@@ -36,7 +36,7 @@ func TestEngine_CheckProgram_UnboundBindingIsReported(t *testing.T) {
 
 	err = eng.CheckProgram(ctx, `(define (g) (nope 1))`, "t.scm")
 	qt.Assert(t, err, qt.IsNotNil)
-	qt.Assert(t, err.Error(), qt.Contains, `no such binding "nope"`)
+	qt.Assert(t, err.Error(), qt.Contains, `no such local or global binding "nope"`)
 	qt.Assert(t, err.Error(), qt.Contains, "t.scm:")
 }
 

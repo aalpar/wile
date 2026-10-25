@@ -186,7 +186,10 @@ func TestUnboundDiagnosticKeepsItsSentinel(t *testing.T) {
 // unbound diagnostic says which of three things happened, instead of asserting
 // a scope refusal it never tested. "with compatible scopes" blamed scopes for a
 // plain typo: a repeat lookup under syntax.AllScopes() misses too, so no scope
-// set would have found the name.
+// set would have found the name. Such a name also loses the scope wording from
+// the prefix, which reads as the empty-scope arm's ("no such local or global
+// binding"), so the absence clause no longer contradicts the text it follows;
+// a name with a same-named binding somewhere keeps "with compatible scopes".
 //
 // Every row asserts the EXACT tail of the message, not a substring: the clause
 // text, its parentheses and its position before the sentinel are the contract,
@@ -206,7 +209,7 @@ func TestUnboundDiagnosticDiscriminatesAbsenceFromScopeRefusal(t *testing.T) {
 		{
 			name: "a name bound at no phase says so",
 			src:  `(begin (define-syntax q (lambda (stx) (totally-absent-name-xyz stx))) (q))`,
-			tail: `no such binding "totally-absent-name-xyz" with compatible scopes at phase 1 of this unit's macro tower (no global binding of that name at any phase): no such binding`,
+			tail: `no such local or global binding "totally-absent-name-xyz" at phase 1 of this unit's macro tower (no global binding of that name at any phase): no such binding`,
 		},
 		{
 			name: "a phase-0 typo names its absence and carries no phase sentence",
@@ -216,7 +219,14 @@ func TestUnboundDiagnosticDiscriminatesAbsenceFromScopeRefusal(t *testing.T) {
 		{
 			name: "set! of a name bound nowhere says so",
 			src:  `(set! totally-absent-name-xyz 5)`,
-			tail: `no such binding "totally-absent-name-xyz" with compatible scopes for set! (no global binding of that name at any phase): no such binding`,
+			tail: `no such local or global binding "totally-absent-name-xyz" for set! (no global binding of that name at any phase): no such binding`,
+		},
+		{
+			// The scoped half of the same row: a transformer body's identifier
+			// carries scopes, and still no scope set would find the name.
+			name: "set! of a name bound nowhere from a transformer body says so",
+			src:  `(begin (define-syntax q (lambda (stx) (set! totally-absent-q 1))) (q))`,
+			tail: `no such local or global binding "totally-absent-q" for set! at phase 1 of this unit's macro tower (no global binding of that name at any phase): no such binding`,
 		},
 		{
 			name: "a name bound at phase 0 and referenced at phase 1 says so",
@@ -298,12 +308,12 @@ func TestUnboundDiagnosticDiscriminatesAbsenceFromScopeRefusal(t *testing.T) {
 			// table, so the clause must claim only the global table.
 			name: "a phase-0 local read from a transformer body is a global absence only",
 			src:  `(let ((loc 1)) (define-syntax q (lambda (stx) loc)) (q))`,
-			tail: `no such binding "loc" with compatible scopes at phase 1 of this unit's macro tower (no global binding of that name at any phase): no such binding`,
+			tail: `no such local or global binding "loc" at phase 1 of this unit's macro tower (no global binding of that name at any phase): no such binding`,
 		},
 		{
 			name: "the let-syntax form of the same local",
 			src:  `(let ((yy 1)) (let-syntax ((m (lambda (stx) yy))) (m)))`,
-			tail: `no such binding "yy" with compatible scopes at phase 1 of this unit's macro tower (no global binding of that name at any phase): no such binding`,
+			tail: `no such local or global binding "yy" at phase 1 of this unit's macro tower (no global binding of that name at any phase): no such binding`,
 		},
 	}
 	for _, tc := range cases {

@@ -459,7 +459,7 @@ func TestIncludedFormErrorNamesTheInclude(t *testing.T) {
 		{name: "compile error in an included form", code: "(define a 1)\n(include \"badcompile.scm\")",
 			want: []string{"badcompile.scm:2:13: lambda requires", "expanded from 'include' at includer.scm:2:1\n"}},
 		{name: "compiler-raised error in an included form", code: "(define a 1)\n(include \"badset.scm\")",
-			want: []string{"badset.scm:2:6: no such binding", "expanded from 'include' at includer.scm:2:1\n"}},
+			want: []string{"badset.scm:2:6: no such local or global binding", "expanded from 'include' at includer.scm:2:1\n"}},
 		{name: "include-ci names itself", code: "(define a 1)\n(include-ci \"badcompile.scm\")",
 			want: []string{"expanded from 'include-ci' at includer.scm:2:1\n"}},
 		{name: "nested include names both includes", code: "(include \"outer.scm\")",
