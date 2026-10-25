@@ -145,7 +145,9 @@ func (p *CompileTimeContinuation) compileWithSyntaxBody(ctctx CompileTimeCallCon
 			exprCtx = ctctx.NotInTail()
 		}
 
-		err := p.CompileExpression(exprCtx, body)
+		// A with-syntax body is a body (R6RS: (let () b ...)), so a define in it
+		// is in a definition context even when the form sits in an expression slot.
+		err := p.CompileExpression(exprCtx.atExpressionRoot(false), body)
 		if err != nil {
 			return err
 		}

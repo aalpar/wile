@@ -50,6 +50,10 @@ func TestDefinitionInExpressionContextIsRefused(t *testing.T) {
 		{name: "begin in expression position", code: `(display (begin (define w 4) w))`, want: "includer.scm:1:17"},
 		{name: "define right-hand side", code: `(define v (define u 1))`, want: "includer.scm:1:11"},
 		{name: "procedure body argument", code: `(define (f) (list (define x 1) x)) (f)`, want: "includer.scm:1:19"},
+		// Chez's meta only prefixes definitions, so its define is in an expression
+		// slot here. The column is one early (the define starts at 1:13): meta's
+		// subforms carry an off-by-one location, filed separately.
+		{name: "meta in a call argument", code: `(list (meta (define mm 1) 2))`, want: "includer.scm:1:12"},
 		{name: "when body", code: `(when #t (define q 5))`, want: "includer.scm:1:10"},
 		{name: "do command", code: `(do ((i 0 (+ i 1))) ((= i 1)) (define d 1))`, want: "includer.scm:1:31"},
 		{name: "define-values", code: `(list (define-values (a b) (values 1 2)))`, want: "includer.scm:1:7"},
@@ -104,6 +108,8 @@ func TestDefinitionInDefinitionContextIsAccepted(t *testing.T) {
 		{name: "body begin splice", code: `(let () (begin (define a 1) (define b 2)) (+ a b))`, want: "3"},
 		{name: "top-level cond-expand", code: `(cond-expand (else (define ce 1))) ce`, want: "1"},
 		{name: "body cond-expand", code: `(let () (cond-expand (else (define ce 1))) ce)`, want: "1"},
+		// A with-syntax body is a body (R6RS (let () b ...)); racket and petite give (7).
+		{name: "with-syntax body in a call argument", code: `(list (with-syntax () (define wz 7) wz))`, want: "(7)"},
 		{name: "eval of a define", code: `(eval '(define ev 1) (interaction-environment)) (eval 'ev (interaction-environment))`, want: "1"},
 		{name: "load of a file of defines", code: `(load "lf.scm") (eval 'lv (interaction-environment))`, want: "2"},
 		{name: "library body", code: `(import (dlib)) dv`, want: "7", opts: withStdlibResolver()},
