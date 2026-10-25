@@ -15,6 +15,7 @@
 package values_test
 
 import (
+	"fmt"
 	"math"
 	"math/big"
 	"testing"
@@ -282,4 +283,32 @@ func assertSameFloat64(c *qt.C, got, want float64, what string) {
 		return
 	}
 	c.Assert(math.Float64bits(got), qt.Equals, math.Float64bits(want), qt.Commentf("%s: got %v, want %v", what, got, want))
+}
+
+// TestBigFloatWithExactBigComplexKeepsPrecision pins the BigFloat side of the same
+// rule: a BigFloat meeting an exact BigComplex gives a BigComplex whose exact parts
+// round at the BigFloat's precision, as a BigFloat meeting an exact real does. The
+// imaginary part of a sum used to go through float64 first: (+ (sqrt #m2) 1+1/3i)
+// was ...+0.333333333333333314829616256247390992939472198486328125i, the float64 1/3.
+func TestBigFloatWithExactBigComplexKeepsPrecision(t *testing.T) {
+	third := values.NewBigComplex(values.NewBigIntegerFromInt64(1), values.NewRational(1, 3))
+	for _, prec := range []uint{values.DefaultBigFloatPrecision, 512} {
+		x := values.NewBigFloat(new(big.Float).SetPrec(prec).SetInt64(2))
+		want := new(big.Float).SetPrec(prec).SetRat(big.NewRat(1, 3))
+		for name, got := range map[string]values.Number{
+			"x + 1+1/3i": x.Add(third),
+			"1+1/3i + x": third.Add(x),
+			"1+1/3i - x": third.Subtract(x),
+		} {
+			t.Run(fmt.Sprintf("%s at %d bits", name, prec), func(t *testing.T) {
+				c := qt.New(t)
+				z, ok := got.(*values.BigComplex)
+				c.Assert(ok, qt.IsTrue, qt.Commentf("got %T", got))
+				im, ok := z.Imag().(*values.BigFloat)
+				c.Assert(ok, qt.IsTrue, qt.Commentf("imaginary part %T", z.Imag()))
+				c.Assert(im.BigFloatValue().Prec(), qt.Equals, prec)
+				c.Assert(im.BigFloatValue().Cmp(want), qt.Equals, 0, qt.Commentf("imaginary part %s", im.SchemeString()))
+			})
+		}
+	}
 }
