@@ -84,6 +84,12 @@ type ComposableContinuation struct {
 	// segment, precomputed at capture. Nil for essentially every capture, which is
 	// what keeps the resume path's added cost to one length test.
 	escalatorArms []*escalatorArm
+	// interrupted marks a continuation captured at an interrupt between two
+	// instructions (a fired with-timeout timer), not at a call that awaits values.
+	// The value register its top frame holds is live state, the operand the next
+	// instruction consumes, so a reinstatement restores that register and discards
+	// the values the continuation is applied to: there is no hole for them to fill.
+	interrupted bool
 }
 
 // bottomOfChain walks a continuation chain to its terminal frame (parent == nil).

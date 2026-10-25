@@ -50,7 +50,7 @@ func (p *MachineContext) RunBodyUnderTimer(d time.Duration, thunk values.Value, 
 	}
 	// The cause names the timer (timerExpiry), so an expiry is answered by the
 	// with-timeout whose timer fired, on whichever context arms it.
-	timerCtx, cancel := context.WithTimeoutCause(parentCtx, d, &timerExpiry{timer: timer})
+	timerCtx, cancel := p.newTimerContext(parentCtx, d, &timerExpiry{timer: timer})
 	timer.cancel = cancel
 	p.timer = timer
 	p.ctx = timerCtx
@@ -87,4 +87,25 @@ func (p *MachineContext) RunBodyUnderTimer(d time.Duration, thunk values.Value, 
 	p.enterBodyFrame(p.newApplyFrame(finalizer, tag))
 	p.PushWindingFrame(newTimerFrame(timer))
 	return p.ApplyCallable(thunk)
+}
+
+// timerClockKey keys a context value that replaces with-timeout's wall clock: a
+// timerClock found on the ctx a with-timeout is armed under builds the timer's
+// ctx instead of context.WithTimeoutCause. A test installs one to choose the
+// instruction a timer fires at, so an interleaving the wall clock reaches only by
+// chance is replayed exactly (timer_clock_test.go).
+type timerClockKey struct{}
+
+// timerClock builds the ctx of a with-timeout timer armed on p for d. Its expiry
+// must cancel the ctx with cause, which names the timer (firedTimer).
+type timerClock func(p *MachineContext, parent context.Context, d time.Duration, cause error) (context.Context, context.CancelFunc)
+
+// newTimerContext returns the ctx of a with-timeout timer armed on p for d: the
+// wall clock's, unless parent carries a timerClock.
+func (p *MachineContext) newTimerContext(parent context.Context, d time.Duration, cause error) (context.Context, context.CancelFunc) {
+	clock, ok := parent.Value(timerClockKey{}).(timerClock)
+	if ok {
+		return clock(p, parent, d, cause)
+	}
+	return context.WithTimeoutCause(parent, d, cause)
 }

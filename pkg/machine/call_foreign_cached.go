@@ -84,18 +84,6 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 		return bridgeForeignError(mc, err)
 	}
 
-	// Immediate timeout check after foreign call returns successfully.
-	if mc.timer != nil {
-		select {
-		case <-mc.ctx.Done():
-			fired := mc.firedTimer()
-			if fired != nil {
-				return nil, &ErrTimerInterrupt{Handler: fired.handler, Tag: fired.tag}
-			}
-		default:
-		}
-	}
-
 	// If the foreign function reconfigured the VM for continued execution
 	// (e.g., PrimCallCC calling Apply on a MachineClosure), let the
 	// VM continue from wherever it pointed — the closure's RestoreContinuation
@@ -104,19 +92,24 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 	// template is unchanged); the template comparison additionally covers
 	// continuation-restore paths that repoint the template without Apply.
 	if mc.reconfigured || mc.template != savedTemplate {
-		return mc, nil
+		return mc.afterForeignCall()
+	}
+	// The foreign function already consumed the continuation (e.g., PrimCallCC
+	// calling ApplyCallable with a ForeignClosure, where applyForeign does its
+	// own RestoreAndRelease): mc.cont has advanced past savedCont, and restoring
+	// again would pop a second frame and silently drop one activation. Reachable
+	// via call-with-immediate-continuation-mark and apply in tail position.
+	if mc.cont != savedCont {
+		return mc.afterForeignCall()
+	}
+	err = mc.interruptPendingReturn()
+	if err != nil {
+		return nil, err
 	}
 
 	if tail {
-		// Same guard as the non-tail arm below: returnImmediate restores from
-		// mc.cont, so if the foreign function already consumed the continuation
-		// (mc.cont has advanced past savedCont) restoring again pops a second
-		// frame and silently drops one activation. Reachable via
-		// call-with-immediate-continuation-mark and apply in tail position.
-		if mc.cont == savedCont {
-			mc = mc.returnImmediate()
-		}
-	} else if mc.cont == savedCont {
+		mc = mc.returnImmediate()
+	} else {
 		// Non-tail: SaveContinuation is in the bytecode. Restore it
 		// to recover the caller's evals, env, template, and pc.
 		//
@@ -124,12 +117,6 @@ func callForeignCached(mc *MachineContext, instr Instruction, tail bool) (*Machi
 		// CallForeignCached always includes SaveContinuation, which
 		// pushes a frame onto mc.cont. (Unlike applyForeign, which
 		// can be called from sub-contexts where cont is nil.)
-		//
-		// Guard: if the foreign function already consumed the continuation
-		// (e.g., PrimCallCC calling ApplyCallable with a
-		// ForeignClosure, where applyForeign does its own RestoreAndRelease),
-		// mc.cont has already advanced past savedCont. Restoring again would
-		// double-restore from the wrong frame.
 		mc.RestoreAndRelease(mc.cont)
 	}
 	return mc, nil

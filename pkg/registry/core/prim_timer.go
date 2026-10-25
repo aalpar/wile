@@ -28,7 +28,11 @@ import (
 // Runs thunk with a wall-clock timeout of ms milliseconds. If the thunk
 // completes normally, returns its result. If the timer fires before the
 // thunk finishes, the thunk is suspended and handler is called with a
-// composable continuation that can resume the computation.
+// composable continuation that can resume the computation. Resuming continues
+// the thunk exactly where the timer stopped it, so it answers what it would have
+// answered uninterrupted; the values the continuation is applied to are
+// discarded, since the thunk was stopped between two instructions, not at a call
+// awaiting a value.
 //
 // The thunk runs inline on the live continuation chain under a finalizer prompt
 // frame (RunBodyUnderTimer), mirroring call-with-continuation-barrier

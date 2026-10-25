@@ -68,6 +68,55 @@ func (p *MachineContext) firedTimer() *timerState {
 	return t
 }
 
+// pendingTimerInterrupt returns the interrupt for a with-timeout timer p arms
+// whose expiry has cancelled p's ctx, nil when there is none. It is the eager
+// recheck after a foreign call returns: a primitive that blocked past the
+// deadline triggers the handler now, not after up to contextCheckMask more
+// instructions.
+func (p *MachineContext) pendingTimerInterrupt() error {
+	if p.timer == nil {
+		return nil
+	}
+	select {
+	case <-p.ctx.Done():
+	default:
+		return nil
+	}
+	fired := p.firedTimer()
+	if fired == nil {
+		return nil
+	}
+	return &ErrTimerInterrupt{Handler: fired.handler, Tag: fired.tag}
+}
+
+// afterForeignCall is the eager recheck for a foreign call that left p to go on
+// wherever it pointed p (a reconfigured call, or one that made its own return).
+func (p *MachineContext) afterForeignCall() (*MachineContext, error) {
+	err := p.pendingTimerInterrupt()
+	if err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+// interruptPendingReturn is the eager recheck for a foreign call whose return to
+// p.cont is still to be done. When a timer fired it leaves p about to make that
+// return (returnTemplate), with the call's result in the value register, and
+// answers the interrupt, so the continuation the handler receives goes on after
+// the call. Left on the call instruction, a resume re-ran the call on the operands
+// it had drained. Making the return first is no better: when the call is in tail
+// position to the with-timeout's thunk, it pops the boundary frame the interrupt
+// is resolved at.
+func (p *MachineContext) interruptPendingReturn() error {
+	q := p.pendingTimerInterrupt()
+	if q == nil {
+		return nil
+	}
+	p.template = returnTemplate
+	p.pc = 0
+	return q
+}
+
 // ErrTimerInterrupt signals that a wall-clock timer has expired.
 // It propagates through the Go error return path and is resolved by the nearest
 // driver (RunResumable at the top level, or RunWithinBoundary in a surviving
