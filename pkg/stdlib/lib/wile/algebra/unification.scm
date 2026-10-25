@@ -226,20 +226,22 @@ Keywords: AC matching, pattern matching, associative, commutative, unification"
 ;; recursion below can take operands with car/cdr unguarded and terminates:
 ;; every term it reaches is a subterm of a checked input, a binding to one,
 ;; or an (op . subset) it built from a proper list. list? refuses a circular
-;; operand spine; PATH, the compounds from the root down (by eq?), refuses a
-;; term that is its own descendant, such as c = (g c) built by set-car!.
-;; Tracking the path rather than every node visited keeps shared subterms
-;; legal.
+;; operand spine; ANCESTORS, the compounds from the root down to the current
+;; node (an eq? table, so a deep chain stays linear), refuses a term that is
+;; its own descendant, such as c = (g c) built by set-car!. Tracking the path
+;; rather than every node visited keeps shared subterms legal.
 (define (assert-proper-term site term proto)
-  (let walk ((term term) (path '()))
-    (when (and (not (pattern-var? term)) (term-compound? proto term))
-      (when (memq term path)
-        (error (string-append site ": operands are circular") term))
-      (let ((operands (term-get-operands proto term))
-            (path (cons term path)))
-        (unless (list? operands)
-          (error (string-append site ": operands are not a proper list") term))
-        (for-each (lambda (a) (walk a path)) operands)))))
+  (let ((ancestors (make-eq-hashtable)))
+    (let walk ((term term))
+      (when (and (not (pattern-var? term)) (term-compound? proto term))
+        (when (hashtable-contains? ancestors term)
+          (error (string-append site ": operands are circular") term))
+        (let ((operands (term-get-operands proto term)))
+          (unless (list? operands)
+            (error (string-append site ": operands are not a proper list") term))
+          (hashtable-set! ancestors term #t)
+          (for-each walk operands)
+          (hashtable-delete! ancestors term))))))
 
 ;; Collapse nested (op ...) applications under an AC operator into a flat
 ;; list of operand terms. Non-compound terms return (list term); compound
