@@ -35,11 +35,13 @@ jobs:
           # "package requires newer Go version go1.27". Rebuilding it under
           # go1.27 does not help — the cap is in the pinned dependency.
           #
-          # v2.13.1 pins x/tools v0.49.0 and reads go1.27 export data. It also
-          # clears the v2.12.1 regressions this pin originally guarded against:
-          # TestRuleguardRules passes, and no gocritic finding escapes its
-          # //nolint suppression.
-          version: v2.13.1
+          # v2.13.1 read go1.27.0's export data (version 4) but not go1.27.3's
+          # (version 5): setup-go's "1.27" resolves to the latest patch, so
+          # every run failed typechecking go-ruleguard/dsl. v2.15.0 reads
+          # version 5. The v2.12.1 regressions this pin originally guarded
+          # against stay cleared: TestRuleguardRules passes, and no gocritic
+          # finding escapes its //nolint suppression.
+          version: v2.15.0
           args: -v ./...
 
       # The tools/Makefile lint passes are the half of `make lint` the
