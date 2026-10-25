@@ -1115,6 +1115,13 @@ func (p *Engine) RegisterPrimitive(spec PrimitiveSpec) error {
 // Composable continuations cannot be called from Go
 // (they require the VM winding stack) and return an error.
 //
+// The call is not a prompt for the program a host function was called from: a
+// continuation that program captured, invoked inside proc, returns as Call's
+// error, and a host function that returns that error forwards the jump to the
+// program, which runs the rest of its continuation once. A continuation
+// captured inside one Call and invoked from a later one is resumed by the later
+// Call (a host-driven generator).
+//
 // A run whose ctx ended while it ran returns the cancellation
 // (werr.ErrOperationCancelled), even one that finished just before the ctx
 // ended: its value is discarded.
@@ -1170,8 +1177,9 @@ func (p *Engine) callCallable(ctx context.Context, callable values.Callable, arg
 		return nil, p.wrapRuntimeError(err)
 	}
 
-	// Run the VM loop; escape continuations are caught and converted.
-	err = sub.RunWithEscapeHandling()
+	// Run the VM loop; escape continuations are caught and converted, and a
+	// resume owned by the calling program is returned for the host to forward.
+	err = sub.RunHostCall()
 	if err == nil {
 		err = cancelledAtEnd(ctx, sub)
 	}

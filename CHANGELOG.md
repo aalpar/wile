@@ -132,6 +132,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A procedure a host function runs through `Engine.Call` is not a prompt.**
+  A continuation the calling program captured, invoked inside the procedure,
+  was resolved by the call's own driver: the rest of the program ran inside the
+  call, the host returned, and it ran again, and only the extents entered inside
+  the call were left. `Engine.Call` now returns the jump as its error, the
+  call's own extents left first, and a host function that returns that error
+  forwards it to the program, which runs the rest of its continuation once;
+  a `RegisterFunc` callback already answered this way (Racket agrees, with the
+  host as `call-with-continuation-barrier`). A continuation captured inside one
+  `Engine.Call` and invoked from a later one is still resumed by the later call,
+  from top-level Go or from a host inside a running program (a host-driven
+  generator), where Racket's per-callback barrier refuses it.
 - **A use-site identifier inside a box loses a macro's intro scope.**
   `AddScope` descended into a syntax box but `FlipScope` and the expander's
   stamp walk did not, and `AddScopeToSyntax` skipped a top-level box, so an

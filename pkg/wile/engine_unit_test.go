@@ -17,6 +17,7 @@ package wile_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/werr"
@@ -235,6 +236,183 @@ func TestEngineCall(t *testing.T) {
 	result, err := engine.Call(ctx, proc, wile.NewInteger(1), wile.NewInteger(2))
 	qt.Assert(t, err, qt.IsNil)
 	qt.Assert(t, result.SchemeString(), qt.Equals, "3")
+}
+
+// newHostCallEngine binds host-call to a RegisterPrimitive host that runs its
+// argument through Engine.Call and forwards the error, and host-call-func to the
+// same host written as a func-typed RegisterFunc callback, the control: both
+// apply their procedure to 0.
+func newHostCallEngine(t *testing.T) *wile.Engine {
+	t.Helper()
+	ctx := context.Background()
+	engine, err := wile.NewEngine(ctx, wile.WithProfile(wile.KitchenSink))
+	qt.Assert(t, err, qt.IsNil)
+	err = engine.RegisterPrimitive(wile.PrimitiveSpec{
+		Name:       "host-call",
+		ParamCount: 1,
+		Impl: func(mc wile.CallContext) error {
+			v, callErr := engine.Call(mc.Context(), wile.WrapValue(mc.Arg(0)), wile.NewInteger(0))
+			if callErr != nil {
+				return callErr
+			}
+			mc.SetValue(v.Internal())
+			return nil
+		},
+	})
+	qt.Assert(t, err, qt.IsNil)
+	err = engine.RegisterFunc("host-call-func", func(f func(int64) (int64, error)) (int64, error) {
+		return f(0)
+	})
+	qt.Assert(t, err, qt.IsNil)
+	return engine
+}
+
+// TestEngineCallIsNotAPrompt pins that a procedure a host runs through
+// Engine.Call is not a prompt: a continuation the calling program captured,
+// invoked inside it, is passed up to the program's driver when the host returns
+// the error, so the rest of the program runs once and the callback's extents and
+// the program's are both left. Before, the Engine.Call ran the rest of the
+// program itself, the host returned, and it ran again. The func-typed callback
+// answered this way already. Racket agrees (host-call as
+// call-with-continuation-barrier: an escape out of a barrier is allowed).
+func TestEngineCallIsNotAPrompt(t *testing.T) {
+	t.Parallel()
+
+	tcs := []struct {
+		name  string
+		code  string
+		want  string
+		hosts []string // nil: both hosts
+	}{
+		{
+			name: "the rest of the program runs once",
+			code: `(let ((log '()) (n 0) (k #f) (ends 0))
+			         (set! log (cons (call/cc (lambda (c) (set! k c) 'first)) log))
+			         (set! n (+ n 1))
+			         (if (< n 2) (HOST (lambda (_) (k 'again))) #f)
+			         (set! ends (+ ends 1))
+			         (list (reverse log) ends))`,
+			want: "((first again) 1)",
+		},
+		{
+			name: "the callback's extents and the program's are left",
+			code: `(let ((log '()) (n 0) (k #f))
+			         (define (note x) (set! log (cons x log)))
+			         (note (call/cc (lambda (c) (set! k c) 'first)))
+			         (set! n (+ n 1))
+			         (if (< n 2)
+			             (dynamic-wind
+			               (lambda () (note 'in))
+			               (lambda ()
+			                 (HOST (lambda (_)
+			                         (dynamic-wind (lambda () (note 'cb-in))
+			                                       (lambda () (k 'again))
+			                                       (lambda () (note 'cb-out))))))
+			               (lambda () (note 'out)))
+			             #f)
+			         (reverse log))`,
+			want: "(first in cb-in cb-out out again)",
+		},
+		{
+			name: "a guard around the host does not catch the jump",
+			code: `(let ((log '()) (n 0) (k #f) (ends 0))
+			         (set! log (cons (call/cc (lambda (c) (set! k c) 'first)) log))
+			         (set! n (+ n 1))
+			         (if (< n 2)
+			             (guard (e (#t (set! log (cons 'caught log))))
+			               (HOST (lambda (_) (k 'again))))
+			             #f)
+			         (set! ends (+ ends 1))
+			         (list (reverse log) ends))`,
+			want: "((first again) 1)",
+		},
+		{
+			name: "an enclosing host call owns its own continuation",
+			code: `(HOST (lambda (_)
+			         (let ((n 0) (k #f) (ends 0))
+			           (call/cc (lambda (c) (set! k c)))
+			           (set! n (+ n 1))
+			           (if (< n 2) (HOST (lambda (_) (k 'again))) #f)
+			           (set! ends (+ ends 1))
+			           ends)))`,
+			want: "1",
+		},
+		{
+			// The continuation's own boundary (eval's) is gone, but its root is
+			// this call, so it is resumed here rather than passed up. The
+			// func-typed host passes it up and the program's root drops the rest
+			// of the program (the sub-context truncation class), so it is left out.
+			name: "a continuation rooted in the call stays in it",
+			code: `(define kbox (vector #f))
+			       (list 'p (HOST (lambda (_)
+			         (let ((v (eval '(call/cc (lambda (c) (vector-set! kbox 0 c) 0))
+			                        (interaction-environment))))
+			           (if (= v 0) ((vector-ref kbox 0) 5) v)))))`,
+			want:  "(p 5)",
+			hosts: []string{"host-call"},
+		},
+	}
+	for _, tc := range tcs {
+		hosts := tc.hosts
+		if hosts == nil {
+			hosts = []string{"host-call", "host-call-func"}
+		}
+		for _, host := range hosts {
+			t.Run(tc.name+"/"+host, func(t *testing.T) {
+				t.Parallel()
+				ctx := context.Background()
+				engine := newHostCallEngine(t)
+				code := strings.ReplaceAll(tc.code, "HOST", host)
+				got, err := engine.EvalMultiple(ctx, code)
+				qt.Assert(t, err, qt.IsNil)
+				qt.Assert(t, got.SchemeString(), qt.Equals, tc.want)
+			})
+		}
+	}
+}
+
+// TestEngineCallDrivesAHostGenerator pins the host-driven generator shape: a
+// continuation captured inside one Engine.Call and invoked from the next, whose
+// owner's run is over, is resumed by the Engine.Call it reaches, from top-level
+// Go and from a host nested in a running program alike. Racket refuses this
+// shape (a continuation barrier per callback); Wile keeps it on purpose.
+func TestEngineCallDrivesAHostGenerator(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	t.Run("from top-level Go", func(t *testing.T) {
+		t.Parallel()
+		engine := newHostCallEngine(t)
+		_, err := engine.EvalMultiple(ctx, `
+			(define saved (vector #f))
+			(define (start _) (+ 1 (call/cc (lambda (c) (vector-set! saved 0 c) 1))))
+			(define (resume _) ((vector-ref saved 0) 10))`)
+		qt.Assert(t, err, qt.IsNil)
+		start, ok := engine.Get("start")
+		qt.Assert(t, ok, qt.IsTrue)
+		resume, ok := engine.Get("resume")
+		qt.Assert(t, ok, qt.IsTrue)
+
+		got, err := engine.Call(ctx, start, wile.NewInteger(0))
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, got.SchemeString(), qt.Equals, "2")
+		got, err = engine.Call(ctx, resume, wile.NewInteger(0))
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, got.SchemeString(), qt.Equals, "11")
+	})
+
+	t.Run("from a host inside a running program", func(t *testing.T) {
+		t.Parallel()
+		engine := newHostCallEngine(t)
+		got, err := engine.EvalMultiple(ctx, `
+			(let* ((saved #f)
+			       (a (host-call (lambda (_) (+ 1 (call/cc (lambda (c) (set! saved c) 1))))))
+			       (b (host-call (lambda (_) (saved 10)))))
+			  (list a b))`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, got.SchemeString(), qt.Equals, "(2 11)")
+	})
 }
 
 func TestEngineClose(t *testing.T) {
