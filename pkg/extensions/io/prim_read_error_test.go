@@ -17,6 +17,7 @@ package io_test
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -238,6 +239,52 @@ func TestReadOnClosedFilePortNamesTheFile(t *testing.T) {
 			c.Assert(err, qt.IsNotNil)
 			c.Check(errors.Is(err, werr.ErrPortClosed), qt.IsTrue, qt.Commentf("got: %v", err))
 			c.Check(strings.Contains(err.Error(), path+" is closed"), qt.IsTrue, qt.Commentf("got: %v", err))
+		})
+	}
+}
+
+// transientReader yields its chunks in order; a nil chunk is one read failing
+// with a deadline timeout, after which the stream continues.
+type transientReader struct {
+	chunks []*string
+}
+
+func (p *transientReader) Read(b []byte) (int, error) {
+	if len(p.chunks) == 0 {
+		return 0, io.EOF
+	}
+	chunk := p.chunks[0]
+	p.chunks = p.chunks[1:]
+	if chunk == nil {
+		return 0, os.ErrDeadlineExceeded
+	}
+	return copy(b, *chunk), nil
+}
+
+// TestReadRecoversFromATransientReaderFault pins that a reader fault ends only
+// the read it interrupted. The port's cached parser used to survive the fault
+// in its terminal state, so every later read on the port repeated it while
+// read-char on the same port carried on.
+func TestReadRecoversFromATransientReaderFault(t *testing.T) {
+	tcs := []struct {
+		op, datum string
+	}{
+		{"read", "d"},
+		{"read-syntax", "(syntax->datum d)"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.op, func(t *testing.T) {
+			c := qt.New(t)
+			x, y := "x ", "y"
+			rdr := &transientReader{chunks: []*string{&x, nil, &y}}
+			engine := newEngineWithIOTest(t)
+			err := engine.Define("p", wile.WrapValue(values.NewCharacterInputPortFromReader(rdr)))
+			c.Assert(err, qt.IsNil)
+			step := `(guard (e ((error-object? e) 'fault))
+			           (let ((d (` + tc.op + ` p)))
+			             (if (eof-object? d) 'eof ` + tc.datum + `)))`
+			r := eval(t, engine, `(let* ((a `+step+`) (b `+step+`) (c `+step+`) (d `+step+`)) (list a b c d))`)
+			c.Check(r.Internal().SchemeString(), qt.Equals, "(x fault y eof)")
 		})
 	}
 }

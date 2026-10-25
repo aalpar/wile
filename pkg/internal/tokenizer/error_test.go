@@ -255,10 +255,15 @@ func TestReaderFaultIsNotEndOfInput(t *testing.T) {
 		src       string
 		after     int
 		wantIndex int
+		wantState TokenizerState
 	}{
-		{name: "fault before the first rune", src: "abc", after: 0, wantIndex: 0},
-		{name: "fault inside a symbol", src: "abc", after: 1, wantIndex: 1},
-		{name: "fault inside a list", src: "(a b c)", after: 4, wantIndex: 4},
+		{name: "fault before the first rune", src: "abc", after: 0, wantIndex: 0, wantState: TokenizerStateFailed},
+		{name: "fault inside a symbol", src: "abc", after: 1, wantIndex: 1, wantState: TokenizerStateSymbol},
+		{name: "fault inside a list", src: "(a b c)", after: 4, wantIndex: 4, wantState: TokenizerStateSymbol},
+		// Between datums no token is being scanned, so the previous token's
+		// state is not the one the fault happened in.
+		{name: "fault between datums", src: "x y", after: 2, wantIndex: 2, wantState: TokenizerStateFailed},
+		{name: "fault after a line comment", src: "; hi\nx", after: 5, wantIndex: 5, wantState: TokenizerStateFailed},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -273,6 +278,7 @@ func TestReaderFaultIsNotEndOfInput(t *testing.T) {
 			at, located := terr.At()
 			c.Check(located, qt.IsTrue)
 			c.Check(at.Index(), qt.Equals, tc.wantIndex)
+			c.Check(terr.State(), qt.Equals, tc.wantState)
 			// No rune was read, so none may be reported: neither the U+FFFD
 			// placeholder nor end of input.
 			_, isChar := terr.Rune()

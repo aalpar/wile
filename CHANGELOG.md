@@ -809,6 +809,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **`read` and `read-syntax` on a closed port raise instead of answering
+  `#<eof>`.** The error wraps `werr.ErrPortClosed` and names the port
+  (`string-input-port is closed`, or the file port's kind and path), as
+  `read-char` and the other read primitives now do too; petite and racket both
+  raise. A closed port's error is not `read-error?` from any read primitive
+  (`read-char` answered `#t` before): nothing was read, and racket raises a plain
+  `exn:fail`, not `exn:fail:read`. A fault from the port's Go reader, including
+  `io.ErrUnexpectedEOF`, is a read error rather than `#<eof>` or a datum cut
+  short, and ends only the read it interrupted.
+
 - **BREAKING (Go API): `compilation.ExpandAndCompile` and
   `ExpandAndCompileOptimized` take `(ctx, env, stx)`.** The `resolver`,
   `inlineThreshold` and `maxExpandDepth` parameters are gone: every compile

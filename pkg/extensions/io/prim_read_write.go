@@ -18,6 +18,7 @@ import (
 	"errors"
 	"io"
 
+	"github.com/aalpar/wile/pkg/internal/tokenizer"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/parser"
 	"github.com/aalpar/wile/pkg/registry/helpers"
@@ -240,6 +241,12 @@ func PrimRead(mc machine.CallContext) error {
 			mc.SetValue(values.EOFObject)
 			return nil
 		}
+		if errors.Is(err, tokenizer.NewTokenizerError(tokenizer.MessageReaderFailed)) {
+			// The parser dies on any error, which is right for malformed
+			// input but makes a transient stream fault permanent. Evict it so
+			// the next read starts on whatever the stream yields next.
+			evictPortCache(st, port)
+		}
 		return wrapReadFault(err, "error reading from input port")
 	}
 	// Use UnwrapAllShared to preserve object identity for datum labels (R7RS §2.4)
@@ -273,6 +280,12 @@ func PrimReadSyntax(mc machine.CallContext) error {
 			evictPortCache(st, port)
 			mc.SetValue(values.EOFObject)
 			return nil
+		}
+		if errors.Is(err, tokenizer.NewTokenizerError(tokenizer.MessageReaderFailed)) {
+			// The parser dies on any error, which is right for malformed
+			// input but makes a transient stream fault permanent. Evict it so
+			// the next read starts on whatever the stream yields next.
+			evictPortCache(st, port)
 		}
 		return wrapReadFault(err, "error reading syntax from input port")
 	}

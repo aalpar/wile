@@ -340,6 +340,10 @@ func (p *Tokenizer) Text() string {
 // Comment tokens are always emitted; callers that want them elided (the parser,
 // when constructed with skipComments) drop them themselves.
 func (p *Tokenizer) Next() (Token, error) {
+	// Between tokens no token is being scanned. A fault in the released
+	// re-read or in intertoken space is stamped before mark() runs, and would
+	// otherwise carry the previous token's state.
+	p.state = TokenizerStateFailed
 	if p.released {
 		p.released = false
 		p.readNextRune()
