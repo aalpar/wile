@@ -281,22 +281,21 @@ func PrimHashtableEntries(mc machine.CallContext) error {
 	return nil
 }
 
-// equivIdentity maps a table's kind to the equivalence primitive
-// hashtable-equivalence-function must hand back: its identity token, and the name
-// under which the caller's own binding of it is looked for.
+// equivIdentity maps a table's kind to the identity token of the equivalence
+// primitive hashtable-equivalence-function must hand back.
 //
 // values.HashtableKind is opaque, so its three variables are the only kinds that
 // exist; the default arm is HashtableEqual, as in hashKey and keyEqual. (While the
 // kind was a uint8, values.NewHashtable(HashtableKind(7)) was constructible and
 // this switch refused it while storage treated it as equal.)
-func equivIdentity(kind values.HashtableKind) (*machine.PrimitiveIdentity, string) {
+func equivIdentity(kind values.HashtableKind) *machine.PrimitiveIdentity {
 	switch kind {
 	case values.HashtableEq:
-		return identityEqQ, "eq?"
+		return identityEqQ
 	case values.HashtableEqv:
-		return identityEqvQ, "eqv?"
+		return identityEqvQ
 	default:
-		return identityEqualQ, "equal?"
+		return identityEqualQ
 	}
 }
 
@@ -318,9 +317,7 @@ func equivIdentity(kind values.HashtableKind) (*machine.PrimitiveIdentity, strin
 // that as a guard: a remembering table is always the equal kind, because
 // NewEqualHashtableWithFunctions takes no kind, so the order is unobservable and
 // swapping it fails no test (measured). It is written this way to read the same
-// as PrimHashtableHashFunction, where the kind arms DO decide. What makes
-// equivIdentity's out-of-range refusal reachable is the constructor's shape, not
-// this ordering.
+// as PrimHashtableHashFunction, where the kind arms DO decide.
 //
 // The gate that is load-bearing is inside rememberedEqualPair.
 func PrimHashtableEquivalenceFunction(mc machine.CallContext) error {
@@ -328,13 +325,13 @@ func PrimHashtableEquivalenceFunction(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
-	identity, name := equivIdentity(ht.Kind())
+	identity := equivIdentity(ht.Kind())
 	_, equivFn, ok := rememberedEqualPair(ht)
 	if ok {
 		mc.SetValue(equivFn)
 		return nil
 	}
-	return setRecognizedPrimitive(mc, identity, name, "hashtable-equivalence-function")
+	return setRecognizedPrimitive(mc, identity, "hashtable-equivalence-function")
 }
 
 // PrimHashtableHashFunction implements R6RS hashtable-hash-function, which returns
@@ -362,7 +359,7 @@ func PrimHashtableHashFunction(mc machine.CallContext) error {
 			mc.SetValue(hashFn)
 			return nil
 		}
-		return setRecognizedPrimitive(mc, identityEqualHash, "equal-hash", "hashtable-hash-function")
+		return setRecognizedPrimitive(mc, identityEqualHash, "hashtable-hash-function")
 	}
 }
 
@@ -430,11 +427,13 @@ func rememberedEqualPair(ht *values.Hashtable) (values.Callable, values.Callable
 // The sealed-base fallback then covers the un-imported (ambient) case, and keeps
 // working where the mutable layer holds something else entirely.
 //
-// name only LOCATES a candidate; identity DECIDES. So a user (define (equal? a b)
-// #t) shadowing in the mutable layer is found, fails the token check, and is
-// discarded in favour of the sealed base — the same fail-closed direction
+// identity.Name() only LOCATES a candidate; identity DECIDES. So a user (define
+// (equal? a b) #t) shadowing in the mutable layer is found, fails the token check,
+// and is discarded in favour of the sealed base — the same fail-closed direction
 // make-hashtable takes, and the reason this is not a Binding Identity violation:
-// nothing is concluded from the spelling.
+// nothing is concluded from the spelling. The spelling is the token's own, not a
+// second argument, so it cannot disagree with the token; that the token's name is
+// the one the primitive is bound under is PrimitiveSpec.Validate's check.
 //
 // Raising when neither candidate matches rather than returning #f is the point: a
 // profile that ships these accessors without equal-hash is misconfigured, and a
@@ -446,8 +445,8 @@ func rememberedEqualPair(ht *values.Hashtable) (values.Callable, values.Callable
 // does not reach either probe), and a phase-0 shadow with no sealed base beneath
 // it misses too. The message names the phase and the three causes rather than
 // guessing one.
-func setRecognizedPrimitive(mc machine.CallContext, identity *machine.PrimitiveIdentity, name, site string) error {
-	sym := values.NewSymbol(name)
+func setRecognizedPrimitive(mc machine.CallContext, identity *machine.PrimitiveIdentity, site string) error {
+	sym := values.NewSymbol(identity.Name())
 	// One namespace resolution, two frames off it — MutableRuntimeOrNil walks the
 	// lexical chain for the namespace, so deriving the sealed base from its result
 	// keeps both probes talking about the same namespace. Reading the sealed base
@@ -488,7 +487,7 @@ func setRecognizedPrimitive(mc machine.CallContext, identity *machine.PrimitiveI
 	}
 	if q == nil {
 		return werr.WrapForeignErrorf(werr.ErrUnexpectedNil,
-			"%s: no binding of %s at phase 0 is the primitive (it is unregistered, not imported at phase 0, or shadowed)", site, name)
+			"%s: no binding of %s at phase 0 is the primitive (it is unregistered, not imported at phase 0, or shadowed)", site, identity.Name())
 	}
 	mc.SetValue(q)
 	return nil

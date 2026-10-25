@@ -43,8 +43,8 @@ import (
 // no way to construct a token from Scheme.
 //
 // This is NOT a Binding Identity violation. That invariant forbids deciding two
-// IDENTIFIERS denote the same variable by comparing SPELLINGS; nothing is resolved
-// by spelling here. The name below is diagnostic only — never compared.
+// IDENTIFIERS denote the same variable by comparing SPELLINGS; nothing is decided
+// by spelling here. The name LOCATES, it never DECIDES: see Name.
 type PrimitiveIdentity struct {
 	name string
 }
@@ -56,8 +56,14 @@ func NewPrimitiveIdentity(name string) *PrimitiveIdentity {
 	return &PrimitiveIdentity{name: name}
 }
 
-// Name returns the primitive's name, for diagnostics. It is not the identity —
-// see the type doc.
+// Name returns the name the primitive is registered under. It LOCATES, it never
+// DECIDES: a recognizer may look the primitive's binding up by this spelling,
+// but whatever it finds is accepted only if its token is this pointer, so a
+// same-named shadow is found and refused. It also labels diagnostics.
+//
+// Using it to locate relies on it agreeing with the spec's Name, which
+// registry.PrimitiveSpec.Validate checks: a token whose name differed would send
+// the lookup to the wrong binding and refuse the real primitive.
 func (p *PrimitiveIdentity) Name() string {
 	return p.name
 }

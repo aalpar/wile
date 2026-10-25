@@ -933,6 +933,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **BREAKING (Go API): `registry.PrimitiveSpec.Validate` refuses a spec whose
+  `Identity.Name()` differs from its `Name`** (`werr.ErrInvalidArgument`), so
+  `AddPrimitives` panics on it and `Engine.RegisterPrimitive` returns the error.
+  The hashtable accessors locate a primitive's binding by its identity's name
+  and decide by the token, so a mismatched pair could only be refused at use.
+
 - **BREAKING (Go API): `values.UncaughtException` is a Go `error`**, like the
   other three SRFI-18 condition objects, with a `Cause` field (how the joined
   thread ended) that `Unwrap` returns, and `values.NewUncaughtException` takes

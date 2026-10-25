@@ -293,6 +293,21 @@ func TestRegistry_VariadicParamCountZeroPanics(t *testing.T) {
 	}, qt.PanicMatches, ".*variadic.*ParamCount.*")
 }
 
+// TestRegistry_IdentityNameMismatchPanics pins the registration half of the
+// Name/Identity agreement. A recognizer locates a primitive's binding by
+// Identity.Name() and decides by the token, so a spec bound under a spelling its
+// Identity does not carry would be located under the wrong name and refused.
+func TestRegistry_IdentityNameMismatchPanics(t *testing.T) {
+	c := qt.New(t)
+	r := NewRegistry()
+	c.Assert(func() {
+		r.AddPrimitives([]PrimitiveSpec{
+			{Name: "my-hash", ParamCount: 1, Impl: noopImpl,
+				Identity: machine.NewPrimitiveIdentity("other-hash")},
+		}, PhaseSetRuntime)
+	}, qt.PanicMatches, ".*Identity.*other-hash.*")
+}
+
 func TestRegistry_PrimitiveByName(t *testing.T) {
 	c := qt.New(t)
 
@@ -1032,6 +1047,18 @@ func TestPrimitiveSpec_Validate(t *testing.T) {
 			name:    "empty Name is rejected",
 			spec:    PrimitiveSpec{Impl: noopImpl, ParamCount: 1},
 			wantErr: true,
+		},
+		{
+			name: "Identity named differently from the spec is rejected",
+			spec: PrimitiveSpec{Impl: noopImpl, Name: "my-hash", ParamCount: 1,
+				Identity: machine.NewPrimitiveIdentity("other-hash")},
+			wantErr: true,
+		},
+		{
+			name: "Identity named as the spec",
+			spec: PrimitiveSpec{Impl: noopImpl, Name: "my-hash", ParamCount: 1,
+				Identity: machine.NewPrimitiveIdentity("my-hash")},
+			wantErr: false,
 		},
 	}
 	for _, test := range tests {
