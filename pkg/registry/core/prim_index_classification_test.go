@@ -203,9 +203,11 @@ func TestIndexArgumentsShareOneClassification(t *testing.T) {
 	}
 }
 
-// TestSubrangeBoundsAcceptIntegralRationals pins that start/end accept what
-// the single-index family accepts: 4/2 is the exact integer 2.
-func TestSubrangeBoundsAcceptIntegralRationals(t *testing.T) {
+// TestSubrangeBoundsAcceptIntegralLiterals is a control: the reader already
+// reduces the literal 4/2 to the integer 2, so these rows pass on master too.
+// The integer-valued *Rational path itself is pinned at the Go level by
+// TestParseOptionalStartEndClassifiesBounds (helpers), which builds one.
+func TestSubrangeBoundsAcceptIntegralLiterals(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		code string
