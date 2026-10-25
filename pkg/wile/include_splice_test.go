@@ -584,6 +584,9 @@ func TestIncludeLabelDoesNotOverrideTheLoadStack(t *testing.T) {
 				wile.WithSourceOS(),
 			)
 			qt.Assert(t, err, qt.IsNil)
+			t.Cleanup(func() {
+				_ = engine.Close()
+			})
 			loadCtx, err := engine.ContextWithLoadPath(ctx, filepath.Join(tmp, "real", "main.scm"))
 			qt.Assert(t, err, qt.IsNil)
 			result, err := engine.EvalProgram(loadCtx, `(include "inc.scm") v`, tc.label)
@@ -683,6 +686,9 @@ func TestQuotedIncludeResolvesAgainstItsOwnFile(t *testing.T) {
 				wile.WithLibraryPaths(".", "lib"),
 			)
 			qt.Assert(t, err, qt.IsNil)
+			t.Cleanup(func() {
+				_ = engine.Close()
+			})
 			loadCtx, err := engine.ContextWithLoadPath(ctx, "main.scm")
 			qt.Assert(t, err, qt.IsNil)
 			_, err = engine.EvalProgram(loadCtx, tc.setup, "includer.scm")
@@ -1003,6 +1009,9 @@ func TestAbsoluteIncludeThroughALinkAndDotDotNestsAgainstTheOpenedFile(t *testin
 				wile.WithSourceOS(),
 			)
 			qt.Assert(t, err, qt.IsNil)
+			t.Cleanup(func() {
+				_ = engine.Close()
+			})
 			operand := filepath.Join(tmp, "a", "link") + "/../" + tc.file
 			result, err := engine.EvalProgram(ctx, `(include "`+operand+`") y`, "")
 			qt.Assert(t, err, qt.IsNil)

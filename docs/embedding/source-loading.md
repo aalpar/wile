@@ -392,10 +392,11 @@ ChainFileResolver (in WithSource* call order)
 Bootstrap: always from core.BootstrapFS via EmbedFileResolver (separate)
 ```
 
-`LoadStack.CurrentDir()` is the directory of the file that holds the
-`include` form when the reader opened that file (an include, a `load`, a
-library, a file port), even for a form compiled after the file is done, such as
-an `eval-when` body. A name the embedder passes as a program's source
+A relative `include` resolves against the directory of the file that holds
+the form when the reader opened that file (an include, a `load`, a library, a
+file port): the compiler puts that file on top of the stack `CurrentDir()`
+reads, even for a form compiled after the file is done, such as an `eval-when`
+body. A name the embedder passes as a program's source
 (`EvalProgram`, `EvalMultipleWithSource`, `CheckProgram`, `ParseWithSource`) is
 a diagnostic label, whatever its shape: with a load stack on the context
 (`Engine.ContextWithLoadPath`) the stack decides, and the label's directory is
