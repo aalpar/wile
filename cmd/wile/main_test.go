@@ -657,6 +657,38 @@ func TestShebang(t *testing.T) {
 	})
 }
 
+// TestByteOrderMarkOpeningAScript pins X12 for the CLI's file paths: a script
+// saved with a UTF-8 byte order mark runs, whether given positionally, with -f,
+// or through the silent-load branch -e selects. Master failed all three with
+// "unknown token type ... character U+FEFF" at 1:0; racket and petite both load
+// such a file.
+func TestByteOrderMarkOpeningAScript(t *testing.T) {
+	tcs := []struct {
+		name string
+		args func(path string) []string
+		want string
+	}{
+		{name: "positional", args: func(path string) []string {
+			return []string{"-q", path}
+		}, want: "42\n"},
+		{name: "-f", args: func(path string) []string {
+			return []string{"-q", "-f", path}
+		}, want: "42\n"},
+		{name: "positional with -e", args: func(path string) []string {
+			return []string{"-q", path, "-e", "(display x)"}
+		}, want: "1"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			path := writeTempScheme(t, "\uFEFF(define x 1)\n(+ x 41)")
+			result := runCLI(t, tc.args(path)...)
+			c.Assert(result.exitCode, qt.Equals, 0, qt.Commentf("stderr: %s", result.stderr))
+			c.Assert(result.stdout, qt.Equals, tc.want)
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Phase 4: Error tests
 // ---------------------------------------------------------------------------

@@ -15,6 +15,7 @@
 package tokenizer
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -247,4 +248,44 @@ func TestLeadingNewlineAdvancesLine(t *testing.T) {
 	c.Assert(len(tokens), qt.Equals, 1)
 	c.Check(tokens[0].Start().Line(), qt.Equals, 2)
 	c.Check(tokens[0].Start().Column(), qt.Equals, 0)
+}
+
+// TestSkipByteOrderMark pins the tokenizer half of X12: SkipByteOrderMark steps
+// over a leading U+FEFF and counts it (one column, three bytes), and leaves any
+// other first rune alone. Whether to call it is the parser's decision; a
+// tokenizer that is not asked still rejects the mark.
+func TestSkipByteOrderMark(t *testing.T) {
+	tcs := []struct {
+		name  string
+		src   string
+		skip  bool
+		text  string
+		index int
+		col   int
+	}{
+		{name: "skipped", src: "\uFEFFab", skip: true, text: "ab", index: 3, col: 1},
+		{name: "another first rune is kept", src: "ab", skip: true, text: "ab", index: 0, col: 0},
+		// The second mark, and an unskipped first one, reach the scanner: an
+		// empty failed token there, its fault pending.
+		{name: "only one mark", src: "\uFEFF\uFEFFab", skip: true, text: "", index: 3, col: 1},
+		{name: "not asked", src: "\uFEFFab", skip: false, text: "", index: 0, col: 0},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			tk := NewTokenizer(strings.NewReader(tc.src), false)
+			if tc.skip {
+				tk.SkipByteOrderMark()
+			}
+			tok, err := tk.Next()
+			c.Assert(err, qt.IsNil)
+			c.Check(tok.String(), qt.Equals, tc.text)
+			c.Check([]int{tok.Start().Index(), tok.Start().Column()}, qt.DeepEquals, []int{tc.index, tc.col})
+		})
+	}
+	c := qt.New(t)
+	tk := NewTokenizer(strings.NewReader(""), false)
+	tk.SkipByteOrderMark()
+	_, err := tk.Next()
+	c.Check(errors.Is(err, io.EOF), qt.IsTrue, qt.Commentf("an empty source has nothing to skip: %v", err))
 }
