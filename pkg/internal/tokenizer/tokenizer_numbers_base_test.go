@@ -3184,6 +3184,10 @@ func TestBigNumNumeralRequiresDelimiter(t *testing.T) {
 		{"(#m1/2)", "inside a list the second datum also read as a list element"},
 		{"#m1e3+2i", "a complex after an exponent was a second datum"},
 		{"#m2e3x", "trailing symbol characters after an exponent were a second datum"},
+		{"#m+inf.0x", "trailing symbol characters after an infinity"},
+		{"#m+inf.0+2i", "a big-float infinity has no complex form"},
+		{"#m+ix", "an infinity keyword that does not complete stops at the mismatch"},
+		{"#m-nanx", "a NaN keyword that does not complete stops at the mismatch"},
 		{"#z1'a", "a quote character is not a delimiter; (1 'a) was read on master"},
 		{"#z1`a", "a quasiquote character is not a delimiter"},
 		{"#z1,a", "an unquote character is not a delimiter"},
@@ -3241,8 +3245,13 @@ func TestBigNumNumeralRequiresDelimiter(t *testing.T) {
 		{"#z-5 ", []string{"#z-5"}},
 		{"#m1.5)", []string{"#m1.5", ")"}},
 		{"#m2e3 ", []string{"#m2e3"}},
-		// Tokenizer-only: the parser rejects an l/s/d/f marker as an invalid big float.
+		// The short exponent markers scan here and read in the parser (2000.0l0).
 		{"#m2l3 ", []string{"#m2l3"}},
+		// An attached sign may begin an infinity or a NaN; the keyword stays in
+		// the one big-float token, which used to stop at "#m+".
+		{"#m+inf.0 ", []string{"#m+inf.0"}},
+		{"#m-inf.0)", []string{"#m-inf.0", ")"}},
+		{"#m+nan.0", []string{"#m+nan.0"}},
 		// End of input: the digit scan stops at EOF, or (#m2e3) the check is reached
 		// and skipped because a pending error or EOF is not a fault.
 		{"#z12", []string{"#z12"}},

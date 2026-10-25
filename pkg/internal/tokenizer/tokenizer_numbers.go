@@ -143,6 +143,13 @@ func (p *Tokenizer) readBigNum(isExpMarker func(rune) bool) {
 	if p.err != nil {
 		return
 	}
+	// A sign may begin an infinity or a NaN (#m+inf.0), which the digit scan
+	// below would stop at, leaving the token "#m+".
+	if p.runeStart != start && (isImaginary(p.curr()) || p.curr() == 'n' || p.curr() == 'N') {
+		p.readBigNumInfNan()
+		p.requireDelimiter(MessageExpectingDelimiterAfterBigNumber)
+		return
+	}
 	// Integer part
 	p.readUnsignedBaseNNumber(10)
 	// Optional decimal point
@@ -183,6 +190,23 @@ func (p *Tokenizer) readBigNum(isExpMarker func(rune) bool) {
 	if p.runeStart != start {
 		p.requireDelimiter(MessageExpectingDelimiterAfterBigNumber)
 	}
+}
+
+// readBigNumInfNan scans the keyword of an <infnan> after readBigNum's sign,
+// keeping the big-number state: the token stays one #m numeral, which
+// readSignedInfinity and readSignedNan would retype and extend into a complex.
+// A keyword that does not complete is not raised here; the scan stops at the
+// mismatching rune and the caller's delimiter check stamps it there.
+func (p *Tokenizer) readBigNumInfNan() {
+	if isImaginary(p.curr()) {
+		p.next() // consume 'i'
+		if p.err != nil {
+			return
+		}
+		p.readSpecialNumber("nf", 10, MessageExpectingInf)
+		return
+	}
+	p.readSpecialNumber("nan", 10, MessageExpectingNan)
 }
 
 // requireDelimiterAfterRadixNumeral enforces R7RS §7.1.1 implicit termination

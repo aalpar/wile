@@ -678,9 +678,19 @@ func (p *Parser) parseDecimalFractionWithBase(base int) (syntax.SyntaxValue, tok
 }
 
 // parseBigFloat parses a big float token (e.g., "#m1.23456789012345678901234567890").
+//
+// The tokenizer admits two spellings big.ParseFloat does not: an <infnan>
+// (#m+inf.0), converted through float64, whose NaN NewBigFloatFromFloat64 maps
+// to the BigFloat NaN flag; and the short exponent markers s/f/d/l, which mean
+// e (R7RS §7.1.1) and are folded to it.
 func (p *Parser) parseBigFloat() (syntax.SyntaxValue, tokenizer.Token, error) {
 	s := schemeutil.TrimPrefixCI(p.cur.String(), "#m")
-	q1 := values.NewBigFloatFromString(s)
+	special, ok := ParseSpecialFloat(s)
+	if ok {
+		q := p.wrapSyntax(values.NewBigFloatFromFloat64(special.Value), p.cur)
+		return q, p.cur, nil
+	}
+	q1 := values.NewBigFloatFromString(schemeutil.NormalizeExponentMarker(s))
 	if q1 == nil {
 		return nil, p.cur, NewParserErrorWithWrapf(werr.ErrInvalidFormat, p.cur,
 			"invalid big float (malformed, or past the %d-bit precision limit): %s", values.MaxBigFloatLiteralPrecision, p.cur.String())

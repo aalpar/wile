@@ -17,6 +17,7 @@ package parser
 import (
 	"context"
 	"errors"
+	"io"
 	"math"
 	"math/big"
 	"strings"
@@ -79,6 +80,13 @@ func TestReadSyntaxBigFloat(t *testing.T) {
 		{"#m1e10", "1e10"},
 		{"#m1.5e-10", "1.5e-10"},
 		{"#m3.14E+20", "3.14E+20"},
+		// The short exponent markers mean e (R7RS §7.1.1), as they do unprefixed.
+		{"#m2l3", "2e3"},
+		{"#m1s10", "1e10"},
+		{"#m1.5d3", "1.5e3"},
+		{"#m1.5l0", "1.5"},
+		{"#m1f-2", "1e-2"},
+		{"#m-2L3", "-2e3"},
 	}
 
 	for _, tc := range tcs {
@@ -96,6 +104,49 @@ func TestReadSyntaxBigFloat(t *testing.T) {
 
 			expected, _, _ := big.ParseFloat(tc.expect, 10, values.DefaultBigFloatPrecision, big.ToNearestEven)
 			c.Assert(bigFloat.BigFloatValue().Cmp(expected), qt.Equals, 0)
+		})
+	}
+}
+
+// TestReadSyntaxBigFloatInfNan pins the attached-sign spellings of the infinities
+// and NaN under #m. The sign scan used to claim the sign and stop, so the token
+// was "#m+" and failed as an invalid big float, while "#m +inf.0" (an
+// intertoken space, so the introducer path) read. Both now give the same value;
+// NaN must be the BigFloat NaN flag, never a big.Float NaN (which panics).
+func TestReadSyntaxBigFloatInfNan(t *testing.T) {
+	tcs := []struct {
+		input string
+		want  string
+	}{
+		{"#m+inf.0", "+inf.0"},
+		{"#m-inf.0", "-inf.0"},
+		{"#m+nan.0", "+nan.0"},
+		{"#m-nan.0", "+nan.0"},
+		{"#M+INF.0", "+inf.0"},
+		{"#m +inf.0", "+inf.0"},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewNamespace().Runtime()
+			syn, err := NewParser(env, true, strings.NewReader(tc.input)).ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNil)
+			bf, ok := syn.Unwrap().(*values.BigFloat)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("expected BigFloat, got %T", syn.Unwrap()))
+			c.Check(bf.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+
+	// A keyword that does not complete is not a number. Where a rune follows,
+	// the fault is the numeral's missing delimiter at that rune; at end of
+	// input there is no rune, and the token itself is the invalid big float.
+	for _, src := range []string{"#m+ix", "#m+inf.0x", "#m+nanx", "#m+in", "#m+inf", "#m+inf.0+2i", "#z+inf.0"} {
+		t.Run(src, func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewNamespace().Runtime()
+			syn, err := NewParser(env, true, strings.NewReader(src)).ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNotNil, qt.Commentf("read %v", syn))
+			c.Check(errors.Is(err, io.EOF), qt.IsFalse, qt.Commentf("%v", err))
 		})
 	}
 }
