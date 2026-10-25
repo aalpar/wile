@@ -406,9 +406,7 @@ func joinConditionFor(err error) values.Value {
 	}
 	cause := uncaught.Reason
 	if machine.IsControlTransfer(cause) {
-		// A transfer addressed to the joinee's drivers is not forwarded, not even
-		// as a cause, where the joiner's drivers would find it with errors.As.
-		cause = werr.WrapForeignErrorf(werr.ErrThreadEndedByControlTransfer, "thread-join!: %s", cause.Error())
+		cause = &JoineeControlTransfer{transfer: cause}
 	}
 
 	// A thread that ended via an uncaught Scheme exception surfaces it as an
@@ -416,9 +414,34 @@ func joinConditionFor(err error) values.Value {
 	// is converted as a primitive's failure would be.
 	var escErr *machine.ErrExceptionEscape
 	if errors.As(cause, &escErr) {
-		return &values.UncaughtException{Reason: escErr.Condition, Cause: cause}
+		return values.NewUncaughtException(escErr.Condition, cause)
 	}
-	return &values.UncaughtException{Reason: machine.ConditionFromError(cause), Cause: cause}
+	return values.NewUncaughtException(machine.ConditionFromError(cause), cause)
+}
+
+// JoineeControlTransfer is a joined thread's outcome, as its joiner sees it, when
+// the thread's run ended with a control transfer (an abort, a resume, a timer or
+// break interrupt) instead of a value or an uncaught raise. The transfer was
+// addressed to the joined thread's own drivers, so it is not forwarded: the
+// carrier unwraps to werr.ErrThreadEndedByControlTransfer and to nothing else, so
+// the joiner's drivers, which find a transfer with errors.As, cannot act on it.
+// Transfer returns the original for a host that asks for it by name.
+type JoineeControlTransfer struct {
+	transfer error
+}
+
+func (p *JoineeControlTransfer) Error() string {
+	return "thread-join!: " + werr.ErrThreadEndedByControlTransfer.Error() + ": " + p.transfer.Error()
+}
+
+// Unwrap returns werr.ErrThreadEndedByControlTransfer, never the transfer.
+func (*JoineeControlTransfer) Unwrap() error {
+	return werr.ErrThreadEndedByControlTransfer
+}
+
+// Transfer returns the control transfer that ended the joined thread's run.
+func (p *JoineeControlTransfer) Transfer() error {
+	return p.transfer
 }
 
 // PrimThreadState returns the thread's state as a symbol: new, runnable,

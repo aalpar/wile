@@ -2183,6 +2183,50 @@ func TestJoinDoesNotForwardAControlTransfer(t *testing.T) {
 	c.Assert(errors.Is(err, werr.ErrThreadEndedByControlTransfer), qt.IsTrue, qt.Commentf("got %v", err))
 	var abort *machine.ErrPromptAbort
 	c.Assert(errors.As(err, &abort), qt.IsFalse, qt.Commentf("the joinee's abort reached the joiner: %v", err))
+	var carrier *extthreads.JoineeControlTransfer
+	c.Assert(errors.As(err, &carrier), qt.IsTrue, qt.Commentf("got %v", err))
+	c.Assert(errors.As(carrier.Transfer(), &abort), qt.IsTrue, qt.Commentf("the carrier lost the transfer: %v", carrier.Transfer()))
+}
+
+// TestJoinOfAPanickedJoineeIsUncaught pins a joinee that panicked: the joiner
+// sees an uncaught-exception (it was an error-object before every joinee outcome
+// was mapped), and an unguarded join keeps ErrThreadPanic at the host.
+func TestJoinOfAPanickedJoineeIsUncaught(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	defer func() {
+		_ = engine.Close()
+	}()
+	th := values.NewThread(nil, "panics")
+	th.RunFunc = func(context.Context, values.Callable) (values.Value, error) {
+		panic("joinee panic")
+	}
+	c.Assert(th.Start(context.Background()), qt.IsNil)
+	c.Assert(engine.Define("t", wile.WrapValue(th)), qt.IsNil)
+
+	result, err := evalWithWatchdog(t, engine, `(guard (e ((uncaught-exception? e) 'uncaught-exception) ((error-object? e) 'error-object)) (thread-join! t))`, 5*time.Second)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "uncaught-exception")
+
+	_, err = evalWithWatchdog(t, engine, `(thread-join! t)`, 5*time.Second)
+	c.Assert(errors.Is(err, werr.ErrThreadPanic), qt.IsTrue, qt.Commentf("got %v", err))
+}
+
+// TestUncaughtJoinKeepsTheJoineesSentinel pins that a primitive failure in a
+// joinee survives an unguarded join with its sentinel matchable at the host.
+func TestUncaughtJoinKeepsTheJoineesSentinel(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	defer func() {
+		_ = engine.Close()
+	}()
+	_, err := evalWithWatchdog(t, engine, `
+(define t (make-thread (lambda () (+ 'a 1))))
+(thread-start! t)
+(thread-join! t)`, 5*time.Second)
+	c.Assert(errors.Is(err, werr.ErrNotANumber), qt.IsTrue, qt.Commentf("got %v", err))
+	var uncaught *values.UncaughtException
+	c.Assert(errors.As(err, &uncaught), qt.IsTrue, qt.Commentf("got %v", err))
 }
 
 // TestCancelledWaitInChildThreadIsCatchableThere pins the other side of the child

@@ -24,6 +24,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
+	extthreads "github.com/aalpar/wile/extensions/threads"
 	"github.com/aalpar/wile/pkg/wile"
 )
 
@@ -74,6 +75,40 @@ func TestRunSimple_ErrorRecovery(t *testing.T) {
 	c.Assert(strings.Contains(full, "5"), qt.IsTrue, qt.Commentf("out=%q", full))
 	// The error renders one stack trace, not two (double-render regression).
 	c.Assert(strings.Count(full, "Stack trace:"), qt.Equals, 1, qt.Commentf("out=%q", full))
+}
+
+// TestRunSimple_JoineeCancellationIsNotAnInterrupt pins that the REPL reports ^C
+// only for its own interrupt. An uncaught join of a thread that died of its own
+// cancellation unwraps to context.Canceled, and the REPL used to read that as the
+// user's Ctrl-C and print ^C instead of the exception.
+func TestRunSimple_JoineeCancellationIsNotAnInterrupt(t *testing.T) {
+	c := qt.New(t)
+	eng, err := wile.NewEngine(context.Background(), wile.WithMutableTopLevel(), wile.WithExtension(extthreads.Extension))
+	c.Assert(err, qt.IsNil)
+	defer func() {
+		_ = eng.Close()
+	}()
+
+	program := strings.Join([]string{
+		`(define rm (make-mutex))`,
+		`(define rcv (make-condition-variable))`,
+		`(define t (make-thread (lambda () (mutex-lock! rm) (condition-variable-signal! rcv) (mutex-unlock! rm) (thread-sleep! 10))))`,
+		`(with-timeout 5000 (lambda (k) 'timed-out) (lambda () (mutex-lock! rm) (thread-start! t) (mutex-unlock! rm rcv) 'thunk-returned))`,
+		`(thread-join! t)`,
+	}, "\n") + "\n"
+	var out bytes.Buffer
+	r := New(eng,
+		WithInput(strings.NewReader(program)),
+		WithOutput(&out),
+		WithErrorOutput(&out),
+	)
+
+	err = r.RunSimple(context.Background())
+	c.Assert(err, qt.IsNil)
+
+	full := out.String()
+	c.Assert(strings.Contains(full, "^C"), qt.IsFalse, qt.Commentf("out=%q", full))
+	c.Assert(strings.Contains(full, "Exception:"), qt.IsTrue, qt.Commentf("out=%q", full))
 }
 
 // TestRunSimple_WithInput_NoTrailingNewline verifies the simple loop evaluates

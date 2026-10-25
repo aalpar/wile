@@ -318,22 +318,26 @@ func (p *Thread) Join(ctx context.Context, timeout *time.Duration) (Value, error
 		deadline = timer.C
 	}
 
+	// The select only wakes the join. Which arm woke it does not decide the
+	// answer: more than one can be ready together (an elapsed or zero timeout
+	// beside an ended ctx, a joinee finishing as either fires), and select picks
+	// among ready arms at random. The answer is read in one fixed order instead:
+	// the joinee's end, then the joiner's cancellation, then the timeout.
 	select {
 	case <-p.done:
-		// Thread completed
 	case <-deadline:
-		// The joiner's cancellation outranks the timeout, for the same reason the
-		// joinee's end outranks both: an elapsed (or zero) timeout and an ended ctx
-		// can be ready together, and select would pick between them at random.
-		if ctx.Err() != nil {
-			return nil, p.joinCancelled(ctx)
-		}
-		return nil, werr.ErrJoinTimeout
 	case <-ctx.Done():
-		return nil, p.joinCancelled(ctx)
 	}
 
-	return p.terminalResult()
+	select {
+	case <-p.done:
+		return p.terminalResult()
+	default:
+	}
+	if ctx.Err() != nil {
+		return nil, p.joinCancelled(ctx)
+	}
+	return nil, werr.ErrJoinTimeout
 }
 
 // joinCancelled is Join's report of the joining thread's own cancellation.
@@ -621,9 +625,10 @@ type UncaughtException struct {
 }
 
 // NewUncaughtException wraps the original raised condition in an SRFI-18
-// uncaught-exception object.
-func NewUncaughtException(reason Value) *UncaughtException {
-	q := &UncaughtException{Reason: reason}
+// uncaught-exception object; cause is how the joined thread ended (see the type
+// doc), or nil.
+func NewUncaughtException(reason Value, cause error) *UncaughtException {
+	q := &UncaughtException{Reason: reason, Cause: cause}
 	return q
 }
 

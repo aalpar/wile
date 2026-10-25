@@ -203,7 +203,7 @@ var (
 	// timer or break interrupt) instead of a value or an uncaught raise. The
 	// transfer was addressed to the thread's own drivers, so it is reported to the
 	// joiner as a failure and is not forwarded where the joiner's drivers would act
-	// on it.
+	// on it. The threads extension's JoineeControlTransfer carries it.
 	ErrThreadEndedByControlTransfer = NewStaticError("thread ended by a control transfer")
 
 	// ErrNotImplemented marks a primitive that is registered and callable but has

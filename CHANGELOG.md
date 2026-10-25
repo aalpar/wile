@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`machine.IsControlTransfer`, `werr.ErrThreadEndedByControlTransfer` and
+  `threads.JoineeControlTransfer`.** The predicate for a control signal other
+  than an uncaught raise (an abort, resume, timer or break signal), and how a
+  joiner sees a thread whose run ended with one: a carrier that matches the
+  sentinel (its only `Unwrap` edge) and keeps the transfer behind `Transfer()`,
+  so the joiner's drivers cannot act on the joinee's transfer.
+
 - **`values.(*PortObject).LockReads` and `UnlockReads`.** The port's read
   lock, which every read primitive holds for one call: the stream, the port's
   read position and the reader cached against it move together. A Go consumer
@@ -136,6 +143,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   4,207 symbols with 385 dead.
 
 ### Fixed
+
+- **A thread joined after it was killed by its ctx is an `uncaught-exception`
+  wherever it died.** One busy at the VM poll used to reach the joiner's guard as
+  an ordinary error object (the arm for the joiner's own cancellation); one
+  parked in a wait was already an `uncaught-exception`. Every joinee outcome is
+  now one, except a security denial, which still passes the joiner's guards. A
+  joinee that panicked is an `uncaught-exception` too (it was an error object).
+  An uncaught join keeps the joinee's cause at the host: `errors.Is` answers
+  `ErrOperationCancelled`, `context.Canceled`, `ErrThreadPanic` or the joinee's
+  own sentinel, where it used to stop at the uncaught-exception object.
+
+- **A cancelled `thread-sleep!` or `thread-join!` raises even when its timeout
+  has elapsed.** With a zero or elapsed timeout in a cancelled thread both picked
+  at random between the timer and the cancellation; `(thread-join! t 0 'tv)`
+  answered `'tv` about half the time. Cancellation now beats an elapsed timeout,
+  and a join answers in one order: the joinee's end, the joiner's cancellation,
+  the timeout.
+
+- **`condition-variable-signal!` right after `thread-terminate!` of a waiter
+  wakes the live waiter behind it.** It woke the terminated one, which was still
+  in the wait set, and the next waiter stayed parked.
+
+- **The REPL prints `^C` only for its own interrupt.** It read any error carrying
+  `context.Canceled` as one, which an uncaught join of a cancelled joinee now
+  carries.
 
 - **Two threads reading one textual port no longer race.** `read-char`,
   `peek-char`, `read-line` and `read-string` took no lock, and `read` and
@@ -878,6 +910,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `let` — are affected and all five now report the structural error.
 
 ### Changed
+
+- **BREAKING (Go API): `values.UncaughtException` is a Go `error`**, like the
+  other three SRFI-18 condition objects, with a `Cause` field (how the joined
+  thread ended) that `Unwrap` returns, and `values.NewUncaughtException` takes
+  the cause as a second argument.
 
 - **BREAKING (behavior): a program's source name never steers `include` under a
   live load stack.** The name passed to `EvalProgram`, `EvalMultipleWithSource`,
