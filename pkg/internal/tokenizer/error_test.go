@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/aalpar/wile/pkg/werr"
 
@@ -60,7 +61,7 @@ func TestTokenizerErrorCarriesScannerState(t *testing.T) {
 		name: "unterminated_string_reports_eof", src: `"abc`,
 		wantMess:  MessageUnterminatedString,
 		wantIndex: 4, wantCol: 4, wantLine: 1,
-		wantEOF: true, wantState: TokenizerStateFailed,
+		wantEOF: true, wantState: TokenizerStateString,
 	}, {
 		// The fault is on line 2: line/column must be tracked, not just index.
 		name: "position_tracks_newlines", src: "(a b)\n#b19",
@@ -141,6 +142,71 @@ func TestTokenizerErrorCarriesScannerState(t *testing.T) {
 					qt.Commentf("ErrorInFile %q lacks %q", inFile, want))
 			}
 			c.Check(terr.ErrorInFile(""), qt.Equals, rendered)
+		})
+	}
+}
+
+// TestFaultPastACompleteTokenIsIntertoken pins which state a fault on the rune
+// after a token reports. The scanner always reads one rune past a token; when
+// that rune could still extend the token ("(" might be "()", "ab" might be
+// "abc") it is read while the token is being scanned and reports the token's
+// state. When the token's last rune already fixed its extent (")", "#(", the
+// closing "|" of "|ab|"), the rune is read in intertoken space and reports
+// failed, as Next reports a fault in whitespace. The token itself keeps its
+// type either way. The fault is a reader failing right after the prefix.
+func TestFaultPastACompleteTokenIsIntertoken(t *testing.T) {
+	closed := werr.WrapForeignErrorf(werr.ErrPortClosed, "string-input-port is closed")
+	tcs := []struct {
+		prefix    string
+		wantTok   TokenizerState
+		wantState TokenizerState
+	}{
+		// Complete once their last rune is consumed.
+		{prefix: ")", wantTok: TokenizerStateCloseParen, wantState: TokenizerStateFailed},
+		{prefix: "]", wantTok: TokenizerStateCloseBracket, wantState: TokenizerStateFailed},
+		{prefix: "()", wantTok: TokenizerStateEmptyList, wantState: TokenizerStateFailed},
+		{prefix: "[]", wantTok: TokenizerStateEmptyList, wantState: TokenizerStateFailed},
+		{prefix: "'", wantTok: TokenizerStateQuote, wantState: TokenizerStateFailed},
+		{prefix: "`", wantTok: TokenizerStateQuasiquote, wantState: TokenizerStateFailed},
+		{prefix: ",@", wantTok: TokenizerStateUnquoteSplicing, wantState: TokenizerStateFailed},
+		{prefix: "#'", wantTok: TokenizerStateSyntax, wantState: TokenizerStateFailed},
+		{prefix: "#`", wantTok: TokenizerStateQuasisyntax, wantState: TokenizerStateFailed},
+		{prefix: "#,@", wantTok: TokenizerStateUnsyntaxSplicing, wantState: TokenizerStateFailed},
+		{prefix: "#(", wantTok: TokenizerStateOpenVector, wantState: TokenizerStateFailed},
+		{prefix: "#u8(", wantTok: TokenizerStateOpenVectorUnsignedByteMarker, wantState: TokenizerStateFailed},
+		{prefix: "#;", wantTok: TokenizerStateDatumCommentBegin, wantState: TokenizerStateFailed},
+		{prefix: "#&", wantTok: TokenizerStateBoxBegin, wantState: TokenizerStateFailed},
+		{prefix: "#1=", wantTok: TokenizerStateLabelAssignment, wantState: TokenizerStateFailed},
+		{prefix: "#1#", wantTok: TokenizerStateLabelReference, wantState: TokenizerStateFailed},
+		{prefix: "|ab|", wantTok: TokenizerStateSymbol, wantState: TokenizerStateFailed},
+		{prefix: "#|c|#", wantTok: TokenizerStateBlockCommentBody, wantState: TokenizerStateFailed},
+		{prefix: `"a"`, wantTok: TokenizerStateString, wantState: TokenizerStateFailed},
+		{prefix: `#\(`, wantTok: TokenizerStateCharGraphic, wantState: TokenizerStateFailed},
+		{prefix: `#\1`, wantTok: TokenizerStateCharGraphic, wantState: TokenizerStateFailed},
+		// Still open when the rune is read: it could have extended the token.
+		{prefix: "(", wantTok: TokenizerStateOpenParen, wantState: TokenizerStateOpenParen},
+		{prefix: "[", wantTok: TokenizerStateOpenBracket, wantState: TokenizerStateOpenBracket},
+		{prefix: ",", wantTok: TokenizerStateUnquote, wantState: TokenizerStateUnquote},
+		{prefix: "#,", wantTok: TokenizerStateUnsyntax, wantState: TokenizerStateUnsyntax},
+		{prefix: "ab", wantTok: TokenizerStateSymbol, wantState: TokenizerStateSymbol},
+		{prefix: `#\a`, wantTok: TokenizerStateCharGraphic, wantState: TokenizerStateCharGraphic},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.prefix, func(t *testing.T) {
+			c := qt.New(t)
+			rdr := &faultingRuneReader{rdr: strings.NewReader(tc.prefix), after: utf8.RuneCountInString(tc.prefix), fault: closed}
+			tok := NewTokenizer(rdr, false)
+			first, err := tok.Next()
+			c.Assert(err, qt.IsNil)
+			c.Check(first.Type(), qt.Equals, tc.wantTok)
+			_, err = tok.Next()
+			c.Assert(errors.Is(err, NewTokenizerError(MessageReaderFailed)), qt.IsTrue, qt.Commentf("got %v", err))
+			var terr *TokenizerError
+			c.Assert(errors.As(err, &terr), qt.IsTrue)
+			at, located := terr.At()
+			c.Assert(located, qt.IsTrue)
+			c.Check(at.Index(), qt.Equals, len(tc.prefix))
+			c.Check(terr.State(), qt.Equals, tc.wantState)
 		})
 	}
 }
@@ -274,6 +340,14 @@ func TestReaderFaultIsNotEndOfInput(t *testing.T) {
 		// state is not the one the fault happened in.
 		{name: "fault between datums", src: "x y", after: 2, wantIndex: 2, wantState: TokenizerStateFailed},
 		{name: "fault after a line comment", src: "; hi\nx", after: 5, wantIndex: 5, wantState: TokenizerStateFailed},
+		// ")" is complete before the rune after it is read; "(" might be "()".
+		{name: "fault after a close paren", src: "(x)", after: 3, wantIndex: 3, wantState: TokenizerStateFailed},
+		{name: "fault after an open paren", src: "(x)", after: 1, wantIndex: 1, wantState: TokenizerStateOpenParen},
+		// A string or |symbol| body is scanned in the token's own state, set
+		// before the opening delimiter is consumed.
+		{name: "fault inside a string", src: `"ab"`, after: 2, wantIndex: 2, wantState: TokenizerStateString},
+		{name: "fault inside an extended symbol", src: "|ab|", after: 2, wantIndex: 2, wantState: TokenizerStateSymbol},
+		{name: "fault first in an extended symbol", src: "|ab|", after: 1, wantIndex: 1, wantState: TokenizerStateSymbol},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

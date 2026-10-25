@@ -338,3 +338,25 @@ func TestReadRecoversFromATransientReaderFault(t *testing.T) {
 		})
 	}
 }
+
+// TestReadFaultPastACloseParenIsIntertoken pins the port-level shape of B39's
+// gate: a fault just past a ")", here a reader failing after "(x)". The fault
+// is in no token, and was stamped "close-paren" because the ")" read past
+// itself under its own state. Which of the two reads reports it is not pinned.
+func TestReadFaultPastACloseParenIsIntertoken(t *testing.T) {
+	for _, op := range []string{"read", "read-syntax"} {
+		t.Run(op, func(t *testing.T) {
+			c := qt.New(t)
+			datum := "(x)"
+			rdr := &transientReader{chunks: []*string{&datum, nil}}
+			engine := newEngineWithIOTest(t)
+			err := engine.Define("p", wile.WrapValue(values.NewCharacterInputPortFromReader(rdr)))
+			c.Assert(err, qt.IsNil)
+			_, err = engine.EvalMultiple(context.Background(), `(`+op+` p) (`+op+` p)`)
+			c.Assert(err, qt.IsNotNil)
+			c.Check(errors.Is(err, os.ErrDeadlineExceeded), qt.IsTrue, qt.Commentf("got: %v", err))
+			c.Check(strings.Contains(err.Error(), "(at index 3, line 1, column 3,"), qt.IsTrue, qt.Commentf("got: %v", err))
+			c.Check(strings.Contains(err.Error(), "tokenizer state failed)"), qt.IsTrue, qt.Commentf("got: %v", err))
+		})
+	}
+}

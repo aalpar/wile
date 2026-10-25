@@ -36,24 +36,24 @@ func (p *Tokenizer) readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrC
 	switch {
 	case isQuote(p.curr()): // #' (syntax)
 		p.state = TokenizerStateSyntax
-		p.next()
+		p.consumeFinal()
 		return
 
 	case p.curr() == ',': // #' (unsyntax) (unsyntax-splice)
+		// Unsyntax until an '@' makes it splicing, as the ',' arm of read
+		// does: the rune after the ',' is read while that is undecided.
+		p.state = TokenizerStateUnsyntax
 		p.next()
 		if p.err != nil || p.curr() != '@' {
-			p.state = TokenizerStateUnsyntax
-			// unsyntax
 			return
 		}
 		p.state = TokenizerStateUnsyntaxSplicing
-		// unsyntax-splice
-		p.next()
+		p.consumeFinal()
 		return
 
 	case p.curr() == '`': // #' (quasisyntax)
 		p.state = TokenizerStateQuasisyntax
-		p.next()
+		p.consumeFinal()
 		return
 
 	case isVerticalLine(p.curr()):
@@ -86,7 +86,7 @@ func (p *Tokenizer) readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrC
 		if p.err != nil {
 			return
 		}
-		p.next()
+		p.consumeFinal()
 		return
 
 	case isBackSlash(p.curr()): // #\ character escape or character name
@@ -100,20 +100,20 @@ func (p *Tokenizer) readVectorOrExactnessOrRadixOrModifierOrMnemonicOrBooleanOrC
 
 	case p.curr() == '(': // #( array
 		p.state = TokenizerStateOpenVector
-		p.next()
+		p.consumeFinal()
 		return
 
 	case p.curr() == ';': // datum comment
 		// Emit DatumCommentBegin - parser handles datum boundary detection
 		p.state = TokenizerStateDatumCommentBegin
-		p.next()
+		p.consumeFinal()
 		return
 
 	case p.curr() == '&': // #& box
 		// Introducer, same shape as #;: consume the marker and leave the boxed
 		// datum to the next token, so it may carry its own prefixes (#&#x1f).
 		p.state = TokenizerStateBoxBegin
-		p.next()
+		p.consumeFinal()
 		return
 
 	case p.curr() == '!': // #! directive (R7RS §2.1)
@@ -200,7 +200,7 @@ func (p *Tokenizer) readTypedArrayOrExactnessOrRadixOrBooleanMarker() {
 			return
 		}
 		p.state = TokenizerStateOpenVectorUnsignedByteMarker
-		p.next()
+		p.consumeFinal()
 		return
 	case p.curr() == 'i' || p.curr() == 'I': // inexact, #i/#I (R7RS §7.1.1: case-insensitive)
 		p.readExactness(TokenizerStateMarkerNumberInexact)
