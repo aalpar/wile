@@ -418,10 +418,9 @@ func (p *Parser) readQuoteForm(keyword string) (syntax.SyntaxValue, tokenizer.To
 	}
 	sym := p.wrapSyntaxSymbol(keyword, t)
 	result := p.listSyntax(t, sym, q)
-	datumCtx := q.SourceContext()
-	if datumCtx != nil {
-		spanTo(result, datumCtx.End) // the quote mark through its datum
-	}
+	// p.cur is the datum's last token. The datum's own End is not usable: a
+	// #n# reference hands back an earlier node, which ends before the quote.
+	spanTo(result, p.cur.End())
 	return result, p.cur, nil
 }
 
@@ -560,10 +559,7 @@ func (p *Parser) readLabelAssignment() (syntax.SyntaxValue, tokenizer.Token, err
 	// option.
 	if p.labelBackrefs[labelNum] > backrefsBefore {
 		q := p.wrapSyntaxDatumLabelAssignment(labelNum, v, assignTok)
-		vctx := v.SourceContext()
-		if vctx != nil {
-			spanTo(q, vctx.End) // the #n= through its datum
-		}
+		spanTo(q, p.cur.End()) // the #n= through its datum's last token
 		return q, p.cur, nil
 	}
 	return v, p.cur, nil
@@ -670,10 +666,7 @@ func (p *Parser) readBoxInto(placeholder *syntax.SyntaxBox) (syntax.SyntaxValue,
 		return nil, tok, err
 	}
 	placeholder.Value = v
-	vctx := v.SourceContext()
-	if vctx != nil {
-		spanTo(placeholder, vctx.End) // the #& through its datum
-	}
+	spanTo(placeholder, p.cur.End()) // the #& through its datum's last token
 	return placeholder, tok, nil
 }
 

@@ -22,6 +22,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"github.com/aalpar/wile/pkg/environment"
+	"github.com/aalpar/wile/pkg/syntax"
 )
 
 // TestCompoundDatumSpansToItsCloser pins a compound datum's source span: its
@@ -44,6 +45,9 @@ func TestCompoundDatumSpansToItsCloser(t *testing.T) {
 		{"#&(a)", 0, 5},
 		{"#0=(a . #0#)", 0, 12},
 		{"  (x)", 2, 3},
+		{"'()", 0, 3},
+		{"#&()", 0, 4},
+		{"'#0=(a . #0#)", 0, 13},
 		{"abcdef", 0, 6}, // control: an atom already spanned its token
 	}
 	for _, tc := range tcs {
@@ -57,6 +61,25 @@ func TestCompoundDatumSpansToItsCloser(t *testing.T) {
 			c.Assert(sc, qt.IsNotNil)
 			c.Assert(sc.Start.Index(), qt.Equals, tc.start)
 			c.Assert(sc.End.Index()-sc.Start.Index(), qt.Equals, tc.span)
+		})
+	}
+}
+
+// TestQuoteOfALabelReferenceSpansItsOwnText: '#0# hands back the labelled node,
+// which ends before the quote mark, so a span taken from the child came out
+// negative. The form spans from ' to the reference's last token.
+func TestQuoteOfALabelReferenceSpansItsOwnText(t *testing.T) {
+	for _, src := range []string{"(#0=(a) '#0#)", "(#0=(a) #&#0#)", "(#0=(a) `#0#)"} {
+		t.Run(src, func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewNamespace().Runtime()
+			p := NewParser(env, true, strings.NewReader(src))
+			stx, err := p.ReadSyntax(context.TODO())
+			c.Assert(err, qt.IsNil)
+			second := stx.(*syntax.SyntaxPair).SyntaxCdr().(*syntax.SyntaxPair).SyntaxCar()
+			sc := second.SourceContext()
+			c.Assert(sc.Start.Index(), qt.Equals, 8)
+			c.Assert(sc.End.Index()-sc.Start.Index() > 0, qt.IsTrue, qt.Commentf("span %d", sc.End.Index()-sc.Start.Index()))
 		})
 	}
 }
