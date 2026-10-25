@@ -1008,14 +1008,9 @@ func (p *ExpanderTimeContinuation) ExpandOnce(expr syntax.SyntaxValue) (syntax.S
 		return expr, false, nil
 	}
 
-	// Build the cdr (argument list) for both ER and syntax-rules paths.
-	var cdr syntax.SyntaxValue
-	cdrPair, ok := stxPair.SyntaxCdr().(*syntax.SyntaxPair)
-	if ok {
-		cdr = cdrPair
-	} else {
-		cdr = syntax.SyntaxEmptyList
-	}
+	// The cdr goes to the transformer as is, as expandMacroInvocation hands it
+	// expr: a non-pair cdr ((m . 5)) is the macro's argument, not an empty list.
+	cdr := stxPair.SyntaxCdr()
 
 	// Check for ER macro transformer first
 	erTransformer, isER := bnd.Value().(*ERMacroTransformer)
