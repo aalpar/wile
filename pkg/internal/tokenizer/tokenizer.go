@@ -28,6 +28,7 @@ import (
 // Error messages returned by the tokenizer.
 const (
 	MessageRuneError                             = "rune error"
+	MessageReaderFailed                          = "reader failed"
 	MessageExpectingNumber                       = "expecting number"
 	MessageExpectingDelimiterAfterNumber         = "expecting delimiter after radix-prefixed number"
 	MessageExpectingDelimiterAfterBigNumber      = "expecting delimiter after #z or #m number"
@@ -618,7 +619,8 @@ func (p *Tokenizer) term() {
 }
 
 // readNextRune reads the next rune from the reader and updates position tracking.
-// Sets p.cur to utf8.RuneError and p.err appropriately on EOF or encoding error.
+// Sets p.cur to utf8.RuneError and p.err appropriately on EOF, encoding error
+// or reader fault.
 func (p *Tokenizer) readNextRune() {
 	n := 0
 	// The rune being replaced, kept to recognise the '\n' of a CRLF pair, which
@@ -628,7 +630,14 @@ func (p *Tokenizer) readNextRune() {
 	p.runeStart = p.runeEnd
 	if n == 0 {
 		p.cur = utf8.RuneError
-		p.err = io.EOF
+		if p.err == nil || errors.Is(p.err, io.EOF) {
+			p.err = io.EOF
+			return
+		}
+		// Anything else is the stream failing (a closed port, a broken pipe),
+		// not the input ending. Reporting it as io.EOF made read answer
+		// #<eof> on a closed port and end a datum early on a mid-stream fault.
+		p.failWrap(p.err, MessageReaderFailed)
 		return
 	}
 	// A decoding failure is reported as (RuneError, 1); a genuine U+FFFD in the

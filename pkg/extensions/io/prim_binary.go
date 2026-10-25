@@ -46,7 +46,7 @@ func PrimReadU8(mc machine.CallContext) error {
 		return nil
 	}
 	if err != nil {
-		return werr.WrapForeignReadErrorf(err, "read-u8: error reading byte")
+		return wrapReadFault(err, "read-u8: error reading byte")
 	}
 	mc.SetValue(values.NewInteger(int64(b)))
 
@@ -68,7 +68,7 @@ func PrimPeekU8(mc machine.CallContext) error {
 		return nil
 	}
 	if err != nil {
-		return werr.WrapForeignReadErrorf(err, "peek-u8: error reading byte")
+		return wrapReadFault(err, "peek-u8: error reading byte")
 	}
 	// Unread the byte so it can be read again. Every binary input port
 	// has a ByteUnreader slot — port_constructors.go pairs rb/urb.
@@ -169,7 +169,7 @@ func PrimReadBytevector(mc machine.CallContext) error {
 		mc.SetValue(values.EOFObject)
 		return nil
 	default:
-		return werr.WrapForeignReadErrorf(err, "read-bytevector: error reading from port")
+		return wrapReadFault(err, "read-bytevector: error reading from port")
 	}
 
 	mc.SetValue(values.NewByteVectorFromBytes(buf...))
@@ -220,7 +220,7 @@ func PrimReadBytevectorBang(mc machine.CallContext) error {
 			mc.SetValue(values.EOFObject)
 			return nil
 		}
-		return werr.WrapForeignReadErrorf(err, "read-bytevector!: error reading from port")
+		return wrapReadFault(err, "read-bytevector!: error reading from port")
 	}
 
 	slots := bv.Elems()

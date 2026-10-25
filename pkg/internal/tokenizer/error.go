@@ -22,6 +22,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/aalpar/wile/pkg/syntax"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // TokenizerError represents an error that occurred during tokenization.
@@ -87,9 +88,10 @@ func (p *TokenizerError) State() TokenizerState {
 // character. It is false at end of input, where the scanner reports
 // utf8.RuneError as a sentinel rather than as a character — a distinction the
 // tokenizer has to preserve because a literal U+FFFD is writable source text
-// (see Tokenizer.Next).
+// (see Tokenizer.Next). It is also false for a reader fault, where no rune was
+// read at all.
 func (p *TokenizerError) Rune() (rune, bool) {
-	return p.r, !p.eof
+	return p.r, !p.eof && !p.readerFault()
 }
 
 // describeRune renders the offending character for a human: the character
@@ -97,6 +99,9 @@ func (p *TokenizerError) Rune() (rune, bool) {
 func (p *TokenizerError) describeRune() string {
 	if p.eof {
 		return "<end of input>"
+	}
+	if p.readerFault() {
+		return "<none, the reader failed>"
 	}
 	// A control or non-printable rune has no useful glyph; the code point alone
 	// is the whole signal, and quoting it would emit a raw control byte into
@@ -134,7 +139,29 @@ func (p *TokenizerError) Error() string {
 		return p.mess
 	}
 	return fmt.Sprintf("%s (at index %d, line %d, column %d, character %s, tokenizer state %s)",
-		p.mess, p.at.Index(), p.at.Line(), p.at.Column(), p.describeRune(), p.state)
+		p.message(), p.at.Index(), p.at.Line(), p.at.Column(), p.describeRune(), p.state)
+}
+
+// message is the rendered message: the constant, plus the cause when the fault
+// is the reader's. A scanner fault's constant names the rule that failed; "reader
+// failed" names only the operation, and the cause (a closed port, a disk error)
+// is the explanation.
+func (p *TokenizerError) message() string {
+	if !p.readerFault() || p.err == nil {
+		return p.mess
+	}
+	cause := werr.FailureMessage(p.err)
+	if cause == "" {
+		cause = p.err.Error()
+	}
+	return p.mess + ": " + cause
+}
+
+// readerFault reports whether the stream failed rather than the scanner
+// rejecting input. readNextRune raises it when the reader yields no rune, so r
+// is a placeholder and not a character.
+func (p *TokenizerError) readerFault() bool {
+	return p.mess == MessageReaderFailed
 }
 
 // ErrorInFile renders as Error does, with the position as file:line:col for a
