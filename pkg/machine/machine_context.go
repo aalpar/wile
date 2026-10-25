@@ -2606,7 +2606,6 @@ func (p *MachineContext) resolveResume(resumeErr *ErrResumeContinuation, prompt 
 	// The escalator revivals ride the signal rather than being computed here:
 	// p.cont is THIS driver's chain, and the (k v) site may have been a
 	// sub-context whose frames this chain never held (see escalatorRevivals).
-	seg := resumeErr.Segment
 	p.outerIntact = prompt == nil && seg != nil && seg.boundary != nil && seg.boundary == p.boundary
 	wasEmpty, err := p.reinstallSegment(
 		resumeErr.Segment, prompt, resumeErr.SourceWinding, p.windingOutside(prompt),
