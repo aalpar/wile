@@ -335,9 +335,7 @@ func seekToPortPosition(port *values.PortObject, p *parser.Parser) bool {
 // releaseLookahead hands a reader's one-rune lookahead back to port. Every
 // textual input port pairs its rune reader with a rune unreader
 // (port_constructors.go), as peek-char relies on.
-func releaseLookahead(port *values.PortObject, rdr interface {
-	ReleaseLookahead(values.RuneUnreader) error
-}) error {
+func releaseLookahead(port *values.PortObject, rdr *parser.Parser) error {
 	urr, _ := port.AsRuneUnreader()
 	err := rdr.ReleaseLookahead(urr)
 	if err != nil {

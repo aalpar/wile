@@ -1433,6 +1433,12 @@ func (p *EnvironmentFrame) tryGlobalIndexAtPhase(key *values.Symbol, q syntax.Sc
 	return newScopeKeyedGlobalIndex(key, p.global, ref, q), false
 }
 
+// presentPhasesHint sizes the union so the ordinary case does not regrow: the
+// four named phases from the registry plus the same phases from the store, with
+// room for a couple of tower rungs. Overshooting costs one small slice; the
+// duplicates are removed after the sort.
+const presentPhasesHint = 12
+
 // PresentPhases returns the non-negative phases worth searching for this frame's
 // owner (the engine's Namespace, or a library env's own store —
 // EnvironmentFrame.phases is shared by every view over one owner, per "One Store
@@ -1455,12 +1461,6 @@ func (p *EnvironmentFrame) tryGlobalIndexAtPhase(key *values.Symbol, q syntax.Sc
 // PhaseTemplate (-1) is excluded: callers here rank a reference by RUNTIME-first
 // precedence, and a for-template binding is a different axis, not a lower rung
 // of this one.
-// presentPhasesHint sizes the union so the ordinary case does not regrow: the
-// four named phases from the registry plus the same phases from the store, with
-// room for a couple of tower rungs. Overshooting costs one small slice; the
-// duplicates are removed after the sort.
-const presentPhasesHint = 12
-
 func (p *EnvironmentFrame) PresentPhases() []Phase {
 	// One allocation for the union. Both sources append into it: taking the
 	// registry's own exactly-sized slice and then appending the store's phases to

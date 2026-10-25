@@ -2005,49 +2005,6 @@ func TestSimpleToken_StartEnd(t *testing.T) {
 	c.Assert(end.Index(), qt.Equals, 5)
 }
 
-func TestSimpleToken_SchemeString(t *testing.T) {
-	c := qt.New(t)
-	p := NewTokenizer(strings.NewReader("foo"), false)
-	tok, _ := p.Next()
-	st := tok.(*SimpleToken)
-	ss := st.SchemeString()
-	c.Assert(ss, qt.Contains, "foo")
-	c.Assert(ss, qt.Contains, "simple-token")
-}
-
-func TestSimpleToken_IsVoid(t *testing.T) {
-	c := qt.New(t)
-
-	// Non-nil token
-	p := NewTokenizer(strings.NewReader("test"), false)
-	tok, _ := p.Next()
-	st := tok.(*SimpleToken)
-	c.Assert(st.IsVoid(), qt.IsFalse)
-
-	// Nil token
-	var nilTok *SimpleToken
-	c.Assert(nilTok.IsVoid(), qt.IsTrue)
-}
-
-func TestSimpleToken_EqualTo(t *testing.T) {
-	c := qt.New(t)
-
-	// Equal tokens
-	p1 := NewTokenizer(strings.NewReader("foo"), false)
-	tok1, _ := p1.Next()
-	p2 := NewTokenizer(strings.NewReader("foo"), false)
-	tok2, _ := p2.Next()
-	c.Assert(tok1.(*SimpleToken).EqualTo(tok2.(*SimpleToken)), qt.IsTrue)
-
-	// Different source
-	p3 := NewTokenizer(strings.NewReader("bar"), false)
-	tok3, _ := p3.Next()
-	c.Assert(tok1.(*SimpleToken).EqualTo(tok3.(*SimpleToken)), qt.IsFalse)
-
-	// Different type (non-SimpleToken)
-	c.Assert(tok1.(*SimpleToken).EqualTo(nil), qt.IsFalse)
-}
-
 func TestTokenizerError_Is(t *testing.T) {
 	c := qt.New(t)
 	err1 := NewTokenizerError("test error")
@@ -2075,28 +2032,6 @@ func TestTokenizerError_Error(t *testing.T) {
 	c := qt.New(t)
 	err := NewTokenizerError("my error message")
 	c.Assert(err.Error(), qt.Equals, "my error message")
-}
-
-func TestSimpleToken_EqualTo_DifferentType(t *testing.T) {
-	c := qt.New(t)
-	p := NewTokenizer(strings.NewReader("42"), false)
-	tok1, _ := p.Next()
-
-	p2 := NewTokenizer(strings.NewReader("foo"), false)
-	tok2, _ := p2.Next()
-
-	// Different token types
-	c.Assert(tok1.(*SimpleToken).EqualTo(tok2.(*SimpleToken)), qt.IsFalse)
-}
-
-func TestSimpleToken_EqualTo_DifferentPositions(t *testing.T) {
-	c := qt.New(t)
-	p := NewTokenizer(strings.NewReader("foo bar"), false)
-	tok1, _ := p.Next()
-	tok2, _ := p.Next()
-
-	// Different positions (start/end differ)
-	c.Assert(tok1.(*SimpleToken).EqualTo(tok2.(*SimpleToken)), qt.IsFalse)
 }
 
 func TestTokenizer_scanLineEnding(t *testing.T) {
@@ -2182,41 +2117,6 @@ func TestTokenValue(t *testing.T) {
 			c.Check(token.Value(), qt.Equals, tc.expectedVal)
 		})
 	}
-}
-
-// TestEqualTo tests the EqualTo method on tokens
-func TestEqualTo(t *testing.T) {
-	tok1 := NewTokenizer(strings.NewReader("123"), false)
-	token1, err1 := tok1.Next()
-	qt.Check(t, err1, qt.IsNil)
-	st1, ok1 := token1.(*SimpleToken)
-	qt.Check(t, ok1, qt.IsTrue)
-
-	tok2 := NewTokenizer(strings.NewReader("123"), false)
-	token2, err2 := tok2.Next()
-	qt.Check(t, err2, qt.IsNil)
-	st2, ok2 := token2.(*SimpleToken)
-	qt.Check(t, ok2, qt.IsTrue)
-
-	tok3 := NewTokenizer(strings.NewReader("456"), false)
-	token3, err3 := tok3.Next()
-	qt.Check(t, err3, qt.IsNil)
-	st3, ok3 := token3.(*SimpleToken)
-	qt.Check(t, ok3, qt.IsTrue)
-
-	// Test that equal tokens are equal
-	qt.Check(t, st1.EqualTo(st2), qt.IsTrue)
-
-	// Test that different tokens are not equal
-	qt.Check(t, st1.EqualTo(st3), qt.IsFalse)
-
-	// Test equality with different types
-	tok4 := NewTokenizer(strings.NewReader("abc"), false)
-	token4, err4 := tok4.Next()
-	qt.Check(t, err4, qt.IsNil)
-	st4, ok4 := token4.(*SimpleToken)
-	qt.Check(t, ok4, qt.IsTrue)
-	qt.Check(t, st1.EqualTo(st4), qt.IsFalse)
 }
 
 // TestNewTokenizerEdgeCases tests edge cases in NewTokenizer

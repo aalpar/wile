@@ -23,9 +23,8 @@ interpreter via the `wile` command.
 
 ## Installation
 
-Wile requires Go 1.24 or later. For a build free of known stdlib
-vulnerabilities, use Go 1.26.4 or later (Go 1.26.3 and earlier carry reachable
-stdlib CVEs); see [SECURITY.md](SECURITY.md#supported-versions).
+Wile requires Go 1.27 or later (`go.mod`); see
+[SECURITY.md](SECURITY.md#supported-versions).
 
 ### As a library
 
