@@ -196,6 +196,26 @@ func datumToSyntaxVisited(datum values.Value, sctx *syntax.SourceContext, visite
 		}
 		return syntax.NewSyntaxVector(sctx, elems...), nil
 
+	case *values.Box:
+		// A box is a syntax container, as in Racket ((datum->syntax #'k (box 'foo))
+		// holds #<syntax foo>): wrapping the raw box as an atom would leave its
+		// contents raw where every other container's are syntax. A void box has
+		// nothing to unbox, so it stays the atom it was.
+		if v.IsVoid() {
+			return syntax.NewSyntaxObject(v, sctx), nil
+		}
+		dup := visited.ContainsOne(datum)
+		if dup {
+			return nil, circularDatumError()
+		}
+		visited.Set(datum)
+		defer visited.Unset(datum)
+		inner, err := datumToSyntaxVisited(v.Unbox(), sctx, visited, depth+1)
+		if err != nil {
+			return nil, err
+		}
+		return syntax.NewSyntaxBox(inner, sctx), nil
+
 	default:
 		// Other values (numbers, strings, booleans, etc.) get wrapped
 		return syntax.NewSyntaxObject(v, sctx), nil

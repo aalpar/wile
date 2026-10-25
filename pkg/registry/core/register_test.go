@@ -57,6 +57,30 @@ func TestDatumToSyntax_VoidVector(t *testing.T) {
 		qt.Commentf("void Vector must produce empty SyntaxVector, got len=%d", len(sv.Values)))
 }
 
+// TestDatumToSyntax_Box: datum->syntax makes a box a syntax container whose
+// contents are syntax, as Racket does ((syntax-e (datum->syntax #'k (box 'foo)))
+// is #&#<syntax foo>). The atom shape it replaced left the contents raw, so a
+// #&x syntax-case pattern did not match it. A void box has nothing to unbox and
+// stays an atom.
+func TestDatumToSyntax_Box(t *testing.T) {
+	t.Parallel()
+
+	c := qt.New(t)
+	sctx := syntax.NewZeroValueSourceContext()
+	result, err := datumToSyntax(values.NewBox(values.NewSymbol("foo")), sctx)
+	c.Assert(err, qt.IsNil)
+	sb, ok := result.(*syntax.SyntaxBox)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("expected *SyntaxBox, got %T", result))
+	_, ok = sb.Value.(*syntax.SyntaxSymbol)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("expected *SyntaxSymbol contents, got %T", sb.Value))
+
+	var voidBox *values.Box
+	result, err = datumToSyntax(voidBox, sctx)
+	c.Assert(err, qt.IsNil)
+	_, ok = result.(*syntax.SyntaxObject)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("expected *SyntaxObject, got %T", result))
+}
+
 func TestBuilder_AddToRegistry(t *testing.T) {
 	t.Parallel()
 

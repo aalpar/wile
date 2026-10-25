@@ -48,6 +48,7 @@ func TestDatumToSyntaxRefusesCircularDatum(t *testing.T) {
 		{Name: "cdr-cycle", Code: `(let ((x (list 1))) (set-cdr! x x) (datum->syntax #f x))`},
 		{Name: "car-cycle", Code: `(let ((x (list 1))) (set-car! x x) (datum->syntax #f x))`},
 		{Name: "vector-self-reference", Code: `(let ((v (vector 0))) (vector-set! v 0 v) (datum->syntax #f v))`},
+		{Name: "box-self-reference", Code: `(let ((b (box 0))) (set-box! b b) (datum->syntax #f b))`},
 		// The cycle closes on the THIRD cell, not the head: a visited set that
 		// only remembered the entry point would walk straight past this.
 		{Name: "cycle-on-inner-cell", Code: `(let ((x (list 1 2 3))) (set-cdr! (cddr x) (cdr x)) (datum->syntax #f x))`},
