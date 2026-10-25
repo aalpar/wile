@@ -15,6 +15,7 @@
 package io
 
 import (
+	"context"
 	"errors"
 	"io"
 
@@ -225,6 +226,27 @@ func wrapReadFault(err error, msg string) error {
 	return werr.WrapForeignReadErrorf(err, "%s", msg)
 }
 
+// readSyntaxLocked reads the next datum from port's cached parser under the
+// port's read lock, and updates the cache in the same critical section: at end
+// of input (io.EOF, returned as is) and after a reader fault it evicts the
+// parser. The parser dies on any error, which is right for malformed input but
+// would make a transient stream fault permanent; evicted, the next read starts
+// on whatever the stream yields next. Holding the lock across the lookup, the
+// read and the eviction is what keeps another reader of the port from moving
+// it mid-datum or being handed an entry this read is about to evict.
+func readSyntaxLocked(ctx context.Context, st *State, port *values.PortObject, mk func() *parser.Parser) (syntax.SyntaxValue, error) {
+	port.LockReads()
+	defer port.UnlockReads()
+	q, err := st.readSyntaxCached(ctx, port, mk)
+	if err == nil {
+		return q, nil
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, tokenizer.NewTokenizerError(tokenizer.MessageReaderFailed)) {
+		evictPortCache(st, port)
+	}
+	return nil, err
+}
+
 // PrimRead implements the (read) primitive.
 // Reads a Scheme datum from port.
 // Reads from the current input port if no port is specified.
@@ -242,20 +264,12 @@ func PrimRead(mc machine.CallContext) error {
 	mkParser := func() *parser.Parser {
 		return newPortParser(mc, rr, port)
 	}
-	syn, err := st.readSyntaxCached(mc.Context(), port, mkParser)
+	syn, err := readSyntaxLocked(mc.Context(), st, port, mkParser)
+	if errors.Is(err, io.EOF) {
+		mc.SetValue(values.EOFObject)
+		return nil
+	}
 	if err != nil {
-		if errors.Is(err, io.EOF) {
-			// Port is exhausted; evict the cached parser.
-			evictPortCache(st, port)
-			mc.SetValue(values.EOFObject)
-			return nil
-		}
-		if errors.Is(err, tokenizer.NewTokenizerError(tokenizer.MessageReaderFailed)) {
-			// The parser dies on any error, which is right for malformed
-			// input but makes a transient stream fault permanent. Evict it so
-			// the next read starts on whatever the stream yields next.
-			evictPortCache(st, port)
-		}
 		return wrapReadFault(err, "error reading from input port")
 	}
 	// Use UnwrapAllShared to preserve object identity for datum labels (R7RS §2.4)
@@ -282,20 +296,12 @@ func PrimReadSyntax(mc machine.CallContext) error {
 	mkParser := func() *parser.Parser {
 		return newPortParser(mc, rr, port)
 	}
-	q, err := st.readSyntaxCached(mc.Context(), port, mkParser)
+	q, err := readSyntaxLocked(mc.Context(), st, port, mkParser)
+	if errors.Is(err, io.EOF) {
+		mc.SetValue(values.EOFObject)
+		return nil
+	}
 	if err != nil {
-		if errors.Is(err, io.EOF) {
-			// Port is exhausted; evict the cached parser.
-			evictPortCache(st, port)
-			mc.SetValue(values.EOFObject)
-			return nil
-		}
-		if errors.Is(err, tokenizer.NewTokenizerError(tokenizer.MessageReaderFailed)) {
-			// The parser dies on any error, which is right for malformed
-			// input but makes a transient stream fault permanent. Evict it so
-			// the next read starts on whatever the stream yields next.
-			evictPortCache(st, port)
-		}
 		return wrapReadFault(err, "error reading syntax from input port")
 	}
 	mc.SetValue(q)
@@ -306,10 +312,12 @@ func PrimReadSyntax(mc machine.CallContext) error {
 // R7RS §6.13.2: (read-char [port])
 // Reads and returns a single character from the input port.
 func PrimReadChar(mc machine.CallContext) error {
-	_, rr, err := getOptionalInputPort(mc, 0)
+	port, rr, err := getOptionalInputPort(mc, 0)
 	if err != nil {
 		return err
 	}
+	port.LockReads()
+	defer port.UnlockReads()
 
 	r, _, err := rr.ReadRune()
 	if errors.Is(err, io.EOF) {
@@ -331,6 +339,10 @@ func PrimPeekChar(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
+	// The read and the unread are one step: another reader between them would
+	// have its rune unread instead.
+	port.LockReads()
+	defer port.UnlockReads()
 
 	r, _, err := rr.ReadRune()
 	if errors.Is(err, io.EOF) {
@@ -360,6 +372,8 @@ func PrimReadLine(mc machine.CallContext) error {
 	if err != nil {
 		return err
 	}
+	port.LockReads()
+	defer port.UnlockReads()
 	urr, _ := port.AsRuneUnreader()
 
 	var line []rune
@@ -447,10 +461,12 @@ func PrimReadString(mc machine.CallContext) error {
 		)
 	}
 
-	_, rr, err := getOptionalInputPort(mc, 1)
+	port, rr, err := getOptionalInputPort(mc, 1)
 	if err != nil {
 		return err
 	}
+	port.LockReads()
+	defer port.UnlockReads()
 
 	// Read up to k characters
 	chars := make([]rune, 0, k.Value)

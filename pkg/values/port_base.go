@@ -17,6 +17,8 @@ package values
 import (
 	"fmt"
 	"io"
+	"sync"
+	"sync/atomic"
 
 	"github.com/aalpar/wile/pkg/werr"
 )
@@ -51,7 +53,10 @@ const (
 //   - Flush-before-close is handled by (*PortObject).Close via the flsh
 //     slot (see flushThenClose), not by overriding this method.
 type portBase struct {
-	closed bool
+	// closed is atomic because close-port takes no read lock: a close parked
+	// behind a read blocked on a pipe or stdin would never run. A read racing a
+	// close sees one answer or the other, never a torn flag.
+	closed atomic.Bool
 	clsr   io.Closer
 	kind   string
 	datum  any
@@ -76,13 +81,22 @@ type portBase struct {
 	// needs it to tell the '\n' of a CRLF pair from a bare one. posBefore and
 	// lastBefore are the same pair one read earlier, which is exactly what
 	// UnreadRune restores; the io.RuneScanner contract allows one rune of
-	// unread, so one step of history is the whole of it.
+	// unread, so one step of history is the whole of it. canUnread says whether
+	// that step is still unspent: set by a read that yielded a rune, cleared by
+	// a read that did not and by an unread, so a second unread in a row is
+	// refused here whatever the underlying reader allows.
 	//
-	// Not synchronised: read-char takes no per-port lock, so two threads
-	// reading one port race here as they race on the stream itself (see
-	// ReadPosition).
+	// Not synchronised itself: the read primitives hold readMu for the whole
+	// call (LockReads), which covers the stream, this counter and the cached
+	// reader together.
 	pos, posBefore   SourceIndexes
 	last, lastBefore rune
+	canUnread        bool
+
+	// readMu serialises reads on the port. It lives on the port, not in the
+	// guarded slots, because the tokenizer reads through those slots while a
+	// read primitive already holds it.
+	readMu sync.Mutex
 }
 
 // portOrigin is where a port's first rune stands: index 0, column 0, line 1
@@ -104,6 +118,7 @@ func (p *portBase) consumed(r rune, n int) {
 	p.posBefore, p.lastBefore = p.pos, p.last
 	p.pos = AdvanceIndexes(p.pos, p.last, r, n)
 	p.last = r
+	p.canUnread = true
 }
 
 // unconsumed undoes the most recent consumed. The caller has already seen the
@@ -111,20 +126,20 @@ func (p *portBase) consumed(r rune, n int) {
 func (p *portBase) unconsumed() {
 	p.pos = p.posBefore
 	p.last = p.lastBefore
+	p.canUnread = false
 }
 
 // IsClosed returns true if the port has been closed.
 func (p *portBase) IsClosed() bool {
-	return p.closed
+	return p.closed.Load()
 }
 
 // Close marks the port as closed and, if a closer was provided,
 // closes the underlying stream. Close is idempotent.
 func (p *portBase) Close() error {
-	if p.closed {
+	if !p.closed.CompareAndSwap(false, true) {
 		return nil
 	}
-	p.closed = true
 	if p.clsr != nil {
 		return p.clsr.Close()
 	}
@@ -145,7 +160,7 @@ func (p *portBase) setCloser(v any) {
 // port is closed. I/O methods call this at the top to reject operations on
 // closed ports; naming the operation is their wrap, not this one.
 func (p *portBase) guardClosed() error {
-	if !p.closed {
+	if !p.closed.Load() {
 		return nil
 	}
 	if p.srcName == "" {

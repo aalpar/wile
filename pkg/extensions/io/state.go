@@ -41,9 +41,10 @@ type State struct {
 	inPort, outPort, errPort *machine.Parameter
 
 	// mu protects the parsers cache map — get-or-create and evict only. It is
-	// never held across a read: a read runs under the per-port entry lock
-	// (parserEntry.mu), so a blocking read on one port neither serialises other
-	// ports nor freezes the engine's I/O.
+	// never held across a read: a read runs under the port's own read lock
+	// (values.PortObject.LockReads), so a blocking read on one port neither
+	// serialises other ports nor freezes the engine's I/O. The order is the
+	// port's read lock, then mu.
 	mu sync.Mutex
 	// parsers caches parsers per input port. Entries are evicted via
 	// evictPortCache() on port close or EOF. Ports abandoned without close or EOF
@@ -51,16 +52,13 @@ type State struct {
 	parsers map[values.Value]*parserEntry
 }
 
-// parserEntry pairs a port's cached parser with a mutex that serialises reads
-// on that port. A port's read position is a causal chain — two concurrent reads
-// cannot both yield coherent data — so reads on one port serialise on entry.mu,
-// held across the whole ReadSyntax call. Reads on DIFFERENT ports take different
-// entry locks and never contend. The parser is constructed lazily under entry.mu
-// (its tokenizer reads the first rune on the first read, so construction is
-// itself I/O that must stay off State.mu). Fixes the reviews/2026-07-13 §4 finding where the
-// shared parser was driven outside any per-port lock.
+// parserEntry is a port's cached parser and the state that decides whether it
+// may continue. Its fields are touched only under the port's read lock, which
+// every read primitive holds for its whole call (readSyntaxLocked), so reads
+// on one port serialise and reads on DIFFERENT ports never contend. The parser
+// is constructed lazily under that lock (its tokenizer reads the first rune on
+// the first read, so construction is itself I/O that must stay off State.mu).
 type parserEntry struct {
-	mu     sync.Mutex
 	parser *parser.Parser
 	mk     func() *parser.Parser // constructor; nil once parser is built
 
@@ -265,13 +263,12 @@ func resolveCurrentInputPort(cc machine.CallContext) (*values.PortObject, error)
 	return currentTextualInputPort("current-input-port", v)
 }
 
-// readSyntaxCached returns the next datum from the port's cached parser. It
-// get-or-creates the port's entry under State.mu (no I/O), then holds that
-// entry's lock across the whole ReadSyntax call so two threads reading one port
-// serialise on a single parser instead of racing its fields and datum-label map.
-// The parser is built lazily under the entry lock (its tokenizer reads the first
-// rune on the first read), so State.mu is never held across a read. First-creator's mk wins,
-// matching the pre-fix "first read constructs the cached parser" behaviour.
+// readSyntaxCached returns the next datum from the port's cached parser. The
+// caller holds the port's read lock (readSyntaxLocked), so the entry, the
+// stream and the port's position move only under it. It get-or-creates the
+// port's entry under State.mu (no I/O); the parser is built lazily outside
+// State.mu (its tokenizer reads the first rune on the first read), so State.mu
+// is never held across a read.
 //
 // The cache holds reader state that outlives one datum (fold-case mode, source
 // positions, the dead flag), never input: after each datum the tokenizer's
@@ -286,8 +283,6 @@ func (p *State) readSyntaxCached(ctx context.Context, port *values.PortObject, m
 	}
 	p.mu.Unlock()
 
-	entry.mu.Lock()
-	defer entry.mu.Unlock()
 	if entry.parser == nil {
 		entry.parser = entry.mk()
 		entry.mk = nil
@@ -296,10 +291,9 @@ func (p *State) readSyntaxCached(ctx context.Context, port *values.PortObject, m
 		// The tokenizer still holds a lookahead rune, so it cannot be repositioned.
 		// That is right only if the port refused the rune back and has not moved
 		// since: the held rune is then still the next one and is the only copy.
-		// Otherwise the port has moved past it (another reader took characters), or
-		// a thread that waited on this entry saw it evicted, and the parser's
-		// positions are stale; reader state that outlives a datum (fold-case mode)
-		// is lost with it.
+		// Otherwise the port has moved past it (read-char and friends took
+		// characters since), and the parser's positions are stale; reader state
+		// that outlives a datum (fold-case mode) is lost with it.
 		at, _ := port.ReadPosition()
 		if !entry.held || at != entry.heldAt {
 			entry.parser = mk()

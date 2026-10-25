@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`values.(*PortObject).LockReads` and `UnlockReads`.** The port's read
+  lock, which every read primitive holds for one call: the stream, the port's
+  read position and the reader cached against it move together. A Go consumer
+  that reads a port shared with Scheme threads takes it the same way.
+
 - **`values.SourceContext.FileIsPath`, `parser.(*Parser).SetFileIsPath`,
   `values.(*PortObject).SetPortNameIsPath` and `PortNameIsPath`.** A reader
   marks the contexts it builds when its file name is a location it opened (an
@@ -132,6 +137,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Two threads reading one textual port no longer race.** `read-char`,
+  `peek-char`, `read-line` and `read-string` took no lock, and `read` and
+  `read-syntax` serialised only against each other, so a `read-char` thread
+  beside a `read-syntax` thread raced on the stream and its position counter
+  (`go test -race`) and could return a datum or a line spliced from
+  non-adjacent text (`"ef"` from the lines `e` and `f`). The binary readers
+  (`read-u8`, `peek-u8`, `read-bytevector`, `read-bytevector!`) took no lock
+  either: two `read-u8` threads draining 20000 bytes counted 15906. Every read
+  primitive now holds the port's read lock for the whole call. A port also refuses a second `UnreadRune` in a row itself
+  (`bufio.ErrInvalidUnreadRune`), whatever its Go reader allows, so the
+  counted position cannot run ahead of the stream; and `close-port` racing a
+  read is no longer a data race on the closed flag. A read that a close
+  interrupts inside the stream (a pipe read blocked when the port closes)
+  reports the closed port, not a read error, as a read started after the close
+  does: it was `read-char: error reading character: read |0: file already
+  closed` with `read-error?` true.
+
 - **A source that opens with a UTF-8 byte order mark reads.** A file an editor
   saved with a BOM failed at 1:0 with "unknown token type ... character U+FEFF"
   under `wile file.scm`, `-f`, `load`, `include`, `include-ci`, library import,
@@ -156,6 +178,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   context carries thread 0); the driver now refuses a segment captured in
   another thread with `ErrCrossThreadContinuation`, as a direct `(k v)` from the
   thread is refused. (Go API: `MachineContext.RunHostCall` added.)
+
 - **A use-site identifier inside a box loses a macro's intro scope.**
   `AddScope` descended into a syntax box but `FlipScope` and the expander's
   stamp walk did not, and `AddScopeToSyntax` skipped a top-level box, so an

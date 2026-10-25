@@ -121,9 +121,9 @@ func TestConcurrentMapAccess_T1(t *testing.T) {
 // p.cur/p.err/p.toks and an UNRECOVERABLE "fatal error: concurrent map writes"
 // on the lazily-allocated p.datumLabels. Unlike TestConcurrentMapAccess_T1
 // above (which exercises only map get-or-create/evict), this drives concurrent
-// ReadSyntax on a single shared cache entry — the actual finding. readSyntaxCached
-// now holds a per-port lock across the whole ReadSyntax call, serialising reads
-// on one port. Run under -race; must stay green.
+// ReadSyntax on a single shared cache entry — the actual finding. readSyntaxLocked
+// holds the port's read lock across the lookup, the ReadSyntax call and the
+// eviction, serialising reads on one port. Run under -race; must stay green.
 func TestConcurrentReadSyntaxSamePort_T1_1(t *testing.T) {
 	st := NewState(nil)
 	// Datum labels force the lazy p.datumLabels map allocation on every read,
@@ -139,7 +139,7 @@ func TestConcurrentReadSyntaxSamePort_T1_1(t *testing.T) {
 	for range 2 {
 		wg.Go(func() {
 			for {
-				_, err := st.readSyntaxCached(context.Background(), port, mk)
+				_, err := readSyntaxLocked(context.Background(), st, port, mk)
 				if err != nil {
 					return
 				}

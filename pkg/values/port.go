@@ -156,15 +156,35 @@ func (p *PortObject) PortNameIsPath() bool {
 // through AsReader on a textual port bypasses the counter. A port that has read
 // nothing, a port with no rune reader, and a nil port all stand at the origin.
 //
-// The counter is not synchronised. Two readers racing on one port already race
-// on the stream itself; what is new is that the position, three ints copied
-// without a lock, can be torn, and a cached tokenizer seeked to a torn position
-// reports a location the port never held.
+// The counter takes no lock of its own: a caller that shares the port across
+// goroutines reads it under LockReads, as the read primitives do.
 func (p *PortObject) ReadPosition() (SourceIndexes, rune) {
 	if p == nil {
 		return portOrigin(), 0
 	}
 	return p.position(), p.last
+}
+
+// LockReads takes the port's read lock, which serialises every read of the
+// port: the stream, its read position and any reader state cached against it
+// move together, so a read that holds the lock for its whole duration sees no
+// other reader's runes. The read primitives hold it for one call each. It is
+// not reentrant, and the guarded rune reader does not take it, so a reader
+// built over the port (the tokenizer) reads freely while its caller holds it.
+// Writes and Close do not take it. Nil-safe: a nil port has nothing to lock.
+func (p *PortObject) LockReads() {
+	if p == nil {
+		return
+	}
+	p.readMu.Lock()
+}
+
+// UnlockReads releases the lock LockReads took. Nil-safe.
+func (p *PortObject) UnlockReads() {
+	if p == nil {
+		return
+	}
+	p.readMu.Unlock()
 }
 
 // Close flushes (if a flusher is present) and closes the port. Close
