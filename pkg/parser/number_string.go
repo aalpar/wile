@@ -440,3 +440,108 @@ func MakeInexactNumber(n values.Number) values.Number {
 		return n // Float, BigFloat, Complex are already inexact
 	}
 }
+
+// WidenToBigInteger is the value half of the reader's #z introducer
+// (Parser.widenToBigInteger), shared with string->number so the two cannot
+// disagree on what #z accepts: an exact integer, widened to BigInteger. Anything
+// else, including an inexact integer (#z#i1) and a non-number, is an
+// ErrNotANumber naming the type.
+func WidenToBigInteger(v values.Value) (values.Number, error) {
+	switch v := v.(type) {
+	case *values.BigInteger:
+		return v, nil
+	case *values.Integer:
+		return values.NewBigIntegerFromInt64(v.Value), nil
+	default:
+		return nil, werr.WrapForeignErrorf(werr.ErrNotANumber,
+			"WidenToBigInteger: #z requires an exact integer datum, got %T", v)
+	}
+}
+
+// WidenToBigFloat is the value half of the reader's #m introducer
+// (Parser.widenToBigFloat, which documents the precision rule), shared with
+// string->number. A complex number has no BigFloat image and is an
+// ErrNotANumber, as is a non-number; an exact operand too wide for
+// MaxBigFloatLiteralPrecision is an ErrInvalidFormat.
+func WidenToBigFloat(v values.Value) (values.Number, error) {
+	switch v := v.(type) {
+	case *values.BigFloat:
+		return v, nil
+	case *values.Float:
+		return values.NewBigFloatFromFloat64(v.Value), nil
+	case *values.Integer:
+		bf := new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetInt64(v.Value)
+		return values.NewBigFloat(bf), nil
+	case *values.BigInteger:
+		n := v.BigInt()
+		prec := max(uint(values.DefaultBigFloatPrecision), uint(n.BitLen()))
+		if prec > values.MaxBigFloatLiteralPrecision {
+			return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
+				"WidenToBigFloat: #m operand needs %d bits, past the %d-bit limit", prec, values.MaxBigFloatLiteralPrecision)
+		}
+		return values.NewBigFloat(new(big.Float).SetPrec(prec).SetInt(n)), nil
+	case *values.Rational:
+		r := v.Rat()
+		bits := max(r.Num().BitLen(), r.Denom().BitLen())
+		prec := max(uint(values.DefaultBigFloatPrecision), uint(bits))
+		if prec > values.MaxBigFloatLiteralPrecision {
+			return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
+				"WidenToBigFloat: #m operand needs %d bits, past the %d-bit limit", prec, values.MaxBigFloatLiteralPrecision)
+		}
+		return values.NewBigFloat(new(big.Float).SetPrec(prec).SetRat(r)), nil
+	default:
+		return nil, werr.WrapForeignErrorf(werr.ErrNotANumber,
+			"WidenToBigFloat: #m requires a real datum, got %T", v)
+	}
+}
+
+// ParseBigFloatLiteral converts the digits of a one-token #m numeral (the text
+// after "#m"), keeping every digit the literal spells, which is what separates
+// #m1.2345678901234567890123456789 from #m applied to a float64. Shared by the
+// reader (Parser.parseBigFloat) and string->number.
+//
+// The tokenizer admits two spellings big.ParseFloat does not: an <infnan>
+// (#m+inf.0), converted through float64, whose NaN NewBigFloatFromFloat64 maps
+// to the BigFloat NaN flag; and the short exponent markers s/f/d/l, which mean
+// e (R7RS §7.1.1) and are folded to it. Text the tokenizer would not scan as
+// #m digits (1p3, inf, 1_0, all of which big.ParseFloat takes) is refused, so
+// a caller without a tokenizer in front cannot read what the reader cannot.
+func ParseBigFloatLiteral(s string) (values.Number, error) {
+	if !IsNumeral("#m", s) {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "big float literal: not #m digits: %s", s)
+	}
+	special, ok := ParseSpecialFloat(s)
+	if ok {
+		return values.NewBigFloatFromFloat64(special.Value), nil
+	}
+	q := values.NewBigFloatFromString(schemeutil.NormalizeExponentMarker(s))
+	if q == nil {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
+			"big float literal: malformed, or past the %d-bit precision limit: %s", values.MaxBigFloatLiteralPrecision, s)
+	}
+	return q, nil
+}
+
+// ParsePolarStringNumber parses a polar complex numeral ("1@1.5708", "-3@1.0")
+// and converts it to rectangular form, real = r*cos(θ) and imag = r*sin(θ).
+// Shared by the reader (Parser.parsePolarComplex) and string->number. Text
+// that is not a decimal numeral (0x1p3@0, nan@0) is refused: the parts are
+// converted by strconv, which takes Go spellings the tokenizer does not.
+func ParsePolarStringNumber(s string) (*values.Complex, error) {
+	if !IsNumeral("#d", s) {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "polar complex: not a decimal numeral: %s", s)
+	}
+	magPart, anglePart, ok := strings.Cut(s, "@")
+	if !ok {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "polar complex: no @ separator: %s", s)
+	}
+	mag, err := parseFloatOrInfnan(magPart)
+	if err != nil {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "polar complex: invalid magnitude: %s", magPart)
+	}
+	angle, err := parseFloatOrInfnan(anglePart)
+	if err != nil {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "polar complex: invalid angle: %s", anglePart)
+	}
+	return values.NewComplexFromParts(mag*math.Cos(angle), mag*math.Sin(angle)), nil
+}

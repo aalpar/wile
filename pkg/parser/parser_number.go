@@ -16,6 +16,7 @@ package parser
 
 import (
 	"errors"
+	"io"
 	"math"
 	"math/big"
 	"strconv"
@@ -188,15 +189,7 @@ func (p *Parser) parseBigIntegerWithBase(base int) (syntax.SyntaxValue, tokenize
 // container introducer #& gives #&#&5 two boxes deep. That falls out of the
 // BigInteger arm being the identity.
 func (p *Parser) widenToBigInteger(stx syntax.SyntaxValue, _ tokenizer.Token) (syntax.SyntaxValue, error) {
-	switch v := stx.Unwrap().(type) {
-	case *values.BigInteger:
-		return stx, nil
-	case *values.Integer:
-		return p.rewrapSyntax(stx, values.NewBigIntegerFromInt64(v.Value)), nil
-	default:
-		return nil, werr.WrapForeignErrorf(werr.ErrNotANumber,
-			"widenToBigInteger: #z requires an exact integer datum, got %T", v)
-	}
+	return p.widenWrappedNumber(stx, WidenToBigInteger)
 }
 
 // widenToBigFloat implements #m as a datum introducer, the inexact counterpart
@@ -215,37 +208,18 @@ func (p *Parser) widenToBigInteger(stx syntax.SyntaxValue, _ tokenizer.Token) (s
 // notation. Precision beyond float64 is available through the unprefixed decimal
 // spelling or the l marker.
 func (p *Parser) widenToBigFloat(stx syntax.SyntaxValue, _ tokenizer.Token) (syntax.SyntaxValue, error) {
-	switch v := stx.Unwrap().(type) {
-	case *values.BigFloat:
-		return stx, nil
-	case *values.Float:
-		return p.rewrapSyntax(stx, values.NewBigFloatFromFloat64(v.Value)), nil
-	case *values.Integer:
-		bf := new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetInt64(v.Value)
-		return p.rewrapSyntax(stx, values.NewBigFloat(bf)), nil
-	case *values.BigInteger:
-		n := v.BigInt()
-		prec := max(uint(values.DefaultBigFloatPrecision), uint(n.BitLen()))
-		if prec > values.MaxBigFloatLiteralPrecision {
-			return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
-				"widenToBigFloat: #m operand needs %d bits, past the %d-bit limit", prec, values.MaxBigFloatLiteralPrecision)
-		}
-		bf := new(big.Float).SetPrec(prec).SetInt(n)
-		return p.rewrapSyntax(stx, values.NewBigFloat(bf)), nil
-	case *values.Rational:
-		r := v.Rat()
-		bits := max(r.Num().BitLen(), r.Denom().BitLen())
-		prec := max(uint(values.DefaultBigFloatPrecision), uint(bits))
-		if prec > values.MaxBigFloatLiteralPrecision {
-			return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
-				"widenToBigFloat: #m operand needs %d bits, past the %d-bit limit", prec, values.MaxBigFloatLiteralPrecision)
-		}
-		bf := new(big.Float).SetPrec(prec).SetRat(r)
-		return p.rewrapSyntax(stx, values.NewBigFloat(bf)), nil
-	default:
-		return nil, werr.WrapForeignErrorf(werr.ErrNotANumber,
-			"widenToBigFloat: #m requires a real datum, got %T", v)
+	return p.widenWrappedNumber(stx, WidenToBigFloat)
+}
+
+// widenWrappedNumber applies a #z/#m widening to a syntax-wrapped datum. Unlike
+// convertWrappedNumber it hands over a non-number too, so the widening's
+// diagnostic names the operand's type (#z"a").
+func (p *Parser) widenWrappedNumber(stx syntax.SyntaxValue, widen func(values.Value) (values.Number, error)) (syntax.SyntaxValue, error) {
+	q, err := widen(stx.Unwrap())
+	if err != nil {
+		return nil, err
 	}
+	return p.rewrapSyntax(stx, q), nil
 }
 
 // parseScientificNotation parses a number in scientific notation (e.g., "1e10", "+2e-5").
@@ -383,7 +357,17 @@ func (p *Parser) parseRadixNumeral(base int) (syntax.SyntaxValue, tokenizer.Toke
 // parse (#x1+2i): the rule is about the operand being a numeral, and a numeral
 // that fails is reported by its own parser.
 func (p *Parser) requireRadixNumeral() error {
-	switch p.cur.Type() {
+	if isNumeralState(p.cur.Type()) {
+		return nil
+	}
+	return NewParserErrorWithWrapf(werr.ErrNotANumber, p.cur,
+		"radix prefix requires a numeral, not %q", p.cur.String())
+}
+
+// isNumeralState reports whether t is the state of a numeral token, the operand
+// a radix prefix requires.
+func isNumeralState(t tokenizer.TokenizerState) bool {
+	switch t {
 	case tokenizer.TokenizerStateUnsignedInteger, tokenizer.TokenizerStateSignedInteger,
 		tokenizer.TokenizerStateUnsignedDecimalFraction, tokenizer.TokenizerStateSignedDecimalFraction,
 		tokenizer.TokenizerStateUnsignedRationalFraction, tokenizer.TokenizerStateSignedRationalFraction,
@@ -394,10 +378,91 @@ func (p *Parser) requireRadixNumeral() error {
 		tokenizer.TokenizerStateUnsignedImaginaryNan, tokenizer.TokenizerStateSignedImaginaryNan,
 		tokenizer.TokenizerStateUnsignedComplex, tokenizer.TokenizerStateSignedComplex,
 		tokenizer.TokenizerStateUnsignedComplexPolar, tokenizer.TokenizerStateSignedComplexPolar:
-		return nil
+		return true
 	}
-	return NewParserErrorWithWrapf(werr.ErrNotANumber, p.cur,
-		"radix prefix requires a numeral, not %q", p.cur.String())
+	return false
+}
+
+// IsNumeral reports whether text is one whole numeral as the reader's tokenizer
+// scans it after prefix: a radix prefix ("#b", "#o", "#d", "#x"), which scans
+// text as the radix's numeral, or "#z"/"#m", which scans text as the digits
+// attached to that marker. It is the lexical half of the reader's number
+// syntax, for string->number, which has no tokenizer in front of it: the
+// conversions it shares with the reader are built on strconv and math/big,
+// which also accept Go spellings (0x1p3, 1_0, nan, 1/-2) that the tokenizer
+// never forms.
+//
+// The prefix is what makes "whole" checkable: a numeral after an explicit radix
+// prefix, or attached to #z/#m, must end at a delimiter, so a trailing fault
+// surfaces as a tokenizer error instead of a second token. The text comparison
+// rejects intertoken space and comments the token boundary would hide.
+func IsNumeral(prefix, text string) bool {
+	if isPlainInteger(text, prefixRadix[prefix]) {
+		return true
+	}
+	src := prefix + text
+	toks := tokenizer.NewTokenizer(strings.NewReader(src), false)
+	tok, err := toks.Next()
+	if err != nil {
+		return false
+	}
+	switch tok.Type() {
+	case tokenizer.TokenizerStateBigInteger, tokenizer.TokenizerStateBigFloat:
+		return text != "" && tok.String() == src && atEnd(toks)
+	}
+	// The first token is the radix marker; the numeral is the second.
+	tok, err = toks.Next()
+	if err != nil {
+		return false
+	}
+	return isNumeralState(tok.Type()) && tok.String() == text && atEnd(toks)
+}
+
+// prefixRadix maps a radix prefix to its radix; #z, #m and anything else map
+// to 0, which isPlainInteger refuses.
+var prefixRadix = map[string]int{"#b": 2, "#o": 8, "#d": 10, "#x": 16}
+
+// isPlainInteger reports whether s is an optionally signed run of radix digits:
+// the numeral string->number sees most, answered without building a tokenizer
+// (which costs eight allocations). Every such run scans as one integer token,
+// so this is a shortcut of the tokenizer's answer, not a second grammar.
+func isPlainInteger(s string, radix int) bool {
+	if radix == 0 {
+		return false
+	}
+	if s != "" && (s[0] == '+' || s[0] == '-') {
+		s = s[1:]
+	}
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		d := digitValue(s[i])
+		if d < 0 || d >= radix {
+			return false
+		}
+	}
+	return true
+}
+
+// digitValue is the value of an ASCII digit or letter digit, or -1.
+func digitValue(c byte) int {
+	switch {
+	case '0' <= c && c <= '9':
+		return int(c - '0')
+	case 'a' <= c && c <= 'f':
+		return int(c-'a') + 10
+	case 'A' <= c && c <= 'F':
+		return int(c-'A') + 10
+	}
+	return -1
+}
+
+// atEnd reports whether toks has nothing left but a clean end of input; a
+// pending fault (a numeral that did not end at a delimiter) is not one.
+func atEnd(toks *tokenizer.Tokenizer) bool {
+	_, err := toks.Next()
+	return errors.Is(err, io.EOF)
 }
 
 // parseRational parses a rational number string like "3/4" or "-1/2".
@@ -428,36 +493,14 @@ func (p *Parser) parseImaginary(s string) (values.Number, error) {
 	return q, nil
 }
 
-// parsePolarComplex parses a polar complex number string like "1@1.5708", "+2@0.5", "-3@1.0"
-// and converts it to rectangular form using: real = r*cos(θ), imag = r*sin(θ)
+// parsePolarComplex parses a polar complex number token's text, wrapping
+// ParsePolarStringNumber's reject with the token's location.
 func (p *Parser) parsePolarComplex(s string) (*values.Complex, error) {
-	// Find the @ separator
-	before, after, ok := strings.Cut(s, "@")
-	if !ok {
-		return nil, NewParserErrorf(p.cur, "invalid polar complex number: %s (no @ separator found)", s)
-	}
-
-	// Split into magnitude and angle parts
-	magPart := before
-	anglePart := after
-
-	// Parse magnitude
-	mag, err := parseFloatOrInfnan(magPart)
+	q, err := ParsePolarStringNumber(s)
 	if err != nil {
-		return nil, NewParserErrorf(p.cur, "invalid magnitude in polar complex: %s", magPart)
+		return nil, NewParserErrorWithWrapf(err, p.cur, "invalid polar complex number: %s", s)
 	}
-
-	// Parse angle
-	angle, err := parseFloatOrInfnan(anglePart)
-	if err != nil {
-		return nil, NewParserErrorf(p.cur, "invalid angle in polar complex: %s", anglePart)
-	}
-
-	// Convert polar to rectangular: real = r*cos(θ), imag = r*sin(θ)
-	rel := mag * math.Cos(angle)
-	iam := mag * math.Sin(angle)
-
-	return values.NewComplexFromParts(rel, iam), nil
+	return q, nil
 }
 
 // isRationalString reports whether s has the coarse shape of a rational literal:
@@ -680,22 +723,11 @@ func (p *Parser) parseDecimalFractionWithBase(base int) (syntax.SyntaxValue, tok
 }
 
 // parseBigFloat parses a big float token (e.g., "#m1.23456789012345678901234567890").
-//
-// The tokenizer admits two spellings big.ParseFloat does not: an <infnan>
-// (#m+inf.0), converted through float64, whose NaN NewBigFloatFromFloat64 maps
-// to the BigFloat NaN flag; and the short exponent markers s/f/d/l, which mean
-// e (R7RS §7.1.1) and are folded to it.
+// The conversion is ParseBigFloatLiteral, shared with string->number.
 func (p *Parser) parseBigFloat() (syntax.SyntaxValue, tokenizer.Token, error) {
-	s := schemeutil.TrimPrefixCI(p.cur.String(), "#m")
-	special, ok := ParseSpecialFloat(s)
-	if ok {
-		q := p.wrapSyntax(values.NewBigFloatFromFloat64(special.Value), p.cur)
-		return q, p.cur, nil
-	}
-	q1 := values.NewBigFloatFromString(schemeutil.NormalizeExponentMarker(s))
-	if q1 == nil {
-		return nil, p.cur, NewParserErrorWithWrapf(werr.ErrInvalidFormat, p.cur,
-			"invalid big float (malformed, or past the %d-bit precision limit): %s", values.MaxBigFloatLiteralPrecision, p.cur.String())
+	q1, err := ParseBigFloatLiteral(schemeutil.TrimPrefixCI(p.cur.String(), "#m"))
+	if err != nil {
+		return nil, p.cur, NewParserErrorWithWrap(err, p.cur, "invalid big float")
 	}
 	q := p.wrapSyntax(q1, p.cur)
 	return q, p.cur, nil

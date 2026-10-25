@@ -314,15 +314,7 @@ func (p *Tokenizer) readSignedInfinity(r int) bool {
 	}
 	p.state = TokenizerStateSignedInf
 	if isExplicitSign(p.curr()) {
-		// +inf.0+2i — rectangular complex with an <infnan> real part.
-		p.state = TokenizerStateSignedComplex
-		p.next()
-		if p.err != nil {
-			return false
-		}
-		p.mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r) //nolint:errcheck
-		p.mayConsumeImaginarySuffix()
-		return p.atNumberEnd()
+		return p.readInfnanRealComplex(r)
 	}
 	if isComplexPolar(p.curr()) {
 		// +inf.0@1 — <infnan> is a <real R>, so it is a legal polar magnitude.
@@ -343,6 +335,9 @@ func (p *Tokenizer) readSignedNan(r int) bool {
 		return false
 	}
 	p.state = TokenizerStateSignedNan
+	if isExplicitSign(p.curr()) {
+		return p.readInfnanRealComplex(r)
+	}
 	if isComplexPolar(p.curr()) {
 		// +nan.0@1 — see readSignedInfinity.
 		p.state = TokenizerStateSignedComplexPolar
@@ -352,6 +347,21 @@ func (p *Tokenizer) readSignedNan(r int) bool {
 	if p.mayConsumeImaginarySuffix() {
 		p.state = TokenizerStateSignedImaginaryNan
 	}
+	return p.atNumberEnd()
+}
+
+// readInfnanRealComplex scans the imaginary part of a rectangular complex whose
+// real part is an <infnan> (+inf.0+2i, +nan.0-i), entered on the sign. Both
+// infinities and NaNs are a <real R>, so both take this tail; NaN lacking it
+// made `+nan.0+1i` the symbol |+nan.0+1i|. Reports whether the run is a number.
+func (p *Tokenizer) readInfnanRealComplex(r int) bool {
+	p.state = TokenizerStateSignedComplex
+	p.next()
+	if p.err != nil {
+		return false
+	}
+	p.mayReadUnsignedFractionalRealNumberOrRationalRealNumber(r) //nolint:errcheck
+	p.mayConsumeImaginarySuffix()
 	return p.atNumberEnd()
 }
 
@@ -411,10 +421,21 @@ func (p *Tokenizer) readIntegerAndFraction(signed bool, r int) {
 		p.readSignedComplexSuffix(r)
 		return
 	}
-	switch {
-	case isImaginary(p.curr()):
+	if isImaginary(p.curr()) {
 		p.state = TokenizerStateUnsignedImaginary
 		p.next()
+		return
+	}
+	p.readUnsignedComplexSuffix(r)
+}
+
+// readUnsignedComplexSuffix scans what may follow an unsigned real: a signed
+// imaginary part (1+2i) or a polar angle (1@0). Shared by the integer-led and
+// the dot-led real (.5+.5i), which used to stop after its fraction and leave
+// the imaginary part as a second datum. The bare imaginary suffix (1i) is not
+// here: R7RS has no unsigned imaginary, and only the integer-led real accepts it.
+func (p *Tokenizer) readUnsignedComplexSuffix(r int) {
+	switch {
 	case isExplicitSign(p.curr()):
 		p.state = TokenizerStateUnsignedComplex
 		p.next() // consume sign
@@ -479,6 +500,10 @@ func (p *Tokenizer) readConsOrDecimalFractionWithExponent(r int) {
 		return
 	}
 	p.mayReadExponent(r) //nolint:errcheck
+	if p.err != nil {
+		return
+	}
+	p.readUnsignedComplexSuffix(r)
 }
 
 // readUnsignedFractionalRealNumberOrImaginaryNumberOrRationalRealNumber parses numeric literals.
@@ -686,6 +711,31 @@ func (p *Tokenizer) mayReadSignedImaginaryPart(r int) {
 	} else if p.curr() == 'n' {
 		// Check for +nan.0i or -nan.0i
 		p.requireSpecialNumber("nan", r, MessageExpectingNan)
+		if p.err != nil {
+			return
+		}
+		p.mayConsumeImaginarySuffix()
+		return
+	}
+
+	// A coefficient may begin with its point (+1+.5i), as the unsigned real
+	// before it may; the point commits to a fraction, so a missing digit is a
+	// fault here rather than a token boundary.
+	if isDot(p.curr()) {
+		p.next()
+		if p.err != nil {
+			p.failWrap(p.err, MessageExpectingDecimalFraction)
+			return
+		}
+		if !isDigit(r, p.curr()) {
+			p.fail(MessageExpectingDecimalFraction)
+			return
+		}
+		p.readDigitsAndHash(r)
+		if p.err != nil {
+			return
+		}
+		p.mayReadExponent(r) //nolint:errcheck
 		if p.err != nil {
 			return
 		}

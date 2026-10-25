@@ -112,7 +112,8 @@ func PrimNumberToString(mc machine.CallContext) error {
 //
 // R7RS §7.1.1: The string may contain prefix directives #b, #o, #d, #x
 // (radix) and #e, #i (exactness), in either order, up to one of each.
-// A radix prefix in the string overrides the radix argument.
+// A radix prefix in the string overrides the radix argument. Wile's #z and #m
+// read as they do in a literal; see parsePrefixedNumber.
 func PrimStringToNumber(mc machine.CallContext) error {
 	s := mc.Arg(0)
 	rest := mc.Arg(1)
@@ -135,71 +136,148 @@ func PrimStringToNumber(mc machine.CallContext) error {
 		}
 	}
 
-	input := str.Value
-	exactness := 0 // 0 = unspecified, 1 = exact (#e), -1 = inexact (#i)
-
-	// Parse up to two R7RS prefix directives.
-	for range 2 {
-		if len(input) < 2 || input[0] != '#' {
-			break
-		}
-		switch input[1] {
-		case 'b', 'B':
-			radix = 2
-			input = input[2:]
-		case 'o', 'O':
-			radix = 8
-			input = input[2:]
-		case 'd', 'D':
-			radix = 10
-			input = input[2:]
-		case 'x', 'X':
-			radix = 16
-			input = input[2:]
-		case 'e', 'E':
-			exactness = 1
-			input = input[2:]
-		case 'i', 'I':
-			exactness = -1
-			input = input[2:]
-		default:
-			// Unknown prefix — not a valid number.
-			mc.SetValue(values.FalseValue)
-			return nil
-		}
-	}
-
-	result := parseStringToNumber(input, radix)
+	result := parsePrefixedNumber(str.Value, radix)
 	if result == nil {
 		mc.SetValue(values.FalseValue)
 		return nil
 	}
-
-	// Apply exactness conversion if a prefix was specified. Both conversions are
-	// the reader's, shared via pkg/parser so #e/#i cannot mean one thing in a
-	// literal and another in a string. R7RS §6.2.7 has no error channel here, so
-	// a magnitude with no exact representation (#e+inf.0) yields #f.
-	switch exactness {
-	case 1:
-		exact, err := parser.MakeExactFromLiteral(input, result)
-		if err != nil {
-			mc.SetValue(values.FalseValue)
-			return nil //nolint:nilerr // §6.2.7 has no error channel: unrepresentable answers #f
-		}
-		result = exact
-	case -1:
-		result = parser.MakeInexactNumber(result)
-	}
-
 	mc.SetValue(result)
 	return nil
+}
+
+// parsePrefixedNumber reads s as the reader reads a number literal, with radix
+// as the default radix, and returns nil wherever the reader would not produce a
+// number. R7RS §6.2.7 has no error channel, so every refusal is nil.
+//
+// The prefixes follow the reader's `#` dispatch (CLAUDE.local.md): #b #o #d #x
+// and #e #i form one product, at most one prefix per slot, in either order;
+// #z and #m are introducers that end the product and take one number, which
+// may start a product of its own (#z#e9). Radix is lexical, so it cannot
+// precede an introducer (#x#z1f); exactness converts a finished value, so it
+// can, and applies after the widening (#i#z9 is 9.0).
+func parsePrefixedNumber(s string, radix int) values.Number {
+	exactness := 0 // 0 = unspecified, 1 = exact (#e), -1 = inexact (#i)
+	radixSet := false
+	for len(s) >= 2 && s[0] == '#' {
+		marker := s[1] | 0x20 // ASCII lower case; a non-letter matches no arm
+		switch marker {
+		case 'b', 'o', 'd', 'x':
+			if radixSet {
+				return nil
+			}
+			radixSet = true
+			radix = radixOfMarker[marker]
+		case 'e', 'i':
+			if exactness != 0 {
+				return nil
+			}
+			exactness = 1
+			if marker == 'i' {
+				exactness = -1
+			}
+		case 'z', 'm':
+			if radixSet {
+				return nil
+			}
+			return applyExactness(parseIntroduced(marker, s[2:], radix), "", radix, exactness)
+		default:
+			return nil
+		}
+		s = s[2:]
+	}
+	return applyExactness(parseStringToNumber(s, radix), s, radix, exactness)
+}
+
+// radixOfMarker maps a lower-case radix prefix letter to its radix.
+var radixOfMarker = map[byte]int{'b': 2, 'o': 8, 'd': 10, 'x': 16}
+
+// parseIntroduced reads the operand of #z or #m (marker) and widens it.
+//
+// The reader has two spellings. A bare marker followed by '#' (#z#x1f) takes a
+// whole prefixed number and widens its value. A marker with digits attached
+// (#z42, #m1.5) is one decimal token, read from its text, which is how #m keeps
+// every digit of #m1.2345678901234567890123456789; its grammar is a decimal
+// integer or real, so #z10/2 and #m1/3 are refused there although #z#d10/2 is
+// 5. Under a non-decimal default radix the attached digits are read in that
+// radix and widened by value, with the same refusal of a ratio.
+func parseIntroduced(marker byte, operand string, radix int) values.Number {
+	widen := parser.WidenToBigInteger
+	if marker == 'm' {
+		widen = parser.WidenToBigFloat
+	}
+	switch {
+	case strings.HasPrefix(operand, "#"):
+		return widenOrNil(widen, parsePrefixedNumber(operand, radix))
+	case strings.Contains(operand, "/"):
+		return nil
+	case radix != 10:
+		return widenOrNil(widen, parseStringToNumber(operand, radix))
+	case marker == 'z':
+		q := values.NewBigIntegerFromString(operand, 10)
+		if q == nil {
+			return nil
+		}
+		return q
+	}
+	q, err := parser.ParseBigFloatLiteral(operand)
+	if err != nil {
+		return nil //nolint:nilerr // §6.2.7 has no error channel: a malformed literal answers #f
+	}
+	return q
+}
+
+// widenOrNil applies widen to n, mapping a missing operand or a refused
+// widening to nil.
+func widenOrNil(widen func(values.Value) (values.Number, error), n values.Number) values.Number {
+	if n == nil {
+		return nil
+	}
+	q, err := widen(n)
+	if err != nil {
+		return nil //nolint:nilerr // §6.2.7 has no error channel: #z1.5 answers #f
+	}
+	return q
+}
+
+// applyExactness applies an #e (1) or #i (-1) prefix to n, read from text in
+// radix. Both conversions are the reader's, shared via pkg/parser so #e/#i
+// cannot mean one thing in a literal and another in a string. #e converts a
+// decimal literal from its digits (#e0.1 is 1/10) and anything else from its
+// value: re-reading non-decimal digits as decimal would make #x#e1.8 9/5. A
+// magnitude with no exact representation (#e+inf.0) yields nil.
+func applyExactness(n values.Number, text string, radix, exactness int) values.Number {
+	if n == nil {
+		return nil
+	}
+	switch exactness {
+	case 1:
+		exact, err := makeExact(n, text, radix)
+		if err != nil {
+			return nil //nolint:nilerr // §6.2.7 has no error channel: unrepresentable answers #f
+		}
+		return exact
+	case -1:
+		return parser.MakeInexactNumber(n)
+	}
+	return n
+}
+
+// makeExact is the #e conversion, choosing the digits path for decimal text.
+func makeExact(n values.Number, text string, radix int) (values.Number, error) {
+	if radix != 10 {
+		return parser.MakeExactNumber(n)
+	}
+	return parser.MakeExactFromLiteral(text, n)
 }
 
 // parseStringToNumber parses a numeric string in the given radix.
 // Returns nil if the string is not a valid number.
 // R7RS §6.2.7: handles integers, rationals, floats, complex, and special values.
 func parseStringToNumber(input string, radix int) values.Number {
-	if len(input) == 0 {
+	// The conversions below sit on strconv and math/big, which also take Go
+	// spellings (0x1p3, 1_0, nan, 1/-2); the reader's tokenizer decides what is
+	// a numeral, so they only ever convert one.
+	if !parser.IsNumeral(radixPrefix[radix], input) {
 		return nil
 	}
 
@@ -223,6 +301,14 @@ func parseStringToNumber(input string, radix int) values.Number {
 		if err == nil {
 			return n
 		}
+	}
+
+	if radix == 10 && strings.Contains(input, "@") {
+		n, err := parser.ParsePolarStringNumber(input)
+		if err != nil {
+			return nil //nolint:nilerr // §6.2.7 has no error channel: a malformed numeral answers #f
+		}
+		return n
 	}
 
 	// Try integer first.
@@ -266,10 +352,20 @@ func parseStringToNumber(input string, radix int) values.Number {
 		if err == nil {
 			return n
 		}
+		return nil
 	}
 
-	return nil
+	// A non-decimal radix still reads a decimal point (#x1.8 is 1.5), as the
+	// reader's parseDecimalFractionWithBase does.
+	n, err := parser.ParseRealFloatStringWithBase(input, radix)
+	if err != nil {
+		return nil //nolint:nilerr // §6.2.7 has no error channel: a malformed numeral answers #f
+	}
+	return n
 }
+
+// radixPrefix maps a radix to the prefix the reader scans its numerals under.
+var radixPrefix = map[int]string{2: "#b", 8: "#o", 10: "#d", 16: "#x"}
 
 // --- Loss-signal primitives ---
 //

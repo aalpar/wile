@@ -119,6 +119,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Three complex numeral shapes read as one number.** A dot-led real part
+  ended at its fraction (`.5+.5i` read as `.5` then `+.5i`, `.5e1+1i` as `5.0`
+  then `+1i`); a signed real part took no point after the imaginary sign
+  (`+1+.5i` was a read error); a NaN real part had no imaginary tail
+  (`+nan.0+1i` was the symbol `|+nan.0+1i|`). Each now reads as racket and
+  petite read it, and `string->number` agrees.
+
+- **`string->number` accepts exactly the reader's number syntax.** It returned
+  `#f` for every `#z`/`#m` string the reader reads (`"#z42"`, `"#m1.5"`); it
+  took a second prefix from one slot (`"#d#x1"` was 1, `"#e#i1"` 1.0; racket
+  and petite answer `#f`); it refused a decimal point under a non-decimal radix
+  (`"#x1.8"` and `(string->number "1.8" 16)` are now 1.5) and polar notation
+  (`"1@0"`); and it accepted Go spellings the reader does not, through strconv
+  and math/big (`"nan"`, `"0x1p3"`, `"1_0.5"`, `"1e1_0"`) and a signed
+  denominator (`"1/-2"`). The numeral now has to tokenize as one reader
+  numeral before it is converted, and the prefixes follow the reader's `#`
+  dispatch: `#z`/`#m` are introducers, a radix cannot precede one (`"#x#z1f"`
+  is `#f`), exactness before one applies after widening (`"#i#z9"` is 9.0).
+  `pkg/parser` exports what the two sides now share: `IsNumeral`,
+  `WidenToBigInteger`, `WidenToBigFloat`, `ParseBigFloatLiteral` and
+  `ParsePolarStringNumber`.
+
 - **A resumed `with-timeout` continuation answers as if the thunk had not been
   interrupted.** Resuming after the timer stopped the thunk between two
   instructions cleared or replaced the operand the next instruction consumes

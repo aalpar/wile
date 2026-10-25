@@ -1160,10 +1160,12 @@ func TestTokenizer_read(t *testing.T) {
 			state: TokenizerStateUnsignedDecimalFraction,
 		},
 		{
+			// One complex numeral, as in racket and petite; the dot-led real used
+			// to end at its fraction and leave +inf.0i as a second token.
 			bs:    ".34e10+inf.0i",
-			scan:  ".34e10",
-			err0:  nil,
-			state: TokenizerStateUnsignedDecimalFraction,
+			scan:  ".34e10+inf.0i",
+			err0:  io.EOF,
+			state: TokenizerStateUnsignedComplex,
 		},
 		{
 			bs:    "0.0034e+10",
@@ -1184,10 +1186,12 @@ func TestTokenizer_read(t *testing.T) {
 			state: TokenizerStateUnsignedDecimalFraction,
 		},
 		{
+			// One complex numeral, as in racket and petite; the dot-led real used
+			// to end at its fraction and leave +inf.0i as a second token.
 			bs:    ".34e+10+inf.0i",
-			scan:  ".34e+10",
-			err0:  nil,
-			state: TokenizerStateUnsignedDecimalFraction,
+			scan:  ".34e+10+inf.0i",
+			err0:  io.EOF,
+			state: TokenizerStateUnsignedComplex,
 		},
 		{
 			bs:    "123a",
