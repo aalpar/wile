@@ -439,8 +439,9 @@ func Promote(n Number, target NumericKind) Number {
 
 // isSpecialFloat reports whether a Float holds IEEE 754 Inf or NaN.
 // Used by the arithmetic dispatches (makeArithmeticDispatch, makeDivideDispatch)
-// to compute in clamped float64 for the kind pairs specialFloatNeedsGuard names.
-// The comparison dispatch deliberately has no such guard.
+// to compute in clamped float64 for the kind pairs specialFloatNeedsGuard names,
+// part-wise for a BigComplex. The comparison dispatch deliberately has no such
+// guard.
 func isSpecialFloat(f *Float) bool {
 	return math.IsInf(f.Value, 0) || math.IsNaN(f.Value)
 }

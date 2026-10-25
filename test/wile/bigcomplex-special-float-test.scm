@@ -9,6 +9,10 @@
 ;;; Every group runs under an explicit equal?: chibi `test`'s default comparator
 ;;; is approximate (1e-5), which a float64-rounded imaginary part satisfies.
 ;;;
+;;; The last two groups (portable spellings, but they need exact complex and
+;;; bignum contagion that does not overflow, so they are not in test/scheme)
+;;; pin the same guard for BigInteger, Rational and exact-complex partners.
+;;;
 ;;; The multiplicative groups pin real x complex and real / complex part-wise:
 ;;; an out-of-range part stays finite and non-zero, an EXACT zero part
 ;;; annihilates (0.0), and an INEXACT zero part gives NaN, as Chez does.
@@ -101,6 +105,44 @@
     ;; an INFINITE part is not clamped: Inf / Inf is NaN
     (test "+nan.0+nan.0i" (number->string (/ +inf.0 (make-rectangular #m1 (/ #m1 #m0)))))
     (test "+inf.0+inf.0i" (number->string (* +inf.0 (make-rectangular #m1 (/ #m1 #m0)))))))
+
+;; The exact partner must not be rounded to +-inf.0 or 0.0 before the special
+;; value decides: that made (+ +inf.0 (- (expt 10 400))) Inf - Inf = NaN and
+;; (* +inf.0 (/ 1 (expt 10 400))) Inf * 0 = NaN.
+(test-group "special float with an out-of-range exact partner"
+  (with-exact-comparison
+    (test "+inf.0" (number->string (+ +inf.0 (- (expt 10 400)))))
+    (test "-inf.0" (number->string (- (expt 10 400) +inf.0)))
+    (test "+inf.0" (number->string (/ +inf.0 (expt 10 400))))
+    (test "0.0" (number->string (/ (expt 10 400) +inf.0)))
+    (test "+inf.0" (number->string (* +inf.0 (/ 1 (expt 10 400)))))
+    (test "-inf.0" (number->string (* +inf.0 (/ -1 (expt 10 400)))))
+    ;; controls: NaN still wins; a FINITE float partner stays lossy
+    (test "+nan.0" (number->string (+ +nan.0 (expt 10 400))))
+    (test "+inf.0" (number->string (+ 1.0 (expt 10 400))))))
+
+;; A real Inf/NaN scales each part of a complex. An exact zero part annihilates
+;; (0.0); an inexact zero part gives NaN.
+(test-group "special float times or over an exact complex"
+  (with-exact-comparison
+    (test "0.0+inf.0i" (number->string (* +inf.0 +2i)))
+    (test "0.0-inf.0i" (number->string (* -inf.0 +2i)))
+    (test "0.0+nan.0i" (number->string (* +nan.0 +2i)))
+    (test "0.0+inf.0i" (number->string (* +2i +inf.0)))
+    (test "0.0-inf.0i" (number->string (/ +inf.0 +2i)))
+    (test "0.0+inf.0i" (number->string (/ -inf.0 +2i)))
+    (test "+inf.0+inf.0i" (number->string (* +inf.0 (make-rectangular 1 (expt 10 400)))))
+    (test "+inf.0-inf.0i" (number->string (/ +inf.0 (make-rectangular 1 (expt 10 400)))))
+    (test "+inf.0-inf.0i"
+          (number->string (/ +inf.0 (make-rectangular (expt 10 400) (expt 10 400)))))
+    (test "+inf.0-inf.0i"
+          (number->string (/ +inf.0 (make-rectangular (/ 1 (expt 10 400)) 1))))
+    (test "0.0+0.0i" (number->string (/ (make-rectangular 1 (expt 10 400)) +inf.0)))
+    ;; controls: inexact zero parts and in-range parts
+    (test "+nan.0+inf.0i" (number->string (* +inf.0 0+9.87i)))
+    (test "+nan.0-inf.0i" (number->string (/ +inf.0 0+9.87i)))
+    (test "+inf.0-inf.0i" (number->string (/ +inf.0 (make-rectangular 1 1e300))))
+    (test "+inf.0+inf.0i" (number->string (* +inf.0 (make-rectangular 1 1e300))))))
 
 (test-end)
 (test-exit)

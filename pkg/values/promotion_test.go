@@ -467,9 +467,10 @@ func TestFloatBigComplexGuard_ResultType(t *testing.T) {
 // a BigComplex used to round BOTH components through complex128, so the
 // untouched imaginary component came back at float64 precision (the result still
 // printed as a BigComplex, which hides the loss). The additive rows assert the
-// exact imaginary digits. The multiplicative rows pin today's complex128 route so
-// a change to it is deliberate: it is right while the BigComplex parts fit in
-// float64 and wrong beyond (filed in todo/tier1-security-correctness.md).
+// exact imaginary digits. The multiplicative rows pin the part-wise route on a
+// BigComplex whose real part is an INEXACT zero, so Inf * 0.0 makes it NaN (Chez:
+// (* +inf.0 0+9.87i) => +nan.0+inf.0i); TestSpecialFloatBigComplex_Multiplicative
+// covers exact and out-of-range parts.
 func TestSpecialFloatBigComplex_ImaginaryDigits(t *testing.T) {
 	c := qt.New(t)
 

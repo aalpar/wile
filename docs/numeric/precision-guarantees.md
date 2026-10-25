@@ -80,11 +80,11 @@ The guard decides the result *kind*, so the lattice LUB is not what comes back:
 | Operation | Result Type | Precision |
 |-----------|------------|-----------|
 | `Float(Inf/NaN) op BigFloat` | `Float` (guard overrides the `BigFloat` LUB) | No precision loss — the special value determines the result, so the extra mantissa carries nothing |
-| `Float(Inf/NaN) op BigComplex` | `BigComplex` (guard computes in `complex128`, rewraps) | Imaginary part of the `BigComplex` operand survives rather than being dropped to a `Complex`, but rounded to float64: `(imag-part (+ +inf.0 (make-rectangular #m1 (/ #m1 3))))` keeps 53 bits of the 256 |
+| `Float(Inf/NaN) op BigComplex` | `BigComplex` (guard computes part-wise on the `BigComplex` parts, never through `complex128`) | Additive: the imaginary part is the operand's own, at full precision: `(imag-part (+ +inf.0 (make-rectangular #m1 (/ #m1 3))))` is `(/ #m1 3)`, all 256 bits. Multiplicative: each part is scaled by the Inf/NaN, so it is itself special (or `0.0` for an exact-zero part) and carries no digits |
 | `BigFloat(Inf) op BigFloat` | `BigFloat` | IEEE 754 rules apply |
 | `BigComplex(Inf real) op BigComplex` | `BigComplex` | IEEE 754 rules apply to each component |
 
-**No blanket precision loss is acceptable at this tier.** When the guard fires, the float64 short-circuit preserves IEEE 754 semantics (Inf/NaN propagation) and loses no information that was representable in the Float operand. It does round the other operand's finite components to float64 when that operand is a `BigComplex` (row two); a `BigFloat` Inf in the same position keeps them at full precision. See [`tower.md`](tower.md) § "IEEE 754 Semantic Uniformity".
+**No blanket precision loss is acceptable at this tier.** When the guard fires, the float64 short-circuit preserves IEEE 754 semantics (Inf/NaN propagation) and loses no information that was representable in the Float operand. A `BigComplex` operand's imaginary part survives an additive operation at full precision (row two); a multiplicative one replaces every finite component with a special value or `0.0`, so there are no digits to keep. See [`tower.md`](tower.md) § "IEEE 754 Semantic Uniformity".
 
 **Go `math/big.Float` limitations:** Go's `big.Float` supports Inf (`SetInf`) but not NaN: a NaN-producing operation panics with `big.ErrNaN`. Wile's `values.BigFloat` extends beyond `big.Float` with an out-of-band `nan` flag (`NewBigFloatNaN`, `recoverNaN` in `pkg/values/big_float.go`). This shipped with issue #362; the guard was **updated** to preserve the BigComplex imaginary part rather than removed, and there is no open plan to remove it.
 
