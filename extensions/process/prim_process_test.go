@@ -565,10 +565,9 @@ func TestProcessWaitCancelledRaisesAndLeavesTheChild(t *testing.T) {
 //     handler kills it and resumes, and the re-issued wait answers the signalled
 //     exit code. The wait used to park for the child's 30 s, then the handler's
 //     kill failed on the reaped child.
-//   - A child spawned inside the thunk is killed by the expiry: process-spawn
-//     binds the child to the ctx it was spawned under (exec.CommandContext), and
-//     the thunk's ctx is the timer's. The re-issued wait answers the killed
-//     status. This is the spawn's contract, not the wait's.
+//
+// A child spawned inside the thunk would die with the timer's ctx; that contract
+// is the spawn's, and TestProcessSpawnCtxBoundsTheChild pins it without a timer.
 func TestProcessWaitUnderWithTimeout(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses Unix commands")
@@ -581,9 +580,6 @@ func TestProcessWaitUnderWithTimeout(t *testing.T) {
 		{"a child spawned outside the thunk survives the expiry",
 			`(define p (process-spawn "sleep" "30"))
 (with-timeout 50 (lambda (k) (process-kill p 'kill) (list 'resumed (k))) (lambda () (process-wait p)))`,
-			"(resumed -1)"},
-		{"a child spawned inside the thunk dies with the thunk's ctx",
-			`(with-timeout 50 (lambda (k) (list 'resumed (k))) (lambda () (process-wait (process-spawn "sleep" "30"))))`,
 			"(resumed -1)"},
 	}
 	for _, tc := range tcs {
@@ -598,4 +594,23 @@ func TestProcessWaitUnderWithTimeout(t *testing.T) {
 			c.Assert(result.SchemeString(), qt.Equals, tc.want)
 		})
 	}
+}
+
+// TestProcessSpawnCtxBoundsTheChild pins the other half of process-wait's
+// cancellation contract: the wait does not kill the child, but the ctx the child
+// was spawned under does (exec.CommandContext). A child spawned in a run whose ctx
+// then ends is killed, and a wait on it in a later run under a live ctx answers
+// the killed status.
+func TestProcessSpawnCtxBoundsTheChild(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses Unix commands")
+	}
+	c := qt.New(t)
+	engine, ctx := newCancelEngine(t)
+	_, err := evalWithin(ctx, t, engine, `(begin (define p (process-spawn "sleep" "30")) (cancel!))`, 10*time.Second)
+	c.Assert(errors.Is(err, werr.ErrOperationCancelled), qt.IsTrue, qt.Commentf("got %v", err))
+
+	result, err := evalWithin(context.Background(), t, engine, `(process-wait p)`, 10*time.Second)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.SchemeString(), qt.Equals, "-1", qt.Commentf("the spawn's ctx must have killed the child"))
 }

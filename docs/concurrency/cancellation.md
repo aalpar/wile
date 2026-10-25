@@ -314,8 +314,8 @@ Scheme (they live above `pkg/values` and cannot be reached from a Go-level test)
 `extensions/process/prim_process_test.go` covers `process-wait`:
 `TestProcessWaitCancelledRaisesAndLeavesTheChild` (an embedder cancel raises, and
 the child is still alive afterwards) and `TestProcessWaitUnderWithTimeout` (the
-handler runs at the expiry and the resume re-issues the wait; a child spawned
-inside the thunk dies with the thunk's ctx). `TestMutexLockContextNoLostWakeup`'s
+handler runs at the expiry and the resume re-issues the wait), and
+`TestProcessSpawnCtxBoundsTheChild` (the ctx a child was spawned under kills it). `TestMutexLockContextNoLostWakeup`'s
 `cancelled-timed` arm (`pkg/values`) drives the timed path's ctx wakeup.
 
 `extensions/threads/prim_threads_test.go` covers the rest of the rule:
@@ -333,8 +333,8 @@ inside the thunk dies with the thunk's ctx). `TestMutexLockContextNoLostWakeup`'
   program's last form, raise `werr.ErrOperationCancelled` under an embedder cancel
   and under a cancel whose cause is `DeadlineExceeded`, with the cause reachable by
   `errors.Is`. This is the row that answered `#f` with a nil error before. Three
-  more rows: a timed acquire, which only `PrimMutexLock`'s own check turns into a
-  raise; a timed cv wait; and an acquire inside an armed but unexpired
+  more rows: a timed acquire, whose 30 s timeout outlasts the watchdog, so it must
+  wake on the cancel; a timed cv wait; and an acquire inside an armed but unexpired
   `with-timeout`, which must raise rather than run the handler (only an
   `ErrTimerExpired` cause belongs to a timer). `TestEmbedderDeadlineInsideArmedTimerRaises`
   does the last with a real embedder deadline, whose `Err()` matches an expired
