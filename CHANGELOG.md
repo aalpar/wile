@@ -678,6 +678,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **BREAKING (Go API, behavior): the `er-macro-transformer` contract is one
+  contract on both syntax-forms layers.** `compilation.NewERMacroTransformer`,
+  `NewERRenameClosure` and `NewERCompareClosure` each gain a parameter (the
+  keyword's `syntax.Scopes`; the rename closure also the use-site frame). A
+  rename carries the `er-macro-transformer` keyword's scopes, so it reaches a
+  macro or local defined in the same body, and always the expansion's own
+  scope, so a renamed binder never captures a passed-through identifier: a
+  renamed `(define x 5)` of a global `x` now defines the macro's own variable,
+  `(5 5)` -> `(5 1)` (Chez and Racket's R5RS agree), and `swap!` of a global
+  `tmp` answers `(2 1)`. `rename` takes any datum (a compound one symbol by
+  symbol) and memoises symbols per expansion on both layers. `compare` takes a
+  bare symbol in the use-site keyword's context on both layers (the Scheme
+  layer raised; the Go layer resolved it ignoring scopes), and reports an
+  ambiguous identifier as a located `ErrAmbiguousBinding`.
+
 - **A read error's text names the file it failed in.** `ParserError.Error()`
   rendered index, line, column, token and state but never the file, so a read
   error inside an included file printed the include form's file with the

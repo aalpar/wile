@@ -74,23 +74,20 @@ func erBindingsEqual(bnd1 *environment.Binding, name1 string, bnd2 *environment.
 	return false
 }
 
-// resolveERIdentifier resolves an identifier to its binding in the given environment.
-// Returns the binding (may be nil if unbound) and the symbol's string key.
-//
-// For SyntaxSymbols with a ResolvedBinding (from the rename closure), the binding
-// is looked up in the definition-site global environment carried by the GlobalIndex.
-// This handles cross-library compare correctly: renamed symbols resolve in the
-// library where the macro was defined, not the use site.
-//
-// A bare symbol resolves under useScopes, the use-site keyword's. It used to
-// resolve with the wildcard, which reaches a binder no identifier written at the
-// use can see: under a macro that wraps the use in (let ((else 1)) …), the
-// user's else and 'else compared different.
+// resolveERIdentifier resolves an identifier to its binding in the given
+// environment, returning the binding (nil if unbound) and the symbol's key. An
+// identifier the rename closure pinned resolves in the definition-site store the
+// pin names, which is what makes a cross-library compare see the library's own
+// binding; a bare symbol resolves under useScopes, the use-site keyword's (the
+// wildcard it used to take reaches a binder no identifier written at the use can
+// see, so under a macro wrapping the use in (let ((else 1)) …) the user's else
+// and 'else compared different). An incomparable tie is returned as
+// ErrAmbiguousBinding rather than raised, so it reaches the user as the macro
+// use's located error and not as a recovered internal panic.
 func resolveERIdentifier(env *environment.EnvironmentFrame, useScopes syntax.Scopes, id values.Value) (*environment.Binding, string, error) {
 	switch v := id.(type) {
 	case *values.Symbol:
-		bnd := env.GetBinding(v, syntax.ScopesOf(useScopes))
-		return bnd, v.Key, nil
+		return resolveERName(env, v, syntax.ScopesOf(useScopes))
 	case *syntax.SyntaxSymbol:
 		sym := v.Sym
 
@@ -104,15 +101,25 @@ func resolveERIdentifier(env *environment.EnvironmentFrame, useScopes syntax.Sco
 
 		scopes := v.Scopes()
 		if !scopes.IsEmpty() {
-			bnd := env.GetBinding(sym, syntax.ScopesOf(scopes))
-			return bnd, sym.Key, nil
+			return resolveERName(env, sym, syntax.ScopesOf(scopes))
 		}
-		bnd := env.GetBinding(sym, syntax.AllScopes())
-		return bnd, sym.Key, nil
+		return resolveERName(env, sym, syntax.AllScopes())
 	default:
 		return nil, "", werr.WrapForeignErrorf(
 			werr.ErrNotASymbol,
 			"er-compare: expected a symbol or identifier, got %T", id,
 		)
 	}
+}
+
+// resolveERName is env.GetBinding with the incomparable tie reported as an error.
+func resolveERName(env *environment.EnvironmentFrame, sym *values.Symbol, q syntax.ScopeSet) (*environment.Binding, string, error) {
+	bnd, ambiguous := env.TryGetBinding(sym, q)
+	if ambiguous {
+		return nil, "", werr.WrapForeignErrorf(
+			werr.ErrAmbiguousBinding,
+			"er-compare: identifier %q resolves ambiguously among incomparable hygienic scope sets", sym.Key,
+		)
+	}
+	return bnd, sym.Key, nil
 }

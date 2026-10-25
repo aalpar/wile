@@ -886,7 +886,9 @@ as symbols.
 
 `rename` takes any datum and gives it the macro definition's context: a compound datum
 renames symbol by symbol, and within one expansion a symbol renames to one identifier
-(`eq?`). `compare` also takes a bare symbol, which means what that name means at the
+(`eq?`). Every rename also takes the expansion's own scope, so `(rename 'tmp)` used as a
+binder binds only the macro's references and never captures a `tmp` the form passed
+through, even when `tmp` is a global where the macro was defined. `compare` also takes a bare symbol, which means what that name means at the
 macro use, so `(compare (cadr form) 'else)` is true under a use-site `(let ((else 1)) …)`;
 compare against `(rename 'else)` to ask about the definition's `else` instead. Both
 syntax-forms implementations agree on all of this.

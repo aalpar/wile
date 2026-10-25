@@ -642,7 +642,9 @@ func TestP2_ERRenamedDefineIsTheMacros(t *testing.T) {
 // symbol with no regard to scopes, so a macro-introduced else around the use
 // (the wrapper row) captured it and the answer was #f. Comparing against
 // (r 'else) asks about the definition's else instead, so a use-site local
-// else makes the two differ (the last row's #f).
+// else makes the two differ (the last row's #f). The first three rows were
+// already true on the Go layer and pin the Scheme layer's change; the wrapper
+// row pins both; the last pins what did not move.
 func TestP2_ERCompareTakesASymbolAtTheUseSite(t *testing.T) {
 	const defs = `(import (for-syntax (scheme base)))  ; cadr
 (define-syntax er-cmp (er-macro-transformer (lambda (f r c) (list (r 'quote) (c 'magic (cadr f))))))
@@ -661,6 +663,50 @@ func TestP2_ERCompareTakesASymbolAtTheUseSite(t *testing.T) {
 		for _, l := range syntaxLayers {
 			t.Run(tc.name+"/"+l.name, func(t *testing.T) {
 				qt.Assert(t, evalSyntaxForms(t, defs+tc.use, withStdlibResolver(l.opt)...), qt.Equals, tc.want)
+			})
+		}
+	}
+}
+
+// TestP2_ERCompareOfARenameShadowedByALocal: a rename of a name a
+// definition-site local shadows denotes the local, and compare and
+// free-identifier=? must say so. The rename used to carry a pin to the
+// same-named global, which the compiler consults only after locals but compare
+// and free-identifier=? read first, so the Go layer answered #f while (r 'x)
+// evaluated to the local. Racket (free-identifier=? twin) answers #t.
+func TestP2_ERCompareOfARenameShadowedByALocal(t *testing.T) {
+	const cmp = `(define-syntax m (er-macro-transformer (lambda (f r c) (list (r 'quote) (c (r 'x) (car (cdr f)))))))`
+	const fid = `(define-syntax m (er-macro-transformer (lambda (f r c) (list (r 'quote) (free-identifier=? (r 'x) (car (cdr f)))))))`
+	tcs := []struct{ name, src string }{
+		{"let", "(let ((x 'l)) " + cmp + " (m x))"},
+		{"internal define", "(define (h) (define x 'l) " + cmp + " (m x)) (h)"},
+		{"free-identifier=?", "(let ((x 'l)) " + fid + " (m x))"},
+	}
+	for _, tc := range tcs {
+		for _, l := range syntaxLayers {
+			t.Run(tc.name+"/"+l.name, func(t *testing.T) {
+				qt.Assert(t, evalSyntaxForms(t, "(define x 'g)\n"+tc.src, l.opt), qt.Equals, "#t")
+			})
+		}
+	}
+}
+
+// TestP2_ERRefusals: what neither half of the contract accepts, on both
+// layers. compare takes identifiers and symbols, not other data; rename takes
+// any datum except a circular one, which is not a program.
+func TestP2_ERRefusals(t *testing.T) {
+	tcs := []struct{ name, src, want string }{
+		{"compare of a number", `(define-syntax m (er-macro-transformer (lambda (f r c) (list (r 'quote) (c 5 'x)))))
+(m)`, `(?s).*identifier.*`},
+		{"rename of a circular datum", `(import (for-syntax (scheme base)))
+(define-syntax m (er-macro-transformer (lambda (f r c) (let ((p (list 'a))) (set-cdr! p p) (r p)))))
+(m)`, `(?s).*circular.*`},
+	}
+	for _, tc := range tcs {
+		for _, l := range syntaxLayers {
+			t.Run(tc.name+"/"+l.name, func(t *testing.T) {
+				err := evalSyntaxFormsErr(t, tc.src, withStdlibResolver(l.opt)...)
+				qt.Assert(t, err, qt.ErrorMatches, tc.want)
 			})
 		}
 	}

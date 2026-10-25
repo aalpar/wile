@@ -34,6 +34,9 @@ import (
 // a name means. See invokeERTransformer for the contract and what the phase-up
 // read was measured to do.
 //
+// useEnv is the use-site environment; it only decides when a rename gets no
+// pin (renameSymbol).
+//
 // defScopes is the er-macro-transformer keyword's scope set
 // (ERMacroTransformer.DefScopes) and introScope is a fresh scope unique to this
 // invocation. Every rename carries both: (datum->syntax #'k sym) followed by the
@@ -48,6 +51,7 @@ import (
 // syntax with each symbol in it renamed through the same cache (renameDatum).
 func NewERRenameClosure(
 	defEnv *environment.EnvironmentFrame,
+	useEnv *environment.EnvironmentFrame,
 	defScopes syntax.Scopes,
 	introScope *syntax.Scope,
 ) *machine.ForeignClosure {
@@ -69,7 +73,7 @@ func NewERRenameClosure(
 				mc.SetValue(cached)
 				return nil
 			}
-			result := renameSymbol(defEnv, v, scopes)
+			result := renameSymbol(defEnv, useEnv, v, scopes)
 			cache[v.Key] = result
 			mc.SetValue(result)
 			return nil
@@ -79,7 +83,7 @@ func NewERRenameClosure(
 				if ok {
 					return cached
 				}
-				result := renameSymbol(defEnv, sym, scopes)
+				result := renameSymbol(defEnv, useEnv, sym, scopes)
 				cache[sym.Key] = result
 				return result
 			})
@@ -108,8 +112,12 @@ func NewERRenameClosure(
 // one of the library's own globals. It is resolved under the identifier's own
 // scopes, at defEnv's phase, the phase the output lands in; a name the
 // definition site's globals do not bind (a temporary, or a macro, whose slot is
-// a phase up) gets none and resolves at the use site by its scopes alone.
-func renameSymbol(defEnv *environment.EnvironmentFrame, sym *values.Symbol, scopes syntax.Scopes) *syntax.SyntaxSymbol {
+// a phase up) gets none and resolves at the use site by its scopes alone. Nor
+// does a name a local reaches under those scopes (a definition-site local that
+// shadows a global): the compiler resolves it to the local before any pin, and
+// the readers that consult the pin first (compare, free-identifier=?) would
+// otherwise name the global the rename does not denote.
+func renameSymbol(defEnv, useEnv *environment.EnvironmentFrame, sym *values.Symbol, scopes syntax.Scopes) *syntax.SyntaxSymbol {
 	sctx := syntax.NewSourceContext(
 		"", "",
 		syntax.NewSourceIndexes(0, 0, 0),
@@ -117,7 +125,11 @@ func renameSymbol(defEnv *environment.EnvironmentFrame, sym *values.Symbol, scop
 	)
 	sctx.Scopes = scopes
 	q := syntax.NewSyntaxSymbol(sym.Key, sctx)
-	gi := defEnv.GetGlobalIndexWithScopes(sym, syntax.ScopesOf(scopes))
+	query := syntax.ScopesOf(scopes)
+	if useEnv.HasLocalBinding(sym, query) {
+		return q
+	}
+	gi := defEnv.GetGlobalIndexWithScopes(sym, query)
 	if gi != nil {
 		q = q.WithResolvedBinding(gi)
 	}
