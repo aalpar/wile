@@ -855,6 +855,38 @@ func TestTopLevelImportOfAnAbortingLibraryBodyIsRememberedAsEscaped(t *testing.T
 	qt.Assert(t, cell.SchemeString(), qt.Equals, "#(1 0)")
 }
 
+// TestTopLevelImportOfAResumingLibraryBodyIsRememberedAsEscaped is the resume
+// twin of the abort test above, and the case where the first and later imports
+// match different sentinels: the first top-level import of a body that invokes a
+// runtime continuation fails as any expansion-time resume with no runtime driver
+// does (ErrContinuationBarrier, from the engine's expansion-signal conversion);
+// a later one gets the remembered ErrLibraryInstantiationEscaped, and the body
+// does not run again.
+func TestTopLevelImportOfAResumingLibraryBodyIsRememberedAsEscaped(t *testing.T) {
+	t.Parallel()
+
+	eng := newLibraryBodyProbeEngine(t, `((vector-ref hook 0) 'again)`)
+	_, err := eng.EvalMultiple(context.Background(), `(import (probe box))`)
+	qt.Assert(t, err, qt.IsNil)
+	_, err = eng.EvalMultiple(context.Background(), `(begin (call/cc (lambda (k) (vector-set! hook 0 k))) 'captured)`)
+	qt.Assert(t, err, qt.IsNil)
+	_, err = eng.EvalMultiple(context.Background(), `(import (probe user))`)
+	qt.Assert(t, errors.Is(err, werr.ErrContinuationBarrier), qt.IsTrue, qt.Commentf("%v", err))
+	qt.Assert(t, errors.Is(err, werr.ErrLibraryInstantiationEscaped), qt.IsFalse, qt.Commentf("%v", err))
+	for range 2 {
+		_, err = eng.EvalMultiple(context.Background(), `(import (probe user))`)
+		qt.Assert(t, errors.Is(err, werr.ErrLibraryInstantiationEscaped), qt.IsTrue, qt.Commentf("%v", err))
+		qt.Assert(t, errors.Is(err, werr.ErrContinuationBarrier), qt.IsFalse, qt.Commentf("%v", err))
+		var resumeErr *machine.ErrResumeContinuation
+		qt.Assert(t, errors.As(err, &resumeErr), qt.IsFalse, qt.Commentf("%v", err))
+		qt.Assert(t, err.Error(), qt.Contains,
+			"probe/user.sld:1:0: library (probe user): its body exited through a continuation")
+	}
+	cell, ok := eng.Get("cell")
+	qt.Assert(t, ok, qt.IsTrue)
+	qt.Assert(t, cell.SchemeString(), qt.Equals, "#(1 0)")
+}
+
 // TestBootstrapBodyHasADriver pins the third expansion-time root: a bootstrap
 // source runs under RunWithinBoundary, so a guard in it works and a call/cc in
 // it resumes. Under a bare Run both failed the load.

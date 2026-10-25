@@ -196,9 +196,11 @@ func (p *CompiledLibrary) EnsureInstantiated(ctx context.Context, evaluator mach
 // again, or deliver the abort again and rerun the after thunks it carries
 // although the body never re-ran. Later importers get
 // ErrLibraryInstantiationEscaped instead, located at the library's form like
-// first. Not a continuation barrier error: no barrier was crossed, and the first
-// importer may have seen no barrier error either (a top-level import whose body
-// aborts to a tag nothing holds fails with "no prompt found"). first is what the
+// first. Not a continuation barrier error: no barrier was crossed. The first
+// importer's error is whatever the body's exit produced and need not match: a
+// top-level import whose body aborts to a tag nothing holds fails with "no
+// prompt found", one whose body resumes a runtime continuation fails with the
+// engine's ErrContinuationBarrier (no runtime driver to resume it). first is what the
 // first importer received; cause is the body's own failure, which first wraps.
 //
 // An uncaught raise (ErrExceptionEscape) is NOT converted, although it is a
