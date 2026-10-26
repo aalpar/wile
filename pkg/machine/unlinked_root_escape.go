@@ -19,6 +19,7 @@ import (
 	"errors"
 
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // unlinkedRootEscape marks an uncaught raise out of a root that ran
@@ -146,11 +147,63 @@ type callerHandlersKey struct{}
 // them, and its thread, on whose goroutine the root runs, so that a handler
 // escaping from the root to the caller's continuation is not refused as a
 // cross-thread escape.
+//
+// The environment is read from the caller when a root first needs it (a raise,
+// a parameter read), not when the expansion starts: an eval that reads no mark
+// walks none of the caller's chain, whatever its depth. That is sound because
+// the caller is parked in the primitive for the whole synchronous expansion, so
+// its chain and marks are as they were; the snapshot is then kept, so a read
+// after the caller has moved on (none is known) sees the same environment.
+// from and cont are the caller and its chain when the expansion started, to
+// check that.
 type expansionCaller struct {
+	from     *MachineContext
+	cont     *MachineContinuation
 	marks    []markEntry
 	handlers values.Value
+	read     bool
 	thread   *values.Thread
 	threadID uint64
+}
+
+// environment returns the caller's reachable marks and its handler stack,
+// reading them from the caller on the first call.
+func (p *expansionCaller) environment() ([]markEntry, values.Value) {
+	if p.read {
+		return p.marks, p.handlers
+	}
+	if p.from.cont != p.cont || p.from.ctx == nil {
+		panic(werr.WrapForeignErrorf(werr.ErrInvariantViolation,
+			"expansion root: its caller moved on before the root first read the caller's dynamic environment"))
+	}
+	p.marks = p.from.collectReachableMarks()
+	p.handlers = lookupMark(p.marks, exceptionHandlerParam)
+	if p.handlers == nil {
+		p.handlers = exceptionHandlerParam.Value()
+	}
+	p.read = true
+	p.from = nil
+	return p.marks, p.handlers
+}
+
+// callerMarks returns p's caller's dynamic environment when p is an
+// expansion-time root that inherited one, nil otherwise.
+func (p *MachineContext) callerMarks() []markEntry {
+	if p.caller == nil {
+		return nil
+	}
+	q, _ := p.caller.environment()
+	return q
+}
+
+// callerHandlers returns the handler stack p, an expansion-time root, inherited
+// from its caller, nil when it inherited none.
+func (p *MachineContext) callerHandlers() values.Value {
+	if p.caller == nil {
+		return nil
+	}
+	_, q := p.caller.environment()
+	return q
 }
 
 // ContextWithCallerHandlers returns the ctx for an expansion a primitive
@@ -164,8 +217,8 @@ type expansionCaller struct {
 // root has ended (MarkUnlinkedRootEscape).
 func (p *MachineContext) ContextWithCallerHandlers() context.Context {
 	return context.WithValue(p.ctx, callerHandlersKey{}, &expansionCaller{
-		marks:    p.collectReachableMarks(),
-		handlers: p.ResolveParameterValue(exceptionHandlerParam),
+		from:     p,
+		cont:     p.cont,
 		thread:   p.thread,
 		threadID: p.threadID,
 	})
@@ -182,8 +235,7 @@ func (p *MachineContext) inheritCallerHandlers(ctx context.Context) bool {
 	if caller == nil {
 		return false
 	}
-	p.callerMarks = caller.marks
-	p.callerHandlers = caller.handlers
+	p.caller = caller
 	p.thread = caller.thread
 	p.threadID = caller.threadID
 	p.ctx = context.WithValue(p.ctx, callerHandlersKey{}, (*expansionCaller)(nil))
@@ -198,7 +250,8 @@ func (p *MachineContext) inheritCallerHandlers(ctx context.Context) bool {
 // RunResumable drives, is at a root that inherited nothing.
 func (p *MachineContext) inheritingRoot(handlers values.Value) *MachineContext {
 	root := p.rootContext()
-	if root.callerHandlers == nil || !values.Eqv(root.callerHandlers, handlers) {
+	inherited := root.callerHandlers()
+	if inherited == nil || !values.Eqv(inherited, handlers) {
 		return nil
 	}
 	return root
@@ -212,7 +265,7 @@ func (p *MachineContext) inheritingRoot(handlers values.Value) *MachineContext {
 // wholesale) is returned whole.
 func (p *MachineContext) ownHandlers() values.Value {
 	handlers := p.ResolveParameterValue(exceptionHandlerParam)
-	inherited := p.rootContext().callerHandlers
+	inherited := p.rootContext().callerHandlers()
 	if inherited == nil {
 		return handlers
 	}

@@ -79,7 +79,7 @@ func (p *MachineContext) forEachReachableMarkFrame(visit func(frame []markEntry)
 		if mc.isolatedMarks && len(mc.capturedMarks) > 0 && !visit(mc.capturedMarks) {
 			return
 		}
-		if len(mc.callerMarks) > 0 && !visit(mc.callerMarks) {
+		if mc.caller != nil && !visit(mc.callerMarks()) {
 			return
 		}
 		if mc.isolatedMarks {
