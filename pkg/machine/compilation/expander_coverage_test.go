@@ -158,7 +158,7 @@ func TestExpanderContext_Expand(t *testing.T) {
 
 	// Self-evaluating value should pass through
 	lit := syntax.NewSyntaxObject(values.NewInteger(42), sctx)
-	result, err := expanderCtx.Expand(lit)
+	result, err := expanderCtx.Expand(context.Background(), lit)
 	c.Assert(err, qt.IsNil)
 	c.Assert(result, qt.Equals, lit)
 }
@@ -173,7 +173,7 @@ func TestExpanderContext_ExpandOnce(t *testing.T) {
 
 	// Non-macro call should return unchanged
 	lit := syntax.NewSyntaxObject(values.NewInteger(42), sctx)
-	result, expanded, err := expanderCtx.ExpandOnce(lit)
+	result, expanded, err := expanderCtx.ExpandOnce(context.Background(), lit)
 	c.Assert(err, qt.IsNil)
 	c.Assert(expanded, qt.IsFalse)
 	c.Assert(result, qt.Equals, lit)

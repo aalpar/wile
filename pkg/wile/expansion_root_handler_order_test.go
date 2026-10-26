@@ -16,16 +16,21 @@ package wile_test
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+
+	"github.com/aalpar/wile/pkg/werr"
 )
 
 // expansionRootTrail is the prelude of the handler-order rows: note records a
 // step in trail, and the transformers m (raise), mc (raise-continuable, its value
-// as syntax) and mb (raise-continuable, its value bare) run the raise inside a dynamic-wind whose before and after thunks note 'before and
-// 'after, so a re-entry of the root shows as a second 'before. note reaches the
-// transformer as a datum in the form, (m note).
+// as syntax) and mb (raise-continuable, its value bare) run the raise inside a
+// dynamic-wind whose before and after thunks note 'before and 'after, so a
+// re-entry of the root shows as a second 'before. note reaches the transformer
+// as a datum in the form, (m note).
 const expansionRootTrail = `(import (for-syntax (scheme base)))
   (define trail (vector '()))
   (define (note x) (vector-set! trail 0 (cons x (vector-ref trail 0))))
@@ -61,7 +66,8 @@ func TestExpansionRootRaiseRunsTheCallersHandlerBeforeTheRootUnwinds(t *testing.
 		// petite: BEFORE AFTER GUARD boom. racket (with-handlers): the same.
 		{"guard", `(guard (e (#t (note 'guard) e)) (eval (list 'm note) env))`,
 			"(boom (before after guard))"},
-		// petite: BEFORE HANDLER AFTER boom. racket (call-with-exception-handler): the same.
+		// petite: BEFORE HANDLER AFTER boom. racket (call-with-exception-handler):
+		// the same.
 		{"handler escaping through call/cc",
 			`(call/cc (lambda (k) (with-exception-handler (lambda (c) (note 'handler) (k c)) (lambda () (eval (list 'm note) env)))))`,
 			"(boom (before handler after))"},
@@ -213,7 +219,8 @@ func TestLibraryBodyRaiseRunsTheImportersHandlerBeforeTheBodyUnwinds(t *testing.
 			`(call/cc (lambda (k) (with-exception-handler (lambda (c) (note 'handler) (k c)) (lambda () (environment '(probe user))))))`,
 			"(boom (handler after))"},
 		// A guard whose clauses miss re-raises from its own continuation, not from
-		// the body, which has ended (TestGuardMissPastAnEndedExpansionRootReRaisesFromTheGuard).
+		// the body, which has ended
+		// (TestGuardMissPastAnEndedExpansionRootReRaisesFromTheGuard).
 		{"an outer guard around a guard that misses",
 			`(guard (e (#t (note 'outer) e)) (guard (e ((string? e) 'no)) (environment '(probe user))))`,
 			"(boom (after outer))"},
@@ -232,4 +239,107 @@ func TestLibraryBodyRaiseRunsTheImportersHandlerBeforeTheBodyUnwinds(t *testing.
 			qt.Assert(t, v.SchemeString(), qt.Equals, "(boom (guard) 1)")
 		})
 	}
+}
+
+// TestExpansionRootRunsInTheCallersParameterization: an expansion-time root
+// inherits the whole dynamic environment of the runtime call that started it,
+// not its handler stack alone, so the caller's handler runs on the root with the
+// caller's parameterization (R7RS 6.11: the dynamic environment of the raise),
+// and so does the transformer. Before, every parameter but the handler stack
+// read its default there. petite and racket agree on every row.
+func TestExpansionRootRunsInTheCallersParameterization(t *testing.T) {
+	t.Parallel()
+
+	const prelude = `(import (for-syntax (scheme base) (scheme write)))
+	  (define-syntax m (lambda (stx) (raise 'boom)))
+	  (define-syntax shout (lambda (stx) (display "EXPANDING") #'1))
+	  (define env (interaction-environment))
+	  (define p (make-parameter 1))
+	  (define port (open-output-string))`
+	for _, tc := range []struct {
+		name, src, want string
+	}{
+		{"a parameter the handler reads",
+			`(parameterize ((p 2))
+			   (call/cc (lambda (k) (with-exception-handler (lambda (e) (k (list 'p= (p)))) (lambda () (eval '(m) env))))))`,
+			"(p= 2)"},
+		{"the port the handler writes to",
+			`(parameterize ((current-output-port port))
+			   (call/cc (lambda (k) (with-exception-handler (lambda (e) (display "IN-HANDLER") (k 0)) (lambda () (eval '(m) env))))))
+			 (get-output-string port)`,
+			`"IN-HANDLER"`},
+		{"the port the transformer writes to",
+			`(parameterize ((current-output-port port)) (eval '(shout) env))
+			 (get-output-string port)`,
+			`"EXPANDING"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			v, err := newExpansionRootProbeEngine(t).EvalMultiple(context.Background(), prelude+"\n"+tc.src)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, v.SchemeString(), qt.Equals, tc.want)
+		})
+	}
+}
+
+// TestAnExpansionInATransformerInheritsItsLiveHandlers: compile, expand and
+// expand-once in a transformer start an expansion whose roots inherit the
+// transformer's live handlers, its own guard first, not the handlers of the eval
+// that runs the transformer. Before, compile inherited none, and the guard
+// around eval took the raise after the root had ended (no after thunk); expand
+// and expand-once, run inside an expansion, inherited that eval's caller's and
+// skipped the transformer's guard.
+func TestAnExpansionInATransformerInheritsItsLiveHandlers(t *testing.T) {
+	t.Parallel()
+
+	const prelude = `(import (for-syntax (scheme base) (wile eval)))
+	  (define-syntax q (lambda (s) (raise 'inner)))
+	  (define-syntax m
+	    (lambda (s)
+	      (datum->syntax s
+	        (list 'quote
+	          (guard (e (#t (list 'caught-in-transformer e)))
+	            (%s)
+	            'notcaught)))))`
+	for _, tc := range []struct {
+		name, call string
+	}{
+		{"compile", `compile '(let-syntax ((q (lambda (s) (raise 'inner)))) (q))`},
+		{"expand", `expand (datum->syntax s '(q))`},
+		{"expand-once", `expand-once (datum->syntax s '(q))`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			src := strings.Replace(prelude, "%s", tc.call, 1) +
+				"\n(guard (e (#t (list 'outer e))) (eval '(m) (interaction-environment)))"
+			v, err := newExpansionRootProbeEngine(t).EvalMultiple(context.Background(), src)
+			qt.Assert(t, err, qt.IsNil)
+			qt.Assert(t, v.SchemeString(), qt.Equals, "(caught-in-transformer inner)")
+		})
+	}
+
+	// compile at run time takes the order eval does: the guard's clause after
+	// the root's after thunk.
+	v, err := newExpansionRootProbeEngine(t).EvalMultiple(context.Background(),
+		expansionRootTrail+"\n(define result (guard (e (#t (note 'guard) e)) (compile (list 'm note))))"+
+			"\n(list result (reverse (vector-ref trail 0)))")
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, v.SchemeString(), qt.Equals, "(boom (before after guard))")
+}
+
+// TestLibraryBodyResumedRaiseIsNotItsEnd: a library body's raise-continuable
+// that the importer's handler resumes is over; when the body then leaves
+// through a continuation, a later importer is told it exited that way, not
+// given the resumed raise.
+func TestLibraryBodyResumedRaiseIsNotItsEnd(t *testing.T) {
+	t.Parallel()
+
+	eng := newLibraryBodyProbeEngine(t, `(raise-continuable 'warn) ((vector-ref hook 0) 'escaped)`)
+	v, err := eng.EvalMultiple(context.Background(), `(import (probe box))
+	  (call/cc (lambda (k) (vector-set! hook 0 k)
+	    (with-exception-handler (lambda (e) 42) (lambda () (environment '(probe user))))))`)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, v.SchemeString(), qt.Equals, "escaped")
+	_, err = eng.EvalMultiple(context.Background(), `(environment '(probe user))`)
+	qt.Assert(t, errors.Is(err, werr.ErrLibraryInstantiationEscaped), qt.IsTrue, qt.Commentf("%v", err))
 }

@@ -15,6 +15,8 @@
 package compilation
 
 import (
+	"context"
+
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/machine"
 	"github.com/aalpar/wile/pkg/syntax"
@@ -55,22 +57,22 @@ func (p *ExpanderContext) Env() *environment.EnvironmentFrame {
 }
 
 // Expand fully expands a syntax object.
-func (p *ExpanderContext) Expand(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+func (p *ExpanderContext) Expand(ctx context.Context, stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
 	if p == nil {
 		return stx, nil
 	}
-	return p.expander.ExpandExpression(stx)
+	return p.expander.withContext(ctx).ExpandExpression(stx)
 }
 
 // ExpandOnce performs a single step of macro expansion.
 // Returns (expanded-syntax, did-expand, error).
 // If the input is a macro call, it expands it once and returns (result, true, nil).
 // If the input is not a macro call, it returns (input, false, nil).
-func (p *ExpanderContext) ExpandOnce(stx syntax.SyntaxValue) (syntax.SyntaxValue, bool, error) {
+func (p *ExpanderContext) ExpandOnce(ctx context.Context, stx syntax.SyntaxValue) (syntax.SyntaxValue, bool, error) {
 	if p == nil {
 		return stx, false, nil
 	}
-	return p.expander.ExpandOnce(stx)
+	return p.expander.withContext(ctx).ExpandOnce(stx)
 }
 
 // MacroValue resolves id through lookupMacroBinding's arms — the let-syntax

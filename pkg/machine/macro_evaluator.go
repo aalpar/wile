@@ -143,6 +143,9 @@ func invokeTransformerClosure(ctx context.Context, cls Closure, expanderCtx Expa
 			ReleaseSubContext(mc)
 			// mc has no handlers, so a failure applyForeign's bridge converts is an
 			// uncaught raise; one it does not (an arity mismatch) passes unmarked.
+			// It inherits none (false): a Go transformer is applied with no driver
+			// (no RunWithinBoundary), so there is no run for a handler of the
+			// caller's to execute on; the bridge raises after it returns.
 			return nil, markExpansionRootEscape(ctx, false, werr.WrapForeignErrorf(err, "failed to apply transformer"))
 		}
 	default:

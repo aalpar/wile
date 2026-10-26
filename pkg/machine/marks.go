@@ -54,7 +54,7 @@ func lookupMark(ms []markEntry, key values.Value) values.Value {
 //     continuation, but that continuation's own marks from ABOVE the sub-context
 //     boundary it was captured behind must still resolve; the snapshot
 //     (collectMarksOutsideSegment / SnapshotReachableMarksInto) carries them.
-//  4. at an expansion-time root, its caller's handler stack (callerHandlers),
+//  4. at an expansion-time root, its caller's dynamic environment (callerMarks),
 //     after the snapshot if it is isolated: the root runs for the caller,
 //     synchronously, with no chain linking it there.
 //  5. otherwise hop to parentMC and repeat, mirroring how dynamic-wind extents
@@ -79,7 +79,7 @@ func (p *MachineContext) forEachReachableMarkFrame(visit func(frame []markEntry)
 		if mc.isolatedMarks && len(mc.capturedMarks) > 0 && !visit(mc.capturedMarks) {
 			return
 		}
-		if len(mc.callerHandlers) > 0 && !visit(mc.callerHandlers) {
+		if len(mc.callerMarks) > 0 && !visit(mc.callerMarks) {
 			return
 		}
 		if mc.isolatedMarks {

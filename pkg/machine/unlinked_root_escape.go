@@ -23,9 +23,11 @@ import (
 
 // unlinkedRootEscape marks an uncaught raise out of a root that ran
 // synchronously for the caller but is not linked to its chain, so it searched
-// none of the caller's handlers: an expansion-time root, which runs a macro
-// transformer, a phase-1 expression or a library body, or the root of an engine
-// run a host function started (Engine.Call, Engine.EvalMultiple). Its
+// none of the caller's handlers: an expansion-time root that did not inherit
+// them (inheritCallerHandlers; one that did settles its escape instead,
+// settleRootEscape), which runs a macro transformer, a phase-1 expression or a
+// library body, or the root of an engine run a host function started
+// (Engine.Call, Engine.EvalMultiple). Its
 // *ErrExceptionEscape means "uncaught on that root", not "uncaught": the first
 // foreign-call bridge it reaches raises the condition in the caller's handlers
 // (applyCallableError), the mechanism thread-join! uses for a joinee's outcome.
@@ -133,64 +135,70 @@ func ReRaiseOutOfEndedRoot(mc *MachineContext, k values.Value, cond values.Value
 }
 
 // callerHandlersKey carries, on the ctx an expansion runs under, the
-// expansionCaller of the runtime call that started it (ExpansionContext).
+// expansionCaller of the runtime call that started it
+// (ContextWithCallerHandlers). A nil *expansionCaller under the key hides an
+// outer one (inheritCallerHandlers).
 type callerHandlersKey struct{}
 
 // expansionCaller is what an expansion-time root takes from the runtime call
-// that started its expansion: that call's handler stack, and its thread, on
-// whose goroutine the root runs, so that a handler escaping from the root to the
-// caller's continuation is not refused as a cross-thread escape.
+// that started its expansion: that call's dynamic environment (its reachable
+// marks: the handler stack and every parameterization), the handler stack among
+// them, and its thread, on whose goroutine the root runs, so that a handler
+// escaping from the root to the caller's continuation is not refused as a
+// cross-thread escape.
 type expansionCaller struct {
+	marks    []markEntry
 	handlers values.Value
 	thread   *values.Thread
 	threadID uint64
 }
 
-// ExpansionContext returns the ctx for an expansion a primitive running on p
-// starts (eval, load, environment, ...): p's ctx, carrying p's handler stack.
-// Each expansion-time root the expansion runs inherits that stack below its own
-// (inheritCallerHandlers), so a raise its own handlers do not take is handled
-// in its dynamic extent, while its dynamic-winds are live, as when the
-// expansion shares the caller's stack (R7RS 6.11; Chez, Racket). Without it, a
-// root raises in no handlers and the caller's are consulted only after the root
-// has ended (MarkUnlinkedRootEscape).
-func (p *MachineContext) ExpansionContext() context.Context {
+// ContextWithCallerHandlers returns the ctx for an expansion a primitive
+// running on p starts (eval, load, environment, compile, expand, ...): p's ctx,
+// carrying p's dynamic environment. Each expansion-time root the expansion runs
+// inherits it below its own (inheritCallerHandlers), so a raise its own handlers
+// do not take is handled in its dynamic extent, while its dynamic-winds are
+// live, and the handler runs with the caller's parameterization, as when the
+// expansion shares the caller's continuation (R7RS 6.11; Chez, Racket). Without
+// it, a root raises in no handlers and the caller's are consulted only after the
+// root has ended (MarkUnlinkedRootEscape).
+func (p *MachineContext) ContextWithCallerHandlers() context.Context {
 	return context.WithValue(p.ctx, callerHandlersKey{}, &expansionCaller{
+		marks:    p.collectReachableMarks(),
 		handlers: p.ResolveParameterValue(exceptionHandlerParam),
 		thread:   p.thread,
 		threadID: p.threadID,
 	})
 }
 
-// inheritCallerHandlers gives p, an expansion-time root, the handler stack and
-// thread identity ctx carries (ExpansionContext), if any, and reports whether it
-// did.
+// inheritCallerHandlers gives p, an expansion-time root, the dynamic
+// environment and thread identity ctx carries (ContextWithCallerHandlers), if
+// any, and reports whether it did. It hides them from p's own ctx: an expansion
+// a primitive on p starts must inherit p's live handlers, which a primitive
+// passes with ContextWithCallerHandlers; one that passes p's ctx as it is gets
+// none, and the after-the-root bridge, rather than the outer caller's.
 func (p *MachineContext) inheritCallerHandlers(ctx context.Context) bool {
-	caller, ok := ctx.Value(callerHandlersKey{}).(*expansionCaller)
-	if !ok {
+	caller, _ := ctx.Value(callerHandlersKey{}).(*expansionCaller)
+	if caller == nil {
 		return false
 	}
-	p.callerHandlers = []markEntry{{key: exceptionHandlerParam, val: caller.handlers}}
+	p.callerMarks = caller.marks
+	p.callerHandlers = caller.handlers
 	p.thread = caller.thread
 	p.threadID = caller.threadID
+	p.ctx = context.WithValue(p.ctx, callerHandlersKey{}, (*expansionCaller)(nil))
 	return true
-}
-
-// rootOf returns the context at the end of p's parentMC links.
-func (p *MachineContext) rootOf() *MachineContext {
-	q := p
-	for q.parentMC != nil {
-		q = q.parentMC
-	}
-	return q
 }
 
 // inheritingRoot returns the expansion-time root p runs under when handlers is
 // the stack that root inherited from its caller, so a raise to handlers has
-// left the root's own; nil otherwise.
+// left the root's own; nil otherwise. The root is rootContext's: an
+// expansion-time root has no parent and is not driven by RunResumable, so the
+// walk ends there whenever it reaches it; one that stops earlier, at a context
+// RunResumable drives, is at a root that inherited nothing.
 func (p *MachineContext) inheritingRoot(handlers values.Value) *MachineContext {
-	root := p.rootOf()
-	if len(root.callerHandlers) == 0 || !values.Eqv(root.callerHandlers[0].val, handlers) {
+	root := p.rootContext()
+	if root.callerHandlers == nil || !values.Eqv(root.callerHandlers, handlers) {
 		return nil
 	}
 	return root
@@ -204,11 +212,10 @@ func (p *MachineContext) inheritingRoot(handlers values.Value) *MachineContext {
 // wholesale) is returned whole.
 func (p *MachineContext) ownHandlers() values.Value {
 	handlers := p.ResolveParameterValue(exceptionHandlerParam)
-	root := p.rootOf()
-	if len(root.callerHandlers) == 0 {
+	inherited := p.rootContext().callerHandlers
+	if inherited == nil {
 		return handlers
 	}
-	inherited := root.callerHandlers[0].val
 	var own []values.Value
 	for h := handlers; !values.Eqv(h, inherited); {
 		pair, ok := h.(*values.Pair)

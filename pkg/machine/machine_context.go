@@ -92,12 +92,15 @@ type MachineContext struct {
 	// expansion-time root (a transformer body, a library body, the bootstrap),
 	// which the resume rule treats differently from a runtime root (resumePrompt).
 	expansionRoot bool
-	// callerHandlers is an expansion-time root's caller's handler stack, as one
-	// mark (inheritCallerHandlers): the walks over reachable marks visit it after
-	// the root's own, so a raise the root's handlers do not take is handled by
-	// the caller's while the root is live (R7RS 6.11). Nil for every other
-	// context and for a root no runtime primitive started.
-	callerHandlers []markEntry
+	// callerMarks is an expansion-time root's caller's dynamic environment, its
+	// reachable marks as one frame (inheritCallerHandlers): the walks over
+	// reachable marks visit it after the root's own, so a raise the root's
+	// handlers do not take is handled by the caller's while the root is live, in
+	// the caller's parameterization (R7RS 6.11). callerHandlers is the handler
+	// stack among them. Both nil for every other context and for a root no
+	// runtime primitive started.
+	callerMarks    []markEntry
+	callerHandlers values.Value
 	// hostCallRoot is set by RunHostCall: a root RunResumable drives for a
 	// procedure a Go host applies (Engine.Call), whose winding started empty and
 	// which may have the calling program's driver above it on the Go stack. The
