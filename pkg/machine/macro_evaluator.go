@@ -62,7 +62,10 @@ func (p *vmMacroEvaluator) EvalTemplate(ctx context.Context, tpl *NativeTemplate
 	inherited := mc.inheritCallerHandlers(ctx)
 	err := mc.RunWithinBoundary()
 	if err != nil {
-		raised := mc.raisedToCaller
+		var raised *ErrExceptionEscape
+		if mc.boundary != nil {
+			raised = mc.boundary.raisedToCaller
+		}
 		ReleaseSubContext(mc)
 		err = markExpansionRootEscape(ctx, inherited, err)
 		if raised != nil {

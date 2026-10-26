@@ -89,16 +89,47 @@ func (p *unlinkedRootEscape) raiseIn(mc *MachineContext, err error) error {
 	if !ok {
 		return &unlinkedRootEscape{err: err}
 	}
-	returned := handlerReturnedMessage
-	if p.escape.Continuable {
-		returned = "exception handler returned from raise-continuable"
-		loc := p.escape.Location()
-		if loc != "" {
-			returned += " at " + loc
-		}
-		returned += ", in a transformer or library body that has ended, so it cannot be resumed"
+	return mc.raiseToHandlers(p.escape.Condition, false, handlers, endedRootReturnedMessage(p.escape))
+}
+
+// endedRootReturnedMessage is the secondary exception's message when a handler
+// returns from escape, a raise out of an expansion-time root raised again after
+// the root has ended: for a raise-continuable, that it cannot be resumed, and
+// where it was raised, rather than that the program raised a non-continuable
+// exception.
+func endedRootReturnedMessage(escape *ErrExceptionEscape) string {
+	if !escape.Continuable {
+		return handlerReturnedMessage
 	}
-	return mc.raiseToHandlers(p.escape.Condition, false, handlers, returned)
+	q := "exception handler returned from raise-continuable"
+	loc := escape.Location()
+	if loc != "" {
+		q += " at " + loc
+	}
+	return q + ", in a transformer or library body that has ended, so it cannot be resumed"
+}
+
+// ReRaiseOutOfEndedRoot is a guard's re-raise of cond when its clauses all miss
+// and k, the continuation of its handler, was captured under an expansion-time
+// root that has ended: the raise came out of the root to a guard of the caller's,
+// and the guard's escape to its clauses ended the root. R7RS 4.2.7 re-raises in
+// the dynamic environment of the original raise, by re-entering k; the root
+// cannot be re-entered, so the raise is made here, in the guard's continuation,
+// to the same handlers (those outside the guard). A handler that returns is told
+// so, as for an uncaught raise out of an ended root (unlinkedRootEscape.raiseIn):
+// a raise-continuable has nothing to resume. raised is false when k's root is
+// live, or not an expansion-time root, and the guard re-enters k.
+func ReRaiseOutOfEndedRoot(mc *MachineContext, k values.Value, cond values.Value) (raised bool, err error) {
+	capt, ok := k.(*CapturedContinuation)
+	if !ok || capt.cc.root == nil || !capt.cc.root.ended() {
+		return false, nil
+	}
+	returned := handlerReturnedMessage
+	escape := capt.cc.root.raisedToCaller
+	if escape != nil && values.Eqv(escape.Condition, cond) {
+		returned = endedRootReturnedMessage(escape)
+	}
+	return true, mc.raiseToHandlers(cond, false, mc.ResolveParameterValue(exceptionHandlerParam), returned)
 }
 
 // callerHandlersKey carries, on the ctx an expansion runs under, the
@@ -202,7 +233,7 @@ func settleRootEscape(err error) error {
 }
 
 // raisedToCallerError is an expansion-time root's failure with the last raise
-// its own handlers did not take (MachineContext.raisedToCaller).
+// its own handlers did not take (boundaryToken.raisedToCaller).
 type raisedToCallerError struct {
 	err   error
 	raise *ErrExceptionEscape

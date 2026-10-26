@@ -98,10 +98,6 @@ type MachineContext struct {
 	// the caller's while the root is live (R7RS 6.11). Nil for every other
 	// context and for a root no runtime primitive started.
 	callerHandlers []markEntry
-	// raisedToCaller is the last raise on this root that its own handlers did not
-	// take, which went on to callerHandlers (raiseToHandlers). A library body's
-	// later importers see it (RaisedToCaller).
-	raisedToCaller *ErrExceptionEscape
 	// hostCallRoot is set by RunHostCall: a root RunResumable drives for a
 	// procedure a Go host applies (Engine.Call), whose winding started empty and
 	// which may have the calling program's driver above it on the Go stack. The
@@ -2564,7 +2560,7 @@ func (p *MachineContext) resumePrompt(resumeErr *ErrResumeContinuation) (prompt 
 	if !p.expansionRoot || seg == nil || seg.root == nil {
 		return nil, false
 	}
-	return nil, seg.root == p.boundary || (seg.root.closed.Load() && !seg.root.runtime)
+	return nil, seg.root == p.boundary || seg.root.ended()
 }
 
 // passUpResume prepares a resume this driver does not own for the enclosing

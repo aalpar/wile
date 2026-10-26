@@ -97,18 +97,19 @@ func (mc *MachineContext) raiseToHandlers(cond values.Value, continuable bool, h
 	enrichNativeError(cond, source, trace)
 
 	// A raise that has left an expansion-time root's own handlers is recorded on
-	// the root, as the escape it would have been with no caller's handlers below.
+	// the root's boundary, as the escape it would have been with no caller's
+	// handlers below.
 	root := mc.inheritingRoot(handlers)
 	pair, ok := handlers.(*values.Pair)
 	if !ok {
 		escape := mc.uncaughtEscape(cond, continuable, source, trace)
 		if root != nil {
-			root.raisedToCaller = escape
+			root.boundaryIdentity().raisedToCaller = escape
 		}
 		return escape
 	}
 	if root != nil {
-		root.raisedToCaller = mc.uncaughtEscape(cond, continuable, source, trace)
+		root.boundaryIdentity().raisedToCaller = mc.uncaughtEscape(cond, continuable, source, trace)
 	}
 	handler := pair.Car()
 	parent := pair.Cdr()

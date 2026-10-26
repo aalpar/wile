@@ -40,7 +40,11 @@
 ;; original raise (where the previous exception handler is current).
 ;;
 ;; - guard-k: escapes to the guard form's return site
-;; - handler-k: captures the handler's dynamic extent for re-raise
+;; - handler-k: captures the handler's dynamic extent for re-raise. When the raise
+;;   came out of an expansion-time root (a transformer, a library body) to a guard
+;;   of its caller's, handler-k is in the root, which ended when the guard escaped
+;;   to its clauses; %guard-re-raise-if-ended then re-raises from the guard's own
+;;   continuation, to the same handlers, instead of re-entering the root.
 ;; - Both paths wrap their result in a thunk; the outer ((call/cc ...))
 ;;   calls whichever thunk wins
 (define-syntax guard
@@ -63,6 +67,7 @@
                      (let ((var condition))
                        (guard-aux
                         (lambda ()
+                          (%guard-re-raise-if-ended handler-k condition)
                           (handler-k
                            (lambda ()
                              (raise-continuable condition))))

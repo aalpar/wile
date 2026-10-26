@@ -57,6 +57,19 @@ type boundaryToken struct {
 	// (the ForeignClosure arm of invokeTransformerClosure) enters no driver, and
 	// that arm sets the flag itself.
 	runtime bool
+	// raisedToCaller is the last raise on an expansion-time root that its own
+	// handlers did not take, which went on to the handlers it inherited from its
+	// caller (raiseToHandlers). It outlives the context, for a library body's later
+	// importers (RaisedToCaller) and for a guard of the caller's whose clauses miss
+	// after the root has ended (ReRaiseOutOfEndedRoot). Written only while the root
+	// runs, before closed is set; read only after.
+	raisedToCaller *ErrExceptionEscape
+}
+
+// ended reports whether p names an expansion-time root whose run is over: a
+// continuation captured under it cannot be resumed there, and its driver is gone.
+func (p *boundaryToken) ended() bool {
+	return p.closed.Load() && !p.runtime
 }
 
 // boundaryIdentity returns p's boundary token, allocating it on first use.

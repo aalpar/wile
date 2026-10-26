@@ -8,7 +8,7 @@ This document catalogs differences between the current implementation and the R7
 
 ## Summary
 
-22 known differences exist:
+23 known differences exist:
 1. Non-blocking I/O detection (`char-ready?`, `u8-ready?`) always returns `#t`. Correct for string, bytevector and regular-file ports; on a port that can block (stdin, a pipe) the `#t` is a promise the next read may break.
 2. `parameterize` uses continuation marks instead of `dynamic-wind`. This fixes composable continuation bugs at the cost of a minor semantic difference when mutating parameters via `(p val)` inside `parameterize`.
 3. `set-current-directory!` changes an **engine-scoped** current directory, not the process's working directory: the host and every other engine are unaffected, and relative paths the engine resolves (file primitives, `load`/`include`, a spawned process's start directory) resolve against it. Until it is first called, the engine follows the host's working directory live. Host-side resolution (a relative target handed straight to `pkg/security`'s containment check, the CLI's script argument) still uses the process directory.
@@ -155,6 +155,13 @@ This document catalogs differences between the current implementation and the R7
     either, a departure from R7RS §6.14 ("runs all outstanding dynamic-wind
     *after* procedures") that holds on the main thread too. See *`exit` Ends
     the Process From Any Thread* below.
+23. A `guard` whose clauses all miss re-raises from **its own continuation**
+    when the raise came out of a transformer or library body that has since
+    ended, rather than by re-entering the raise's continuation inside it. The
+    handlers are the same ones R7RS §4.2.7 names, those outside the guard; what
+    differs is that the body's `dynamic-wind` before and after thunks do not run
+    a second time. See *A Guard Does Not Re-Enter an Ended Transformer or
+    Library Body* below.
 
 ---
 
@@ -595,6 +602,42 @@ runs none, on the main thread too: `(dynamic-wind (lambda () #f) (lambda ()
 Petite Chez prints `after` (Racket prints nothing). This is a current gap
 (`exitWithCode`'s comment calls the cleanup not yet implemented), not a
 decision, and is not pinned.
+
+## A Guard Does Not Re-Enter an Ended Transformer or Library Body
+
+**Forms:** `guard`, around `eval`, `load`, `environment`, `expand` or an import
+
+When no clause matches, R7RS §4.2.7 re-raises with `raise-continuable` "within
+the dynamic environment of the original call to `raise`", which the reference
+implementation does by re-entering the continuation of the guard's handler. A
+raise out of a transformer, a `define-syntax` expression or a library body runs
+the caller's handlers while that body is live, so the handler's continuation is
+inside it, and the guard's escape to its clauses ends it. Wile does not re-enter
+it: the guard raises again from its own continuation, to the same handlers.
+
+```scheme
+(define-syntax m
+  (lambda (stx)
+    (dynamic-wind (lambda () (display "BEFORE "))
+                  (lambda () (raise 'boom))
+                  (lambda () (display "AFTER ")))))
+(guard (e (#t (display "OUTER ") e))
+  (guard (e ((string? e) 'no))
+    (eval '(m) (interaction-environment))))
+;; Wile, Racket (nested with-handlers): BEFORE AFTER OUTER => boom
+;; Petite Chez:                         BEFORE AFTER BEFORE AFTER OUTER => boom
+```
+
+Petite's second before/after pair is the re-entry. An outer handler that
+escapes through `call/cc` runs inside the re-entered body in Petite (`BEFORE
+AFTER BEFORE OUTER AFTER`) and after it here (`BEFORE AFTER OUTER`). A handler
+that returns from the re-raise of a `raise-continuable` is an error ("exception
+handler returned from raise-continuable at …, in a transformer or library body
+that has ended, so it cannot be resumed"), where Petite resumes the transformer
+with the handler's value. Re-entering would also need a `call-with-exit` escape
+re-entered past an expansion root to stay valid, which it does not yet (TODO.md:
+a re-entered `call-with-exit` extent past an expansion-time root). Pinned by
+`TestGuardMissPastAnEndedExpansionRootReRaisesFromTheGuard` (`pkg/wile`).
 
 ## `(library X)` Asks Whether X Is Available, Not What X Does
 
