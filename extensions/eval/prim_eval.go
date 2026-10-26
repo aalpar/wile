@@ -137,7 +137,7 @@ func PrimEval(cc machine.CallContext) error {
 		return werr.WrapForeignErrorf(err, "eval")
 	}
 
-	tpl, err := compilation.ExpandAndCompile(mc.Context(), env, stx)
+	tpl, err := compilation.ExpandAndCompile(mc.ContextWithCallerHandlers(), env, stx)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "eval")
 	}
@@ -211,7 +211,7 @@ func PrimLoad(cc machine.CallContext) error {
 	// in the engine. Two threads each loading a file that includes the same
 	// basename from different directories interleaved their pushes and one
 	// compiled the other's file — a source substitution, so -race cannot see it.
-	loadCtx := mc.Context()
+	loadCtx := mc.ContextWithCallerHandlers()
 	stack := sourceload.LoadStackFromContext(loadCtx)
 	if stack == nil {
 		stack = sourceload.NewLoadStack()
@@ -508,7 +508,7 @@ func PrimEnvironment(cc machine.CallContext) error {
 
 	// Process each import spec
 	err = helpers.ForEachList(mc.Context(), args, "environment", func(_ context.Context, _ int, _ bool, specVal values.Value) error {
-		return compilation.ImportSpecInto(mc.Context(), specVal, callerEnv, newEnv, machine.NewVMMacroEvaluator(), "environment")
+		return compilation.ImportSpecInto(mc.ContextWithCallerHandlers(), specVal, callerEnv, newEnv, machine.NewVMMacroEvaluator(), "environment")
 	})
 	if err != nil {
 		return err
@@ -551,7 +551,7 @@ func PrimExpand(cc machine.CallContext) error {
 	expanderCtx := mc.ExpanderContext()
 	if expanderCtx != nil {
 		// In expansion phase - use current context
-		expanded, err := expanderCtx.Expand(syntaxVal)
+		expanded, err := expanderCtx.Expand(mc.ContextWithCallerHandlers(), syntaxVal)
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "expand: expansion failed")
 		}
@@ -561,7 +561,7 @@ func PrimExpand(cc machine.CallContext) error {
 
 	// Not in expansion phase - create temporary expander
 	env := mc.EnvironmentFrame()
-	expander := compilation.NewExpanderTimeContinuation(mc.Context(), env, machine.NewVMMacroEvaluator())
+	expander := compilation.NewExpanderTimeContinuation(mc.ContextWithCallerHandlers(), env, machine.NewVMMacroEvaluator())
 	expanded, err := expander.ExpandExpression(syntaxVal)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "expand: expansion failed")
@@ -604,7 +604,7 @@ func PrimExpandOnce(cc machine.CallContext) error {
 	expanderCtx := mc.ExpanderContext()
 	if expanderCtx != nil {
 		// In expansion phase - use current context
-		expanded, didExpand, err := expanderCtx.ExpandOnce(syntaxVal)
+		expanded, didExpand, err := expanderCtx.ExpandOnce(mc.ContextWithCallerHandlers(), syntaxVal)
 		if err != nil {
 			return werr.WrapForeignErrorf(err, "expand-once: expansion failed")
 		}
@@ -614,13 +614,24 @@ func PrimExpandOnce(cc machine.CallContext) error {
 
 	// Not in expansion phase - create temporary expander
 	env := mc.EnvironmentFrame()
-	expander := compilation.NewExpanderTimeContinuation(mc.Context(), env, machine.NewVMMacroEvaluator())
+	expander := compilation.NewExpanderTimeContinuation(mc.ContextWithCallerHandlers(), env, machine.NewVMMacroEvaluator())
 	expanded, didExpand, err := expander.ExpandOnce(syntaxVal)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "expand-once: expansion failed")
 	}
 	mc.SetValues(expanded, values.BoolToBoolean(didExpand))
 	return nil
+}
+
+// expansionContext is the ctx for an expansion cc starts: its handlers' when cc
+// is a MachineContext (ContextWithCallerHandlers), else its plain ctx, whose
+// expansion-time roots raise in no handlers and leave the raise to the bridge.
+func expansionContext(cc machine.CallContext) context.Context {
+	mc, ok := cc.(*machine.MachineContext)
+	if !ok {
+		return cc.Context()
+	}
+	return mc.ContextWithCallerHandlers()
 }
 
 // PrimCompile implements the (compile) primitive.
@@ -682,7 +693,7 @@ func PrimCompile(mc machine.CallContext) error {
 	// globals and a nil namespace.
 	env := environment.NewEnvironmentFrameWithParent(nil, mc.EnvironmentFrame().MutableRuntime())
 
-	tpl, err := compilation.ExpandAndCompileOptimized(mc.Context(), env, syntaxVal)
+	tpl, err := compilation.ExpandAndCompileOptimized(expansionContext(mc), env, syntaxVal)
 	if err != nil {
 		return werr.WrapForeignErrorf(err, "compile")
 	}

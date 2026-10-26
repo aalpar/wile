@@ -179,6 +179,15 @@ func (p *CompiledLibrary) EnsureInstantiated(ctx context.Context, evaluator mach
 		// (EvalTemplate), so the importer's handlers see it.
 		cancelled := machine.CancelledBy(ctx, err)
 		p.instantiateErr = p.memoizableInstantiateError(first, err, cancelled)
+		// A raise the body's own handlers did not take went on to the first
+		// importer's, while the body was live; whatever ended the body then (that
+		// handler's escape, or the raise uncaught there too), a later importer
+		// receives the raise, in its own handlers.
+		raised := machine.RaisedToCaller(err)
+		if raised != nil && !cancelled {
+			p.instantiateErr = wrapSourcedError(p.formSource,
+				werr.WrapForeignErrorf(raised, "error executing library %s", p.Name.SchemeString()))
+		}
 	})
 	if first != nil {
 		return first

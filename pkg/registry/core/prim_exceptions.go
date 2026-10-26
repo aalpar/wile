@@ -59,6 +59,25 @@ func PrimRaiseContinuable(cc machine.CallContext) error {
 	return machine.RaiseInPlace(mc, mc.Arg(0), true)
 }
 
+// PrimGuardReRaiseIfEnded implements (%guard-re-raise-if-ended handler-k
+// condition), the first step of guard's re-raise when its clauses all miss: when
+// handler-k was captured under an expansion-time root that has ended, it cannot
+// be re-entered, and the condition is raised here, in the guard's continuation
+// (machine.ReRaiseOutOfEndedRoot). Otherwise it returns, and guard re-enters
+// handler-k.
+func PrimGuardReRaiseIfEnded(cc machine.CallContext) error {
+	mc, err := machine.RequireMachineContext(cc, "%guard-re-raise-if-ended")
+	if err != nil {
+		return err
+	}
+	raised, err := machine.ReRaiseOutOfEndedRoot(mc, mc.Arg(0), mc.Arg(1))
+	if raised {
+		return err
+	}
+	mc.SetValue(values.Void)
+	return nil
+}
+
 // PrimError implements (error message irritant ...): builds an error object from
 // MESSAGE and irritants, then raises it as a non-continuable exception.
 func PrimError(cc machine.CallContext) error {

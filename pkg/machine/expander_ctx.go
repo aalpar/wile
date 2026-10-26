@@ -15,6 +15,8 @@
 package machine
 
 import (
+	"context"
+
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/syntax"
 	"github.com/aalpar/wile/pkg/values"
@@ -27,8 +29,12 @@ import (
 // to machine/.
 type ExpanderCtx interface {
 	Env() *environment.EnvironmentFrame
-	Expand(syntax.SyntaxValue) (syntax.SyntaxValue, error)
-	ExpandOnce(syntax.SyntaxValue) (syntax.SyntaxValue, bool, error)
+	// Expand and ExpandOnce run the transformers they reach under ctx, not the
+	// enclosing expansion's: a primitive in a transformer passes its own
+	// (MachineContext.ContextWithCallerHandlers), so those transformers inherit
+	// its live handlers.
+	Expand(ctx context.Context, stx syntax.SyntaxValue) (syntax.SyntaxValue, error)
+	ExpandOnce(ctx context.Context, stx syntax.SyntaxValue) (syntax.SyntaxValue, bool, error)
 	// MacroValue resolves id the way macro dispatch does and returns the value
 	// its BindingTypeSyntax binding holds: a transformer, or a bare compile-time
 	// value. The read side of syntax-local-value.

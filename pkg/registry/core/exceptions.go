@@ -37,6 +37,11 @@ func addExceptions(r *registry.PrimitiveRegistry) error {
 		{Name: "raise-continuable", InvokesProcedure: true, ParamCount: 1, Impl: PrimRaiseContinuable,
 			Doc: "Raises OBJ as a continuable exception. The handler's return value becomes the result of the raise expression.\n\nExamples:\n  (with-exception-handler\n    (lambda (e) 42)\n    (lambda () (raise-continuable \"note\")))  => 42", ParamNames: []string{"obj"}, Category: "exceptions",
 			ParamTypes: []values.TypeConstraint{values.TypeAny}, ReturnType: values.TypeAny},
+		// guard's re-raise when its clauses miss (bootstrap_macros_late.scm). Like
+		// raise, it runs the handlers on the live chain, hence InvokesProcedure.
+		{Name: "%guard-re-raise-if-ended", InvokesProcedure: true, ParamCount: 2, Impl: PrimGuardReRaiseIfEnded,
+			Doc: "Re-raises CONDITION here when HANDLER-K was captured under an expansion-time root that has ended; otherwise returns (internal).", ParamNames: []string{"handler-k", "condition"}, Category: "exceptions",
+			ParamTypes: []values.TypeConstraint{values.TypeAny, values.TypeAny}, ReturnType: values.TypeAny},
 		// InvokesProcedure: `error` reaches machine.RaiseInPlace, which runs the
 		// installed handler on the LIVE chain. Without the stamp the binding is
 		// CaptureSafe and Stable, so a self-recursive loop calling `error` arms

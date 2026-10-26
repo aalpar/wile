@@ -18,6 +18,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A raise out of a transformer or library body runs the caller's handlers
+  while the body is live (R7RS 6.11).** A `guard` or `with-exception-handler`
+  around `eval`, `load`, `environment`, `compile`, `expand`, `expand-once` or an
+  import took the raise only once the body had ended, so the body's
+  `dynamic-wind` after thunks never ran. Now a guard's clause runs after them
+  (`AFTER GUARD`), a handler runs before them (`HANDLER AFTER`), and a handler
+  that returns from a `raise-continuable` resumes the transformer with its
+  value, as in Petite Chez. The body runs in the caller's dynamic environment,
+  so the handler, and the transformer itself, see the caller's
+  `parameterize` (a `current-output-port` around `eval` now receives what an
+  expanding transformer displays, as in Petite and Racket). One of these called
+  from a transformer gives the expansion it starts the transformer's own
+  handlers.
+  A guard whose clauses miss re-raises from its own continuation, to the
+  handlers outside it, instead of re-entering the body that its escape ended:
+  `(guard (e (#t e)) (guard (e ((string? e) 'no)) (eval '(m) env)))` is `boom`
+  and runs the after thunk once, where Petite re-enters the body (see
+  `docs/reference/r7rs-differences.md`).
+
 - **A reader fault just past a complete datum fails the next read, not the
   one that read the datum.** A port whose reader failed right after `(x)` made
   `(read p)` raise with `(x)` in hand; racket returns `(x)`. The datum is now

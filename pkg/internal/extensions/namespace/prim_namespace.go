@@ -94,7 +94,7 @@ func PrimMakeNamespace(cc machine.CallContext) error {
 	}
 
 	err = helpers.ForEachList(mc.Context(), args, "make-namespace", func(_ context.Context, _ int, _ bool, specVal values.Value) error {
-		return compilation.ImportSpecInto(mc.Context(), specVal, callerEnv, newEnv, machine.NewVMMacroEvaluator(), "make-namespace")
+		return compilation.ImportSpecInto(mc.ContextWithCallerHandlers(), specVal, callerEnv, newEnv, machine.NewVMMacroEvaluator(), "make-namespace")
 	})
 	if err != nil {
 		return err
@@ -319,7 +319,7 @@ func PrimNamespaceRequire(cc machine.CallContext) error {
 	callerEnv := executingNamespace(mc).Runtime()
 	targetEnv := ns.Runtime()
 
-	err = compilation.ImportSpecInto(mc.Context(), specVal, callerEnv, targetEnv, machine.NewVMMacroEvaluator(), "namespace-require")
+	err = compilation.ImportSpecInto(mc.ContextWithCallerHandlers(), specVal, callerEnv, targetEnv, machine.NewVMMacroEvaluator(), "namespace-require")
 	if err != nil {
 		return err
 	}

@@ -58,7 +58,7 @@ var procedureInvokers = []string{
 	// core control / continuations / exceptions / parameters
 	"apply", "call/cc", "call-with-current-continuation", "call-with-values",
 	"call-with-continuation-barrier", "call-with-immediate-continuation-mark",
-	"with-exception-handler", "raise", "raise-continuable", "call-with-exit",
+	"with-exception-handler", "raise", "raise-continuable", "%guard-re-raise-if-ended", "call-with-exit",
 	"make-parameter", "call-with-continuation-prompt",
 	"call-with-composable-continuation", "with-timeout",
 	// eval extension: run / transform arbitrary code

@@ -118,46 +118,53 @@ func TestGuardMissReportsTheRaiseSite(t *testing.T) {
 }
 
 // TestRaiseContinuableOutOfAnExpansionRootNamesItself: a transformer's
-// raise-continuable reaches the caller's handlers after the transformer's root
-// has ended, so it cannot be resumed, and a handler that returns is an error. The
-// error names the raise the program wrote, and where it was, rather than "a
-// non-continuable exception" at the eval.
+// raise-continuable reaches the caller's handlers while the transformer's root is
+// live, so a handler that returns resumes it, as in petite ((eval '(m)) is 42). A
+// later importer of a library whose body's raise-continuable was uncaught gets
+// that raise after the body has ended, so it cannot be resumed, and a handler
+// that returns is an error. The error names the raise the program wrote, and
+// where it was, rather than "a non-continuable exception" at the import.
 func TestRaiseContinuableOutOfAnExpansionRootNamesItself(t *testing.T) {
 	t.Parallel()
 
-	_, err := newExpansionRootProbeEngine(t).EvalMultiple(context.Background(),
+	v, err := newExpansionRootProbeEngine(t).EvalMultiple(context.Background(),
 		"(import (for-syntax (scheme base)))\n"+
-			"(define-syntax m (lambda (s) (raise-continuable 'boom)))\n"+
+			"(define-syntax m (lambda (s) (datum->syntax s (raise-continuable 'boom))))\n"+
 			"(with-exception-handler (lambda (e) 42) (lambda () (eval '(m) (interaction-environment))))")
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, v.SchemeString(), qt.Equals, "42")
+
+	eng := newLibraryBodyProbeEngine(t, `(raise-continuable 'boom)`)
+	_, err = eng.EvalMultiple(context.Background(), `(import (probe box)) (environment '(probe user))`)
+	qt.Assert(t, err, qt.IsNotNil)
+	_, err = eng.EvalMultiple(context.Background(),
+		`(with-exception-handler (lambda (e) 42) (lambda () (environment '(probe user))))`)
 	qt.Assert(t, err, qt.IsNotNil)
 	qt.Assert(t, errors.Is(err, werr.ErrNonContinuableException), qt.IsTrue, qt.Commentf("%v", err))
-	qt.Assert(t, err.Error(), qt.Contains, "returned from raise-continuable at :2:30")
+	qt.Assert(t, err.Error(), qt.Contains, "returned from raise-continuable at probe/user.sld:5:10")
 	qt.Assert(t, err.Error(), qt.Not(qt.Contains), "non-continuable exception")
 }
 
 // TestGuardMissInAnExpansionRootKeepsTheRaisesContinuability: a guard whose
 // clauses miss re-raises with raise-continuable (R7RS 4.2.7), in the dynamic
-// environment of the original raise. Uncaught on a transformer's root, the
-// re-raise is the program's raise again: non-continuable for a raise, so a handler
-// around the eval that returns is told it returned from a non-continuable
-// exception, not from a raise-continuable the program did not write.
+// environment of the original raise, where the caller's handlers are below the
+// transformer's own. For a raise the re-raise is the program's raise again,
+// non-continuable, so a handler around the eval that returns is told it returned
+// from a non-continuable exception, not from a raise-continuable the program did
+// not write. For a raise-continuable it resumes the transformer with the
+// handler's value, as in petite.
 func TestGuardMissInAnExpansionRootKeepsTheRaisesContinuability(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
-		name, raise, want string
-	}{
-		{"raise", "raise", "exception handler returned from non-continuable exception"},
-		{"raise-continuable", "raise-continuable", "exception handler returned from raise-continuable at :2:"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := newExpansionRootProbeEngine(t).EvalMultiple(context.Background(),
-				"(import (for-syntax (scheme base)))\n"+
-					"(define-syntax m (lambda (s) (guard (e ((string? e) 'no)) ("+tc.raise+" 'boom))))\n"+
-					"(with-exception-handler (lambda (e) 42) (lambda () (eval '(m) (interaction-environment))))")
-			qt.Assert(t, err, qt.IsNotNil)
-			qt.Assert(t, errors.Is(err, werr.ErrNonContinuableException), qt.IsTrue, qt.Commentf("%v", err))
-			qt.Assert(t, err.Error(), qt.Contains, tc.want)
-		})
-	}
+	const prelude = "(import (for-syntax (scheme base)))\n" +
+		"(define-syntax m (lambda (s) (datum->syntax s (guard (e ((string? e) 'no)) (%s 'boom)))))\n" +
+		"(with-exception-handler (lambda (e) 42) (lambda () (eval '(m) (interaction-environment))))"
+	_, err := newExpansionRootProbeEngine(t).EvalMultiple(context.Background(), strings.Replace(prelude, "%s", "raise", 1))
+	qt.Assert(t, err, qt.IsNotNil)
+	qt.Assert(t, errors.Is(err, werr.ErrNonContinuableException), qt.IsTrue, qt.Commentf("%v", err))
+	qt.Assert(t, err.Error(), qt.Contains, "exception handler returned from non-continuable exception")
+
+	v, err := newExpansionRootProbeEngine(t).EvalMultiple(context.Background(), strings.Replace(prelude, "%s", "raise-continuable", 1))
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, v.SchemeString(), qt.Equals, "42")
 }

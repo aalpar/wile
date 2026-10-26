@@ -182,6 +182,15 @@ func (p *ExpanderTimeContinuation) newChildExpander(env *environment.Environment
 	return q
 }
 
+// withContext returns p running its transformers under ctx: the same run (its
+// state is shared by pointer, as with newChildExpander), for an expansion a
+// primitive in a transformer starts with its own ctx (ExpanderContext.Expand).
+func (p *ExpanderTimeContinuation) withContext(ctx context.Context) *ExpanderTimeContinuation {
+	q := *p
+	q.ctx = ctx
+	return &q
+}
+
 // SetMaxDepth sets the maximum structural recursion depth allowed during
 // expansion for this run. A value of 0 (or negative, clamped to 0) disables
 // the limit. Mirrors the parser's SetMaxDepth and MachineContext.SetMaxCallDepth.

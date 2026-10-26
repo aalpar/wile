@@ -937,9 +937,12 @@ func TestEnvFramePool_SurvivesGC(t *testing.T) {
 // stubExpanderCtx is a minimal ExpanderCtx for testing pool reset behavior.
 type stubExpanderCtx struct{}
 
-func (p *stubExpanderCtx) Env() *environment.EnvironmentFrame                    { return nil }
-func (p *stubExpanderCtx) Expand(syntax.SyntaxValue) (syntax.SyntaxValue, error) { return nil, nil }
-func (p *stubExpanderCtx) ExpandOnce(syntax.SyntaxValue) (syntax.SyntaxValue, bool, error) {
+func (p *stubExpanderCtx) Env() *environment.EnvironmentFrame { return nil }
+func (p *stubExpanderCtx) Expand(context.Context, syntax.SyntaxValue) (syntax.SyntaxValue, error) {
+	return nil, nil
+}
+
+func (p *stubExpanderCtx) ExpandOnce(context.Context, syntax.SyntaxValue) (syntax.SyntaxValue, bool, error) {
 	return nil, false, nil
 }
 func (p *stubExpanderCtx) MacroValue(*syntax.SyntaxSymbol) (values.Value, bool) {

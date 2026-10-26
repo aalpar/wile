@@ -325,7 +325,11 @@ func applyCallableError(mc *MachineContext, err error) error {
 		// and .StackTrace; without it the stamp survives only as message text.
 		return mc.WrapError(err, "")
 	}
-	return RaiseInPlace(mc, ConditionFromError(err), false)
+	cond := ConditionFromError(err)
+	if CancelledBy(mc.ctx, err) {
+		return mc.raiseToHandlers(cond, false, mc.ownHandlers(), handlerReturnedMessage)
+	}
+	return RaiseInPlace(mc, cond, false)
 }
 
 var _ Closure = (*ForeignClosure)(nil)

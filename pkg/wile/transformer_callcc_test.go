@@ -1086,11 +1086,11 @@ func TestLibraryBodyThatRaisedIsRememberedAsTheSameRaise(t *testing.T) {
 	qt.Assert(t, msgs[1], qt.Equals, msgs[0])
 }
 
-// TestLibraryBodyRaiseIsCaughtByAGuardAroundTheImport: a library body runs on a
-// root that holds none of the importer's handlers, so its uncaught raise used
-// to reach the embedder past a guard around the import. It is raised in the
-// importer's handlers now, as Chez and Racket do, the raised object itself, on
-// every import (later ones see the remembered raise).
+// TestLibraryBodyRaiseIsCaughtByAGuardAroundTheImport: a library body's
+// uncaught raise used to reach the embedder past a guard around the import. The
+// body's root inherits the importer's handlers now, so the guard takes it while
+// the body is live, as Chez and Racket do, the raised object itself, on every
+// import (later ones see the remembered raise, in their own handlers).
 func TestLibraryBodyRaiseIsCaughtByAGuardAroundTheImport(t *testing.T) {
 	t.Parallel()
 

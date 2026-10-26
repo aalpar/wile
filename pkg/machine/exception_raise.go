@@ -96,18 +96,26 @@ func (mc *MachineContext) raiseToHandlers(cond values.Value, continuable bool, h
 	trace := mc.CaptureStackTrace(DefaultBacktraceDepth)
 	enrichNativeError(cond, source, trace)
 
+	// A raise that has left an expansion-time root's own handlers is recorded on
+	// the root's boundary, as the escape it would have been with no caller's
+	// handlers below.
+	var token *boundaryToken
+	var prior *ErrExceptionEscape
+	root := mc.inheritingRoot(handlers)
+	if root != nil {
+		token = root.boundaryIdentity()
+		prior = token.raisedToCaller
+	}
 	pair, ok := handlers.(*values.Pair)
 	if !ok {
-		// Empty handler stack: uncaught exception. Carry it to the embedder, with
-		// the location and trace of the condition's first raise when it is an
-		// error object raised before (a guard's re-raise, the bridge's re-raise of
-		// an expansion-time root's escape), so the two name the same raise.
-		origin := firstRaiseOf(cond)
-		if origin != nil {
-			source, trace = origin.source, origin.trace
+		escape := mc.uncaughtEscape(cond, continuable, source, trace)
+		if token != nil {
+			token.raisedToCaller = escape
 		}
-		continuable = continuable && !reRaisesNonContinuable(mc, cond)
-		return &ErrExceptionEscape{Condition: cond, Source: source, StackTrace: trace, Continuable: continuable}
+		return escape
+	}
+	if token != nil {
+		token.raisedToCaller = mc.uncaughtEscape(cond, continuable, source, trace)
 	}
 	handler := pair.Car()
 	parent := pair.Cdr()
@@ -138,6 +146,15 @@ func (mc *MachineContext) raiseToHandlers(cond values.Value, continuable bool, h
 		// raise-continuable: the handler's return value(s) become the value(s) of the
 		// raise-continuable expression (R7RS §6.11), delivered inline at the raise site
 		// by the transparent frame (returnTemplate passes the value register through).
+		if token != nil {
+			// The raise is over once the handler returns: the root goes on, and a
+			// later end of it is not this raise's (RaisedToCaller).
+			_, err := mc.RunBodyUnderGoFrame(handler, func(*MachineContext, values.Value) error {
+				token.raisedToCaller = prior
+				return nil
+			}, cond)
+			return err
+		}
 		frame := NewMachineContinuation(mc.cont, returnTemplate, mc.env)
 		_, err := mc.RunBodyUnderFrame(frame, handler, cond)
 		return err
@@ -178,6 +195,19 @@ func (mc *MachineContext) raiseToHandlers(cond values.Value, continuable bool, h
 	frame.escalatorArm = &escalatorArm{cond: cond}
 	_, err := mc.RunBodyUnderFrame(frame, handler, cond)
 	return err
+}
+
+// uncaughtEscape is the carrier of cond raised on mc with no handler: it goes to
+// the embedder with the location and trace of the condition's first raise when it
+// is an error object raised before (a guard's re-raise, the bridge's re-raise of
+// an expansion-time root's escape), so the two name the same raise.
+func (mc *MachineContext) uncaughtEscape(cond values.Value, continuable bool, source *syntax.SourceContext, trace StackTrace) *ErrExceptionEscape {
+	origin := firstRaiseOf(cond)
+	if origin != nil {
+		source, trace = origin.source, origin.trace
+	}
+	continuable = continuable && !reRaisesNonContinuable(mc, cond)
+	return &ErrExceptionEscape{Condition: cond, Source: source, StackTrace: trace, Continuable: continuable}
 }
 
 // enrichNativeError stamps a freshly-raised NativeError with the raise-site source
