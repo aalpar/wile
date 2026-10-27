@@ -16,7 +16,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.22.0] - 2026-10-26
+
+The release BigFloat gets a fixed precision class in. Every BigFloat the reader
+or `string->number` makes is 256 bits, so a BigFloat round-trips through write
+and read; a raise out of a transformer or library body runs the caller's
+handlers while the body is live (R7RS 6.11); a definition in an expression
+context is refused (R7RS 5.3); and a Float or Complex meeting an exact
+BigComplex gives a Complex, as in Chez and Racket. Also: a `call-with-exit`
+escape is valid while its extent is live, work started inside a `with-timeout`
+thunk ends with the timer, a library-private pattern literal no longer matches
+another library's import, and `char-ready?` requires a textual port. Six of the
+13 entries below are marked BREAKING; read Changed before upgrading.
+
 ### Fixed
+
+- **A finite Float with an exact operand outside float64's range computes
+  exactly, and a BigFloat with an exact BigComplex keeps the BigFloat's
+  precision.** The Float x BigInteger and Float x Rational kernels rounded the
+  exact operand to float64 first, so `(* 1e-300 (expt 10 400))` was `+inf.0` and
+  `(* (expt 10 400) 0.0)` `+nan.0`; they are now `1e100` and `0.0`, rounding once,
+  as in Petite Chez and Racket. `(+ #m1 (make-rectangular 1 (expt 10 400)))` is
+  `2.0+1e+400i` (was `2.0+inf.0i`), and `(+ (sqrt #m2) 1+1/3i)` keeps 256 bits of
+  the exact imaginary part, where it kept 53.
 
 - **A raise out of a transformer or library body runs the caller's handlers
   while the body is live (R7RS 6.11).** A `guard` or `with-exception-handler`
@@ -163,6 +185,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   back as the same symbol. A bare `a<FF>b` (an invalid byte, which `read` reads
   as U+FFFD since 1.21.0) is therefore the symbol `a<U+FFFD>b`, no longer a
   lexical error.
+
+- **BREAKING (behavior): a Float or Complex with an exact BigComplex gives a
+  Complex.** It went through the BigComplex kind, so the Float became a 256-bit
+  BigFloat part and the result a BigComplex: `(* 1.0 1+1/3i)` printed 77 digits.
+  It now follows the same contagion as Float x Rational, part by part with the
+  exact parts kept exact, and a complex divisor uses Smith's algorithm:
+  `(* 1.0 1+1/3i)` is `1.0+0.3333333333333333i` and `(* +inf.0+1.0i +2i)` is
+  `-2.0+inf.0i`, as in Petite Chez and Racket. Go code that type-asserts these
+  results as `*values.BigComplex` now gets a `*values.Complex`.
 
 ## [1.21.0] - 2026-10-25
 
@@ -4267,7 +4298,8 @@ analysis. No language-visible semantic change.
 - CI builds all four OS/architecture combinations
 - R7RS conformance test suite running in CI
 
-[Unreleased]: https://github.com/aalpar/wile/compare/v1.21.0...HEAD
+[Unreleased]: https://github.com/aalpar/wile/compare/v1.22.0...HEAD
+[1.22.0]: https://github.com/aalpar/wile/compare/v1.21.0...v1.22.0
 [1.21.0]: https://github.com/aalpar/wile/compare/v1.20.0...v1.21.0
 [1.20.0]: https://github.com/aalpar/wile/compare/v1.19.1...v1.20.0
 [1.19.1]: https://github.com/aalpar/wile/compare/v1.19.0...v1.19.1
