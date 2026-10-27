@@ -178,7 +178,7 @@
  ("exp" "number" ("number") "github.com/aalpar/wile/extensions/math.PrimExp" "extensions/math/prim_transcendental.go:148")
  ("expand" "any" ("any") "github.com/aalpar/wile/extensions/eval.PrimExpand" "extensions/eval/prim_eval.go:524")
  ("expand-once" "any" ("any") "github.com/aalpar/wile/extensions/eval.PrimExpandOnce" "extensions/eval/prim_eval.go:577")
- ("expt" "number" ("number" "number") "github.com/aalpar/wile/extensions/math.PrimExpt" "extensions/math/prim_transcendental.go:589")
+ ("expt" "number" ("number" "number") "github.com/aalpar/wile/extensions/math.PrimExpt" "extensions/math/prim_transcendental.go:590")
  ("features" "list" () "github.com/aalpar/wile/extensions/introspection.PrimFeatures" "extensions/introspection/prim_introspection.go:142")
  ("file-error?" "boolean" ("any") "github.com/aalpar/wile/pkg/registry/helpers.MakeTypePredicate.func1" "pkg/registry/helpers/type.go:26")
  ("file-exists?" "boolean" ("string") "github.com/aalpar/wile/extensions/files.PrimFileExistsQ" "extensions/files/prim_files.go:157")

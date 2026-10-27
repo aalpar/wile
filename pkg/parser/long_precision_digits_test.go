@@ -16,22 +16,17 @@ package parser
 
 import (
 	"context"
-	"errors"
 	"math/big"
 	"strings"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/values"
-	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 )
 
-// longDigits is 100 significant digits. It ends in '1', not '0': BigFloat
-// renders with Text('g', -1), the shortest unique form, which drops a trailing
-// zero, so a literal ending in '0' would fail a textual round trip about 9% of
-// the time for a reason unrelated to the precision under test.
+// longDigits is 100 significant digits, past the ~77 that 256 bits hold.
 const longDigits = "1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567891"
 
 func readBigFloat(c *qt.C, src string) *values.BigFloat {
@@ -43,50 +38,56 @@ func readBigFloat(c *qt.C, src string) *values.BigFloat {
 	return bf
 }
 
-// TestLongPrecisionIntegerLiteralIsExact is the value oracle for I192-R6b: a
-// 100-digit #m integer literal must denote exactly that integer. At the fixed
-// 256-bit precision it lost the low ~22 digits. P6.13's decimal-magnitude
-// threshold must stay above 1e99 or this pin goes red.
-func TestLongPrecisionIntegerLiteralIsExact(t *testing.T) {
-	c := qt.New(t)
-	want, ok := new(big.Int).SetString(longDigits, 10)
-	c.Assert(ok, qt.IsTrue)
-
-	bf := readBigFloat(c, "#m"+longDigits)
-	got, acc := bf.BigFloatValue().Int(nil)
-	c.Assert(acc, qt.Equals, big.Exact)
-	c.Assert(got.Cmp(want), qt.Equals, 0, qt.Commentf("got %v", got))
+// at256 is x rounded once to DefaultBigFloatPrecision, the reader's answer
+// for every BigFloat spelling.
+func at256(c *qt.C, x any) *big.Float {
+	q := new(big.Float).SetPrec(values.DefaultBigFloatPrecision)
+	switch x := x.(type) {
+	case string:
+		_, ok := q.SetString(x)
+		c.Assert(ok, qt.IsTrue, qt.Commentf("%.40s", x))
+	case *big.Int:
+		q.SetInt(x)
+	case *big.Rat:
+		q.SetRat(x)
+	}
+	return q
 }
 
-// TestLongPrecisionLiteralRoundTrips is I192-R6a: 100 significant digits in
-// through #m, or through the R7RS l marker, come back out unchanged.
-func TestLongPrecisionLiteralRoundTrips(t *testing.T) {
+// TestLongBigFloatLiteralRoundsTo256Bits pins the fixed precision class: a
+// BigFloat literal longer than 256 bits hold rounds to 256 bits once, whatever
+// its spelling. It used to grow its precision with the digit count, so it kept
+// every digit but did not survive write/read (TestBigFloatWriteReadRoundTrip).
+func TestLongBigFloatLiteralRoundsTo256Bits(t *testing.T) {
 	const mantissa = "1." + longDigits
 	const nine = "9." + longDigits
-	const matula = "8.350121711170800908915733448512723488856342658525180108977596578509172053145559"
+	over := strings.Repeat("7", 20000)
 	tcs := []struct {
 		name, src, want string
 	}{
+		{"hash-m integer", "#m" + longDigits, longDigits},
 		{"hash-m", "#m" + mantissa, mantissa},
 		{"l-marker", mantissa + "l0", mantissa},
 		// float64 overflows, so this reaches NewBigFloatFromString via ErrRange.
-		{"range-overflow", mantissa + "e400", mantissa + "l+400"},
+		{"range-overflow", mantissa + "e400", mantissa + "e400"},
 		{"leading-9", "#m" + nine, nine},
-		// 79 digits, leading 8: fails a +1 bit bound (Matula), found by crosscheck.
-		{"matula-79", "#m" + matula, matula},
+		// Past the former 65536-bit literal cap: rounds rather than refuses.
+		{"hash-m past old cap", "#m" + over, over},
+		{"l-marker past old cap", over + ".5l0", over + ".5"},
+		{"trailing fraction zeros", "1." + strings.Repeat("0", 20000) + "l0", "1"},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 			bf := readBigFloat(c, tc.src)
-			c.Assert(strings.HasPrefix(bf.SchemeString(), tc.want), qt.IsTrue,
-				qt.Commentf("digits lost: %s", bf.SchemeString()))
+			c.Assert(bf.BigFloatValue().Prec(), qt.Equals, uint(values.DefaultBigFloatPrecision))
+			c.Assert(bf.BigFloatValue().Cmp(at256(c, tc.want)), qt.Equals, 0, qt.Commentf("got %s", bf.SchemeString()))
 		})
 	}
 }
 
-// TestShortBigFloatLiteralKeepsDefaultPrecision pins the floor: the change only
-// widens, so short literals and widened small operands stay at 256 bits.
+// TestShortBigFloatLiteralKeepsDefaultPrecision: short literals and widened
+// small operands are at 256 bits too.
 func TestShortBigFloatLiteralKeepsDefaultPrecision(t *testing.T) {
 	for _, src := range []string{"#m1.5", "#m5", "#m#z5", "#m#e5", "1.5l0", "#m#e5/3"} {
 		t.Run(src, func(t *testing.T) {
@@ -97,52 +98,37 @@ func TestShortBigFloatLiteralKeepsDefaultPrecision(t *testing.T) {
 	}
 }
 
-// TestWidenToBigFloatBigIntegerIsExact covers the introducer spelling: #m over
-// a #z BigInteger datum widens at no less than the operand's bit length.
-func TestWidenToBigFloatBigIntegerIsExact(t *testing.T) {
-	c := qt.New(t)
-	want, ok := new(big.Int).SetString(longDigits, 10)
-	c.Assert(ok, qt.IsTrue)
-	bf := readBigFloat(c, "#m#z"+longDigits)
-	got, acc := bf.BigFloatValue().Int(nil)
-	c.Assert(acc, qt.Equals, big.Exact)
-	c.Assert(got.Cmp(want), qt.Equals, 0)
-}
-
-// TestWidenToBigFloatRationalKeepsOperandBits: a ratio over a 100-digit
-// denominator must widen at no fewer bits than the denominator (or numerator).
-func TestWidenToBigFloatRationalKeepsOperandBits(t *testing.T) {
-	n, _ := new(big.Int).SetString(longDigits, 10)
-	bits := uint(n.BitLen())
-	for _, src := range []string{"#m#e1/" + longDigits, "#m#e" + longDigits + "/7"} {
-		t.Run(src[:12], func(t *testing.T) {
+// TestWidenToBigFloatWideExactRoundsTo256Bits covers the introducer spelling:
+// #m over an exact operand wider than 256 bits rounds it to 256 bits, as
+// inexact rounds one to a float64. It used to widen to the operand's bit length.
+func TestWidenToBigFloatWideExactRoundsTo256Bits(t *testing.T) {
+	n, ok := new(big.Int).SetString(longDigits, 10)
+	qt.Assert(t, ok, qt.IsTrue)
+	over, ok := new(big.Int).SetString(strings.Repeat("7", 20000), 10)
+	qt.Assert(t, ok, qt.IsTrue)
+	tcs := []struct {
+		src  string
+		want any
+	}{
+		{"#m#z" + longDigits, n},
+		{"#m#e1/" + longDigits, new(big.Rat).SetFrac(big.NewInt(1), n)},
+		{"#m#e" + longDigits + "/7", new(big.Rat).SetFrac(n, big.NewInt(7))},
+		{"#m#z" + over.String(), over},
+		{"#m#e1/" + over.String(), new(big.Rat).SetFrac(big.NewInt(1), over)},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.src[:12], func(t *testing.T) {
 			c := qt.New(t)
-			bf := readBigFloat(c, src)
-			c.Assert(bf.BigFloatValue().Prec() >= bits, qt.IsTrue, qt.Commentf("prec %d", bf.BigFloatValue().Prec()))
+			bf := readBigFloat(c, tc.src)
+			c.Assert(bf.BigFloatValue().Prec(), qt.Equals, uint(values.DefaultBigFloatPrecision))
+			c.Assert(bf.BigFloatValue().Cmp(at256(c, tc.want)), qt.Equals, 0)
 		})
 	}
 }
 
-// TestLongPrecisionLiteralPastCapIsRefused: derived precision is bounded, and
-// past the bound the reader errors instead of truncating.
-func TestLongPrecisionLiteralPastCapIsRefused(t *testing.T) {
-	over := strings.Repeat("7", 20000)
-	for _, src := range []string{"#m" + over, over + ".5l0", "#m#z" + over, "#m#e1/" + over} {
-		t.Run(src[:8], func(t *testing.T) {
-			c := qt.New(t)
-			env := environment.NewNamespace().Runtime()
-			_, err := NewParser(env, true, strings.NewReader(src)).ReadSyntax(context.TODO())
-			c.Assert(errors.Is(err, werr.ErrInvalidFormat), qt.IsTrue, qt.Commentf("err: %v", err))
-		})
-	}
-	c := qt.New(t)
-	c.Assert(readBigFloat(c, "#m"+strings.Repeat("7", 19000)), qt.IsNotNil)
-}
-
-// TestOverCapExactAndUnmarkedLiteralsStillRead: the cap bounds explicit
-// precision requests, not literals that never produce a BigFloat (#e re-reads
-// the text as a ratio) or that asked for no precision.
-func TestOverCapExactAndUnmarkedLiteralsStillRead(t *testing.T) {
+// TestLongExactAndUnmarkedLiteralsStillRead: #e re-reads the text as a ratio,
+// so it keeps every digit, and an unmarked long decimal is a Float.
+func TestLongExactAndUnmarkedLiteralsStillRead(t *testing.T) {
 	over := strings.Repeat("7", 20000)
 	for _, src := range []string{"#e" + over + ".5", over + ".5", "#e1." + over + "e400"} {
 		t.Run(src[:8], func(t *testing.T) {
@@ -152,10 +138,4 @@ func TestOverCapExactAndUnmarkedLiteralsStillRead(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 		})
 	}
-}
-
-func TestTrailingFractionZerosAddNoPrecision(t *testing.T) {
-	c := qt.New(t)
-	bf := readBigFloat(c, "1."+strings.Repeat("0", 20000)+"l0")
-	c.Assert(bf.BigFloatValue().Prec(), qt.Equals, uint(values.DefaultBigFloatPrecision))
 }

@@ -23,6 +23,7 @@ import (
 
 	"github.com/aalpar/wile/pkg/values"
 	"github.com/aalpar/wile/pkg/werr"
+	"github.com/aalpar/wile/pkg/wile"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -322,6 +323,8 @@ func TestSqrtExactness(t *testing.T) {
 // negative zero lost satisfies every predicate above them.
 func TestSqrtBigFloat(t *testing.T) {
 	engine := newEngine(t)
+	defineWide(t, engine, "w", "2.123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890")
+	defineWide(t, engine, "nw", "-2.123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890")
 	tcs := []struct {
 		name string
 		code string
@@ -339,11 +342,11 @@ func TestSqrtBigFloat(t *testing.T) {
 		// default precision, where both constructions agree; the wider-literal
 		// row below is the one that tells them apart.
 		{"negative arm carries the positive arm's digits", `(equal? (imag-part (sqrt #m-2)) (sqrt #m2))`, values.TrueValue},
-		// A 120-significant-digit literal is wider than DefaultBigFloatPrecision (256 bits),
+		// w, 120 significant digits at 400 bits, is wider than DefaultBigFloatPrecision,
 		// so a negative arm that delegated to (*BigComplex).Sqrt would round
 		// to 256 bits and differ from the positive arm; at the default
 		// precision both arms agree whichever way they are built.
-		{"negative arm keeps a wider-than-default precision", `(equal? (imag-part (sqrt #m-2.123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890)) (sqrt #m2.123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890))`, values.TrueValue},
+		{"negative arm keeps a wider-than-default precision", `(equal? (imag-part (sqrt nw)) (sqrt w))`, values.TrueValue},
 		{"positive infinity", `(let ((r (sqrt (/ #m1 #m0)))) (and (infinite? r) (> r 0)))`, values.TrueValue},
 		{"negative infinity takes the branch cut", `(let ((r (sqrt (/ #m-1 #m0)))) (and (zero? (real-part r)) (infinite? (imag-part r)) (> (imag-part r) 0)))`, values.TrueValue},
 		{"nan", `(nan? (sqrt (/ #m0 #m0)))`, values.TrueValue},
@@ -354,7 +357,7 @@ func TestSqrtBigFloat(t *testing.T) {
 		{"golden sqrt 3", `(eqv? (sqrt #m3) 1.7320508075688772935274463415058723669428052538103806280558069794519330169088l0)`, values.TrueValue},
 		{"golden sqrt 5", `(eqv? (sqrt #m5) 2.23606797749978969640917366873127623544061835961152572427089724541052092563782l0)`, values.TrueValue},
 		// Expected text cross-checked against Python's decimal at 200 digits.
-		{"golden wide operand", `(string=? (number->string (sqrt #m2.123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890)) "1.4572085605747537190458491165921673542867757439927436248464565622923209398775715433421430030375202786347858342742204472055l0")`, values.TrueValue},
+		{"golden wide operand", `(string=? (number->string (sqrt w)) "1.4572085605747537190458491165921673542867757439927436248464565622923209398775715433421430030375202786347858342742204472055l0")`, values.TrueValue},
 		// Kind and sign of the special results. eqv? distinguishes -0.0 from
 		// 0.0 and a NaN or infinity BigFloat from a Float, which the
 		// predicate rows above do not.
@@ -694,22 +697,24 @@ func TestSqrtExptBigTier(t *testing.T) {
 // expt agrees with sqrt and with multiplication.
 func TestSqrtExptBigTierAgreement(t *testing.T) {
 	engine := newEngine(t)
+	defineWide(t, engine, "w", "2.123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890")
 	tcs := []struct {
 		name string
 		code string
 	}{
 		{"negative bigint arm carries the positive arm's digits", `(eqv? (imag-part (sqrt (- 1 (expt 10 400)))) (sqrt (- (expt 10 400) 1)))`},
-		// A BigInteger root keeps the operand's bit length, so a wide operand
-		// keeps every digit (408 characters here, not a 256-bit 84), on both arms.
-		{"wide bigint root keeps its digits", `(= (string-length (number->string (sqrt (+ 3 (expt 10 401))))) 408)`},
+		// A BigInteger root is in the 256-bit class whatever the operand's width
+		// (it used to take the operand's bit length, 408 printed characters
+		// here), so it survives write/read.
+		{"wide bigint root round-trips", `(let ((r (sqrt (+ 3 (expt 10 401))))) (and (= (string-length (number->string r)) 84) (eqv? r (string->number (number->string r)))))`},
 		{"wide negative bigint arm carries the positive arm's digits", `(eqv? (imag-part (sqrt (- (+ 3 (expt 10 401))))) (sqrt (+ 3 (expt 10 401))))`},
 		{"narrow bigint root is the 256-bit root", `(eqv? (sqrt (+ 1 (expt 2 70))) (sqrt (+ #m1 (expt 2 70))))`},
 		{"narrow negative bigint arm carries the positive arm's digits", `(eqv? (imag-part (sqrt (- -1 (expt 2 70)))) (sqrt (+ 1 (expt 2 70))))`},
 		{"negative rational arm carries the positive arm's digits", `(eqv? (imag-part (sqrt -2/3)) (sqrt 2/3))`},
 		{"expt one half is sqrt", `(eqv? (expt #m2 #m0.5) (sqrt #m2))`},
 		{"expt one half is sqrt, exact base", `(eqv? (expt 3 #m0.5) (sqrt #m3))`},
-		{"expt keeps a wider-than-default operand precision", `(let ((w #m2.123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890)) (eqv? (expt w 2) (* w w)))`},
-		{"expt wide operand one half is sqrt", `(let ((w #m2.123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890)) (eqv? (expt w #m0.5) (sqrt w)))`},
+		{"expt keeps a wider-than-default operand precision", `(eqv? (expt w 2) (* w w))`},
+		{"expt wide operand one half is sqrt", `(eqv? (expt w #m0.5) (sqrt w))`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -759,9 +764,9 @@ func TestExptUnitMagnitudeBounded(t *testing.T) {
 // computed at 256 bits and widened afterwards misses by about 2^147 ulps.
 func TestTranscendentalOperandPrecision(t *testing.T) {
 	engine := newEngine(t)
-	operands := map[string]string{
-		"A": "#m1." + strings.Repeat("0", 119) + "1",  // 1 + 10^-120
-		"B": "#m0.5" + strings.Repeat("0", 238) + "1", // 1/2 + 10^-240
+	operands := map[string]*values.BigFloat{
+		"A": defineWide(t, engine, "A", "1."+strings.Repeat("0", 119)+"1"),  // 1 + 10^-120, 403 bits
+		"B": defineWide(t, engine, "B", "0.5"+strings.Repeat("0", 238)+"1"), // 1/2 + 10^-240, 799 bits
 	}
 	rows := []struct {
 		name string
@@ -852,11 +857,8 @@ func TestTranscendentalOperandPrecision(t *testing.T) {
 			}
 			t.Run(row.name+"/"+op, func(t *testing.T) {
 				c := qt.New(t)
-				lit := operands[op]
-				x, ok := eval(t, engine, lit).Internal().(*values.BigFloat)
-				c.Assert(ok, qt.IsTrue)
-				prec := x.BigFloatValue().Prec()
-				result := eval(t, engine, "(let ((x "+lit+")) "+row.code+")").Internal()
+				prec := operands[op].BigFloatValue().Prec()
+				result := eval(t, engine, "(let ((x "+op+")) "+row.code+")").Internal()
 				got, ok := result.(*values.BigFloat)
 				c.Assert(ok, qt.IsTrue, qt.Commentf("%s answered %T", row.code, result))
 				g := got.BigFloatValue()
@@ -879,16 +881,16 @@ func TestTranscendentalOperandPrecision(t *testing.T) {
 // a 403-bit one it survives.
 func TestOperandPrecisionExactPartner(t *testing.T) {
 	engine := newEngine(t)
-	wide := "#m1." + strings.Repeat("0", 119) + "1"
+	defineWide(t, engine, "wide", "1."+strings.Repeat("0", 119)+"1")
 	tcs := []struct {
 		name string
 		code string
 	}{
 		{"rounds beside a default-precision bigfloat", `(= (exact (+ #m0 (+ (expt 10 100) 1))) (expt 10 100))`},
-		{"survives beside a wide bigfloat", `(let ((w ` + wide + `)) (= (exact (- (+ w (+ (expt 10 100) 1)) w)) (+ (expt 10 100) 1)))`},
-		{"survives a wide bigfloat divisor", `(let ((w ` + wide + `)) (= (exact (* w (/ (+ (expt 10 100) 1) w))) (+ (expt 10 100) 1)))`},
+		{"survives beside a wide bigfloat", `(let ((w wide)) (= (exact (- (+ w (+ (expt 10 100) 1)) w)) (+ (expt 10 100) 1)))`},
+		{"survives a wide bigfloat divisor", `(let ((w wide)) (= (exact (* w (/ (+ (expt 10 100) 1) w))) (+ (expt 10 100) 1)))`},
 		// 1/3 at 403 bits errs by about 2^-405; at 256 bits by about 2^-258
-		{"rational partner converts at the wide precision", `(let ((w ` + wide + `)) (< (abs (- (exact (* w 1/3)) (* (exact w) 1/3))) (expt 2 -400)))`},
+		{"rational partner converts at the wide precision", `(let ((w wide)) (< (abs (- (exact (* w 1/3)) (* (exact w) 1/3))) (expt 2 -400)))`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
@@ -910,20 +912,18 @@ func TestBigComplexKernelOperandPrecision(t *testing.T) {
 		parts []string
 	}{
 		// cmplx.Exp(1000+1i) overflows float64, so rescueBigComplex answers
-		{"exp overflow rescue", "#m1000." + strings.Repeat("0", 117) + "1", "(exp (make-rectangular x 1))", []string{"real-part", "imag-part"}},
+		{"exp overflow rescue", "1000." + strings.Repeat("0", 117) + "1", "(exp (make-rectangular x 1))", []string{"real-part", "imag-part"}},
 		// a real part beyond float64 range diverts to values.BigComplexAtan;
 		// the imaginary part, about 1/x^2, is lost and the result is real
-		{"atan beyond float64 range", "#m1." + strings.Repeat("0", 119) + "1e400", "(atan (make-rectangular x 1))", []string{"real-part"}},
+		{"atan beyond float64 range", "1." + strings.Repeat("0", 119) + "1e400", "(atan (make-rectangular x 1))", []string{"real-part"}},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			x, ok := eval(t, engine, tc.lit).Internal().(*values.BigFloat)
-			c.Assert(ok, qt.IsTrue)
-			prec := x.BigFloatValue().Prec()
+			prec := defineWide(t, engine, "x", tc.lit).BigFloatValue().Prec()
 			c.Assert(prec > values.DefaultBigFloatPrecision, qt.IsTrue)
 			for _, part := range tc.parts {
-				code := "(let ((x " + tc.lit + ")) (" + part + " " + tc.code + "))"
+				code := "(" + part + " " + tc.code + ")"
 				got, ok := eval(t, engine, code).Internal().(*values.BigFloat)
 				c.Assert(ok, qt.IsTrue, qt.Commentf("%s", code))
 				c.Assert(got.BigFloatValue().Prec(), qt.Equals, prec, qt.Commentf("%s", code))
@@ -940,7 +940,7 @@ func TestBigComplexKernelOperandPrecision(t *testing.T) {
 // budget flaked under coverage and load (a 2-3 s row took 10.3 s).
 func TestTranscendentalKernelPrecisionBounded(t *testing.T) {
 	engine := newEngine(t)
-	u := "#m1." + strings.Repeat("31415926535897932384", 985) + "7"
+	defineWide(t, engine, "u", "1."+strings.Repeat("31415926535897932384", 985)+"7")
 	tcs := []struct {
 		name   string
 		code   string
@@ -958,7 +958,7 @@ func TestTranscendentalKernelPrecisionBounded(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			result := eval(t, engine, "(let ((u "+u+")) "+tc.code+")").Internal()
+			result := eval(t, engine, tc.code).Internal()
 			got, ok := result.(*values.BigFloat)
 			c.Assert(ok, qt.IsTrue, qt.Commentf("%s answered %T", tc.code, result))
 			if !got.IsFinite() {
@@ -973,17 +973,17 @@ func TestTranscendentalKernelPrecisionBounded(t *testing.T) {
 		})
 	}
 	c := qt.New(t)
-	c.Assert(eval(t, engine, "(let ((u "+u+")) (eqv? (expt u 2) (* u u)))").Internal(), qt.Equals, values.TrueValue)
+	c.Assert(eval(t, engine, "(eqv? (expt u 2) (* u u))").Internal(), qt.Equals, values.TrueValue)
 
 	// An exact integer exponent beyond int64 takes the log path, which is not
 	// a kernel for an integer exponent: on a base near 1 (59804 bits, so a
 	// finite result) the answer keeps the base's precision and agrees with k
 	// repeated squarings, 1 + 2^k(w-1). Capped, it came back exactly 1.
-	w := "#m1." + strings.Repeat("0", 18000) + "1"
+	defineWide(t, engine, "w", "1."+strings.Repeat("0", 18000)+"1")
 	for _, k := range []int{63, 70} {
 		t.Run(fmt.Sprintf("expt beyond int64 exponent 2^%d", k), func(t *testing.T) {
 			c := qt.New(t)
-			bind := fmt.Sprintf("(let* ((w %s) (r (expt w (expt 2 %d))) (sq (let loop ((x w) (i %d)) (if (= i 0) x (loop (* x x) (- i 1)))))) ", w, k, k)
+			bind := fmt.Sprintf("(let* ((r (expt w (expt 2 %d))) (sq (let loop ((x w) (i %d)) (if (= i 0) x (loop (* x x) (- i 1)))))) ", k, k)
 			// #f unless r is the squarings' value and above 1
 			result := eval(t, engine, bind+"(and (eqv? r sq) (> r 1) r))").Internal()
 			got, ok := result.(*values.BigFloat)
@@ -991,4 +991,29 @@ func TestTranscendentalKernelPrecisionBounded(t *testing.T) {
 			c.Assert(got.BigFloatValue().Prec(), qt.Equals, uint(59804))
 		})
 	}
+}
+
+// defineWide binds name to the decimal digits at the precision the reader gave
+// such a literal before the fixed 256-bit class: the bits its significant
+// digits need, floored at 256. The reader no longer makes a BigFloat wider than
+// 256 bits, but an embedder's values.NewBigFloat can, and operand-max precision
+// still applies to it; these references were computed at those roundings.
+func defineWide(t *testing.T, engine *wile.Engine, name, digits string) *values.BigFloat {
+	t.Helper()
+	c := qt.New(t)
+	mantissa, _, _ := strings.Cut(digits, "e")
+	if strings.Contains(mantissa, ".") {
+		mantissa = strings.TrimRight(mantissa, "0")
+	}
+	n := len(strings.TrimLeft(strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, mantissa), "0"))
+	prec := max(uint(values.DefaultBigFloatPrecision), uint(float64(n)*3.3220)+2)
+	f, _, err := big.ParseFloat(digits, 10, prec, big.ToNearestEven)
+	c.Assert(err, qt.IsNil)
+	c.Assert(engine.Define(name, wile.NewBigFloat(f)), qt.IsNil)
+	return values.NewBigFloat(f)
 }

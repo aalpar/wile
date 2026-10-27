@@ -164,16 +164,16 @@ func TestReadSyntaxRadixBigFloat(t *testing.T) {
 	}
 }
 
-// TestReadSyntaxRadixFractionPastFloat64KeepsItsDigits pins that a radix
-// fraction past float64 range takes the precision its digits need, as a
-// decimal one does (decimalLiteralPrecision), instead of a fixed 256 bits:
-// #x1<255 zeros>1.0 is 16^256+1, 1025 bits, and must equal the integer.
-func TestReadSyntaxRadixFractionPastFloat64KeepsItsDigits(t *testing.T) {
-	tcs := []struct{ prefix, digits string }{
-		{"#x", "1" + strings.Repeat("0", 255) + "1"},
-		{"#b", "1" + strings.Repeat("0", 1024) + "1"},
-		{"#o", "7" + strings.Repeat("0", 400) + "7"},
-		{"#x", "-F" + strings.Repeat("0", 300) + "F"},
+// TestReadSyntaxRadixFractionPastFloat64RoundsTo256Bits pins the fixed
+// precision class on a radix fraction past float64 range: it reads at
+// DefaultBigFloatPrecision, as a decimal one does, so #x1<255 zeros>1.0
+// (16^256+1, 1025 bits) rounds to 16^256 rather than keeping its digits.
+func TestReadSyntaxRadixFractionPastFloat64RoundsTo256Bits(t *testing.T) {
+	tcs := []struct{ prefix, digits, rounded string }{
+		{"#x", "1" + strings.Repeat("0", 255) + "1", "1" + strings.Repeat("0", 256)},
+		{"#b", "1" + strings.Repeat("0", 1024) + "1", "1" + strings.Repeat("0", 1025)},
+		{"#o", "7" + strings.Repeat("0", 400) + "7", "7" + strings.Repeat("0", 401)},
+		{"#x", "-F" + strings.Repeat("0", 300) + "F", "-F" + strings.Repeat("0", 301)},
 	}
 	read := func(c *qt.C, s string) values.Value {
 		env := environment.NewNamespace().Runtime()
@@ -186,10 +186,26 @@ func TestReadSyntaxRadixFractionPastFloat64KeepsItsDigits(t *testing.T) {
 			c := qt.New(t)
 			bf, ok := read(c, tc.prefix+tc.digits+".0").(*values.BigFloat)
 			c.Assert(ok, qt.IsTrue)
-			bi, ok := read(c, tc.prefix+tc.digits).(*values.BigInteger)
+			c.Assert(bf.BigFloatValue().Prec(), qt.Equals, uint(values.DefaultBigFloatPrecision))
+			bi, ok := read(c, tc.prefix+tc.rounded).(*values.BigInteger)
 			c.Assert(ok, qt.IsTrue)
 			got, _ := bf.BigFloatValue().Int(nil)
 			c.Assert(got.Cmp(bi.BigInt()), qt.Equals, 0)
 		})
 	}
+}
+
+// TestReadSyntaxRadixFractionRoundsToFloat64Once: an in-range radix fraction
+// longer than 256 bits rounds to float64 once, from its exact value. Here the
+// 2^-53 tie between 1 and 1+2^-52 is broken upward by a 2^-300 bit; parsing at
+// 256 bits first would drop that bit and round the tie to even, 1.0.
+func TestReadSyntaxRadixFractionRoundsToFloat64Once(t *testing.T) {
+	c := qt.New(t)
+	src := "#x1." + strings.Repeat("0", 13) + "8" + strings.Repeat("0", 60) + "1"
+	env := environment.NewNamespace().Runtime()
+	syn, err := NewParser(env, true, strings.NewReader(src)).ReadSyntax(context.TODO())
+	c.Assert(err, qt.IsNil)
+	f, ok := syn.Unwrap().(*values.Float)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("%T", syn.Unwrap()))
+	c.Assert(f.Value, qt.Equals, 1.0000000000000002)
 }

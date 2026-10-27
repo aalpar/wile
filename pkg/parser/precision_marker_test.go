@@ -198,7 +198,10 @@ func TestBigFloatWriteReadRoundTrip(t *testing.T) {
 		n := new(big.Int).Exp(big.NewInt(10), big.NewInt(k), nil)
 		return values.NewBigFloat(new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetInt(n))
 	}
-	built := map[string]*values.BigFloat{"256-bit 10^120": ten(120), "256-bit 10^400": ten(400)}
+	// The 256-bit 1/3 writes 81 digits; a reader deriving precision from the
+	// digit count read them back at 271 bits as another value.
+	third := values.NewBigFloat(new(big.Float).SetPrec(values.DefaultBigFloatPrecision).Quo(big.NewFloat(1), big.NewFloat(3)))
+	built := map[string]*values.BigFloat{"256-bit 10^120": ten(120), "256-bit 10^400": ten(400), "256-bit 1/3": third}
 	for _, tc := range tcs {
 		built[tc] = values.NewBigFloatFromString(tc)
 	}
@@ -220,6 +223,8 @@ func TestBigFloatWriteReadRoundTrip(t *testing.T) {
 			c.Assert(ok, qt.IsTrue, qt.Commentf("round trip through %q: expected BigFloat, got %T: %v", written, got, got))
 			c.Assert(back.BigFloatValue().Cmp(bf.BigFloatValue()), qt.Equals, 0,
 				qt.Commentf("round trip through %q changed the value", written))
+			c.Assert(back.BigFloatValue().Prec(), qt.Equals, bf.BigFloatValue().Prec(),
+				qt.Commentf("round trip through %q changed the precision", written))
 		})
 	}
 }

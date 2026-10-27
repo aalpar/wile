@@ -199,14 +199,13 @@ func (p *Parser) widenToBigInteger(stx syntax.SyntaxValue, _ tokenizer.Token) (s
 // be inexact: #m5 is 5.0 at 256-bit precision, as it was before #m became an
 // introducer.
 //
-// Precision is the value's, not the literal's, floored at 256 bits and widened
-// to the operand's bit length for an exact integer or ratio. #m#x1.8 widens the
-// Float 1.5, so it carries float64 precision rather than 256 bits, while the one-token decimal
-// spelling #m1.2345678901234567890123456789 keeps every digit. Consulting how
-// the operand was spelled is exactly what the introducer model gives up, and
-// re-reading the inner token to recover it would make #m inspect its operand's
-// notation. Precision beyond float64 is available through the unprefixed decimal
-// spelling or the l marker.
+// The result is DefaultBigFloatPrecision bits whatever the operand (WidenToBigFloat).
+// #m widens the operand's value, not its spelling: #m#x1.8 widens the Float
+// 1.5, so its digits went through float64 first, while the one-token decimal
+// spelling #m1.2345678901234567890123456789 rounds its digits once, at 256 bits.
+// Consulting how the operand was spelled is exactly what the introducer model
+// gives up, and re-reading the inner token to recover it would make #m inspect
+// its operand's notation.
 func (p *Parser) widenToBigFloat(stx syntax.SyntaxValue, _ tokenizer.Token) (syntax.SyntaxValue, error) {
 	return p.widenWrappedNumber(stx, WidenToBigFloat)
 }

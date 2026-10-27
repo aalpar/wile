@@ -134,10 +134,10 @@ func NewBigFloatFromFloat64(f float64) Value {
 	return wrapValue(values.NewBigFloatFromFloat64(f))
 }
 
-// NewBigFloatFromString creates a big float from a string.
-// Precision grows with the digits written, floored at 256 bits. Returns nil if
-// the string is not a valid float or needs more than
-// values.MaxBigFloatLiteralPrecision bits.
+// NewBigFloatFromString creates a big float from a decimal string, rounded to
+// values.DefaultBigFloatPrecision (256) bits as the reader rounds an l literal.
+// Returns nil if the string is not a valid float. For another precision, build
+// a big.Float and use NewBigFloat.
 func NewBigFloatFromString(s string) Value {
 	v := values.NewBigFloatFromString(s)
 	if v == nil {

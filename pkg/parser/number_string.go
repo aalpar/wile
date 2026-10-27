@@ -55,7 +55,7 @@ func ParseRealFloatString(s string) (values.Number, error) {
 		if bf != nil {
 			return bf, nil
 		}
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "ParseRealFloatString: invalid long-precision real number (malformed, or past the %d-bit precision limit): %s", values.MaxBigFloatLiteralPrecision, s)
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "ParseRealFloatString: invalid long-precision real number: %s", s)
 	}
 	f, err := strconv.ParseFloat(normalized, 64)
 	if err == nil {
@@ -64,7 +64,7 @@ func ParseRealFloatString(s string) (values.Number, error) {
 
 	var numErr *strconv.NumError
 	if errors.As(err, &numErr) && errors.Is(numErr.Err, strconv.ErrRange) {
-		bf := values.NewBigFloatFromStringClamped(normalized)
+		bf := values.NewBigFloatFromString(normalized)
 		if bf != nil {
 			return bf, nil
 		}
@@ -118,27 +118,27 @@ func ParseRealFloatStringWithBase(text string, base int) (values.Number, error) 
 			"ParseRealFloatStringWithBase: invalid base-%d real number: %s", base, text)
 	}
 	// Magnitudes beyond float64 range promote to BigFloat rather than saturating
-	// to ±Inf, matching ParseRealFloatString's ErrRange branch.
+	// to ±Inf, matching ParseRealFloatString's ErrRange branch, and at the same
+	// fixed DefaultBigFloatPrecision.
 	f, _ := bf.Float64()
 	if math.IsInf(f, 0) {
-		return values.NewBigFloat(bf), nil
+		return values.NewBigFloat(new(big.Float).SetPrec(values.DefaultBigFloatPrecision).Set(bf)), nil
 	}
 	return values.NewFloat(f), nil
 }
 
-// radixLiteralPrecision is decimalLiteralPrecision for a power-of-two radix:
-// the bits the literal's significant digits hold, floored at
-// DefaultBigFloatPrecision and clamped at MaxBigFloatLiteralPrecision, as an
-// unmarked decimal past float64 range is (NewBigFloatFromStringClamped). Only a
-// magnitude past float64 range keeps it; any other result rounds to a Float.
+// radixLiteralPrecision is the bits a power-of-two-radix literal's significant
+// digits hold, so big.ParseFloat reads it exactly and the one rounding is the
+// result's (to float64, or to DefaultBigFloatPrecision past float64 range).
+// Parsing at the result's precision instead would round twice: a fraction
+// longer than 256 bits whose float64 rounding is decided by a bit past 256.
 func radixLiteralPrecision(text string, base int) uint {
 	digits := strings.TrimLeft(text, "+-")
 	if strings.Contains(digits, ".") {
 		digits = strings.TrimRight(digits, "0")
 	}
 	digits = strings.TrimLeft(strings.Replace(digits, ".", "", 1), "0")
-	needed := uint(len(digits) * bits.Len(uint(base-1)))
-	return min(max(uint(values.DefaultBigFloatPrecision), needed), values.MaxBigFloatLiteralPrecision)
+	return max(uint(len(digits)*bits.Len(uint(base-1))), 1)
 }
 
 // ParseSpecialFloat checks if s is +inf.0, -inf.0, +nan.0, or -nan.0
@@ -523,10 +523,10 @@ func WidenToBigInteger(v values.Value) (values.Number, error) {
 }
 
 // WidenToBigFloat is the value half of the reader's #m introducer
-// (Parser.widenToBigFloat, which documents the precision rule), shared with
-// string->number. A complex number has no BigFloat image and is an
-// ErrNotANumber, as is a non-number; an exact operand too wide for
-// MaxBigFloatLiteralPrecision is an ErrInvalidFormat.
+// (Parser.widenToBigFloat), shared with string->number. Every result is
+// DefaultBigFloatPrecision bits: an exact operand wider than that rounds, as an
+// exact operand of inexact rounds to a float64. A complex number has no
+// BigFloat image and is an ErrNotANumber, as is a non-number.
 func WidenToBigFloat(v values.Value) (values.Number, error) {
 	switch v := v.(type) {
 	case *values.BigFloat:
@@ -537,22 +537,11 @@ func WidenToBigFloat(v values.Value) (values.Number, error) {
 		bf := new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetInt64(v.Value)
 		return values.NewBigFloat(bf), nil
 	case *values.BigInteger:
-		n := v.BigInt()
-		prec := max(uint(values.DefaultBigFloatPrecision), uint(n.BitLen()))
-		if prec > values.MaxBigFloatLiteralPrecision {
-			return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
-				"WidenToBigFloat: #m operand needs %d bits, past the %d-bit limit", prec, values.MaxBigFloatLiteralPrecision)
-		}
-		return values.NewBigFloat(new(big.Float).SetPrec(prec).SetInt(n)), nil
+		bf := new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetInt(v.BigInt())
+		return values.NewBigFloat(bf), nil
 	case *values.Rational:
-		r := v.Rat()
-		bits := max(r.Num().BitLen(), r.Denom().BitLen())
-		prec := max(uint(values.DefaultBigFloatPrecision), uint(bits))
-		if prec > values.MaxBigFloatLiteralPrecision {
-			return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
-				"WidenToBigFloat: #m operand needs %d bits, past the %d-bit limit", prec, values.MaxBigFloatLiteralPrecision)
-		}
-		return values.NewBigFloat(new(big.Float).SetPrec(prec).SetRat(r)), nil
+		bf := new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetRat(v.Rat())
+		return values.NewBigFloat(bf), nil
 	default:
 		return nil, werr.WrapForeignErrorf(werr.ErrNotANumber,
 			"WidenToBigFloat: #m requires a real datum, got %T", v)
@@ -560,9 +549,10 @@ func WidenToBigFloat(v values.Value) (values.Number, error) {
 }
 
 // ParseBigFloatLiteral converts the digits of a one-token #m numeral (the text
-// after "#m"), keeping every digit the literal spells, which is what separates
-// #m1.2345678901234567890123456789 from #m applied to a float64. Shared by the
-// reader (Parser.parseBigFloat) and string->number.
+// after "#m") at DefaultBigFloatPrecision, rounding the digits once, which is
+// what separates #m1.2345678901234567890123456789 from #m applied to an
+// already-rounded float64. Shared by the reader (Parser.parseBigFloat) and
+// string->number.
 //
 // The tokenizer admits two spellings big.ParseFloat does not: an <infnan>
 // (#m+inf.0), converted through float64, whose NaN NewBigFloatFromFloat64 maps
@@ -580,8 +570,7 @@ func ParseBigFloatLiteral(s string) (values.Number, error) {
 	}
 	q := values.NewBigFloatFromString(schemeutil.NormalizeExponentMarker(s))
 	if q == nil {
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
-			"big float literal: malformed, or past the %d-bit precision limit: %s", values.MaxBigFloatLiteralPrecision, s)
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "big float literal: malformed: %s", s)
 	}
 	return q, nil
 }

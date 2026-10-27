@@ -816,13 +816,15 @@ func readerDefectRow(prefix, numeral string) bool {
 }
 
 // TestStringToNumberRadixFractionPastFloat64 is the string->number half of
-// TestReadSyntaxRadixFractionPastFloat64KeepsItsDigits: the radix argument
-// reaches the same precision rule as a #x prefix.
+// TestReadSyntaxRadixFractionPastFloat64RoundsTo256Bits: the radix argument
+// reaches the same rule as a #x prefix, so 16^256+1 reads as a 256-bit BigFloat
+// and rounds to 16^256.
 func TestStringToNumberRadixFractionPastFloat64(t *testing.T) {
 	c := qt.New(t)
 	engine := newEngine(t)
 	digits := "1" + strings.Repeat("0", 255) + "1"
-	code := `(list (= (exact (string->number "` + digits + `.0" 16)) (string->number "` + digits + `" 16))` +
-		` (= (exact (string->number "#x` + digits + `.0")) (string->number "#x` + digits + `")))`
+	rounded := "1" + strings.Repeat("0", 256)
+	code := `(list (= (exact (string->number "` + digits + `.0" 16)) (string->number "` + rounded + `" 16))` +
+		` (= (exact (string->number "#x` + digits + `.0")) (string->number "#x` + rounded + `")))`
 	c.Assert(eval(t, engine, code).SchemeString(), qt.Equals, "(#t #t)")
 }

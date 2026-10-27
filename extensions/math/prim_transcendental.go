@@ -494,11 +494,12 @@ func PrimSqrt(mc machine.CallContext) error {
 			}
 			return nil
 		}
-		// SetInt at zero precision is exact. The root rounds at the default, or
-		// at the operand's bit length when that is wider, so a wide operand
-		// keeps its digits; both signs share the rule and so the digits.
-		f := new(big.Float).SetInt(bi)
-		mc.SetValue(values.BigSqrt(f, max(f.Prec(), values.DefaultBigFloatPrecision)))
+		// SetInt at zero precision is exact, so the root rounds once, at the
+		// default, as the Rational arm's does: an exact operand's inexact image
+		// is in the reader's 256-bit class, never sized by the operand's width
+		// (a root at the operand's bit length would not survive write/read).
+		// Both signs share the rule and so the digits.
+		mc.SetValue(values.BigSqrt(new(big.Float).SetInt(bi), values.DefaultBigFloatPrecision))
 	case *values.Float:
 		if v.Value < 0 {
 			mc.SetValue(values.NewComplex(cmplx.Sqrt(complex(v.Value, 0))))
