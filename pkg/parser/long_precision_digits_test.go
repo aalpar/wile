@@ -127,7 +127,8 @@ func TestWidenToBigFloatWideExactRoundsTo256Bits(t *testing.T) {
 }
 
 // TestLongExactAndUnmarkedLiteralsStillRead: #e re-reads the text as a ratio,
-// so it keeps every digit, and an unmarked long decimal is a Float.
+// so it keeps every digit, and an unmarked decimal past float64 range is a
+// 256-bit BigFloat (TestReaderBigFloatIsDefaultPrecision in pkg/wile).
 func TestLongExactAndUnmarkedLiteralsStillRead(t *testing.T) {
 	over := strings.Repeat("7", 20000)
 	for _, src := range []string{"#e" + over + ".5", over + ".5", "#e1." + over + "e400"} {
