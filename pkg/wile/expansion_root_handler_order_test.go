@@ -104,17 +104,6 @@ func TestExpansionRootRaiseRunsTheCallersHandlerBeforeTheRootUnwinds(t *testing.
 			`(import (wile threads))
 			 (thread-join! (thread-start! (make-thread (lambda () (guard (e (#t (note 'guard) e)) (eval (list 'm note) env))))))`,
 			"(boom (before after guard))"},
-		// The inner root, run by an eval in the outer transformer, sees the outer
-		// root's own handler.
-		{"guard in an enclosing transformer",
-			`(import (for-syntax (scheme eval) (scheme repl)))
-			 (define-syntax outer
-			   (lambda (stx)
-			     (let ((note (cadr (syntax->datum stx))))
-			       (guard (e (#t (note 'guard) (datum->syntax stx (list 'quote e))))
-			         (eval (list 'm note) (interaction-environment))))))
-			 (eval (list 'outer note) env)`,
-			"(boom (before after guard))"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -124,6 +113,24 @@ func TestExpansionRootRaiseRunsTheCallersHandlerBeforeTheRootUnwinds(t *testing.
 			qt.Assert(t, v.SchemeString(), qt.Equals, tc.want)
 		})
 	}
+
+	// The inner root, run by an eval in the outer transformer, sees the outer
+	// root's own handler. The definitions are top level: the table's sources are
+	// wrapped in an expression (begin), which cannot hold one (R7RS 5.3).
+	t.Run("guard in an enclosing transformer", func(t *testing.T) {
+		t.Parallel()
+		v, err := newExpansionRootProbeEngine(t).EvalMultiple(context.Background(), expansionRootTrail+`
+			(import (for-syntax (scheme eval) (scheme repl)))
+			(define-syntax outer
+			  (lambda (stx)
+			    (let ((note (cadr (syntax->datum stx))))
+			      (guard (e (#t (note 'guard) (datum->syntax stx (list 'quote e))))
+			        (eval (list 'm note) (interaction-environment))))))
+			(define result (eval (list 'outer note) env))
+			(list result (reverse (vector-ref trail 0)))`)
+		qt.Assert(t, err, qt.IsNil)
+		qt.Assert(t, v.SchemeString(), qt.Equals, "(boom (before after guard))")
+	})
 }
 
 // TestGuardMissPastAnEndedExpansionRootReRaisesFromTheGuard: a guard whose
