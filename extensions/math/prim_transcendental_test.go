@@ -933,7 +933,7 @@ func TestBigComplexKernelOperandPrecision(t *testing.T) {
 }
 
 // TestTranscendentalKernelPrecisionBounded pins the kernel cap: with a
-// 19,700-digit operand (about 65450 bits) a transcendental computes at
+// 19,702-digit operand (65452 bits, from defineWide) a transcendental computes at
 // MaxBigFloatKernelPrecision, so it finishes in a bounded time, while expt with
 // an exact integer exponent, not a kernel, keeps the operand's precision. The
 // result's precision is the deterministic witness of the cap; a wall-clock
@@ -993,11 +993,12 @@ func TestTranscendentalKernelPrecisionBounded(t *testing.T) {
 	}
 }
 
-// defineWide binds name to the decimal digits at the precision the reader gave
-// such a literal before the fixed 256-bit class: the bits its significant
-// digits need, floored at 256. The reader no longer makes a BigFloat wider than
-// 256 bits, but an embedder's values.NewBigFloat can, and operand-max precision
-// still applies to it; these references were computed at those roundings.
+// defineWide binds name to the decimal digits read under the former
+// decimalLiteralPrecision rule (the bits the significant digits need, floored
+// at 256), kept here because the operand-precision rows need a BigFloat wider
+// than the reader can now make; an embedder's values.NewBigFloat still can, and
+// operand-max applies to it. The rows' references were computed at these
+// roundings.
 func defineWide(t *testing.T, engine *wile.Engine, name, digits string) *values.BigFloat {
 	t.Helper()
 	c := qt.New(t)

@@ -71,7 +71,20 @@ func NewBigFloatFromFloat64(v float64) *BigFloat {
 }
 
 // NewBigFloatFromString creates a new BigFloat from a decimal string, rounded
-// to DefaultBigFloatPrecision. Returns nil if the string is not a valid number.
+// to DefaultBigFloatPrecision. Returns nil if the string is not a valid number;
+// ParseBigFloat says why.
+func NewBigFloatFromString(s string) *BigFloat {
+	q, err := ParseBigFloat(s)
+	if err != nil {
+		return nil
+	}
+	return q
+}
+
+// ParseBigFloat reads a decimal string as a BigFloat rounded to
+// DefaultBigFloatPrecision. A string big.ParseFloat refuses is an
+// ErrInvalidFormat whose cause is big's reason, which separates a malformed
+// numeral from a well-formed one whose exponent overflows (1e999999999999).
 //
 // The precision is the class's, never the spelling's: a literal longer than
 // about 77 digits rounds to 256 bits as a 20-digit decimal rounds to a float64's
@@ -79,12 +92,12 @@ func NewBigFloatFromFloat64(v float64) *BigFloat {
 // writer prints the shortest digits at the value's own precision, and reading
 // those digits back at a precision derived from their count yields a different
 // value (the 256-bit 1/3 prints with 81 digits).
-func NewBigFloatFromString(s string) *BigFloat {
+func ParseBigFloat(s string) (*BigFloat, error) {
 	v, _, err := big.ParseFloat(s, 10, DefaultBigFloatPrecision, big.ToNearestEven)
 	if err != nil {
-		return nil
+		return nil, werr.WrapForeignErrorWithCause(werr.ErrInvalidFormat, err, "ParseBigFloat: %s", s)
 	}
-	return &BigFloat{value: v}
+	return &BigFloat{value: v}, nil
 }
 
 // recoverNaN wraps a big.Float operation that may panic with big.ErrNaN.

@@ -16,11 +16,14 @@ package parser
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/aalpar/wile/pkg/environment"
 	"github.com/aalpar/wile/pkg/values"
+	"github.com/aalpar/wile/pkg/werr"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -174,6 +177,8 @@ func TestReadSyntaxRadixFractionPastFloat64RoundsTo256Bits(t *testing.T) {
 		{"#b", "1" + strings.Repeat("0", 1024) + "1", "1" + strings.Repeat("0", 1025)},
 		{"#o", "7" + strings.Repeat("0", 400) + "7", "7" + strings.Repeat("0", 401)},
 		{"#x", "-F" + strings.Repeat("0", 300) + "F", "-F" + strings.Repeat("0", 301)},
+		// 260 one bits round up, to nearest, to 16^265; truncation would not.
+		{"#x", strings.Repeat("F", 65) + strings.Repeat("0", 200), "1" + strings.Repeat("0", 265)},
 	}
 	read := func(c *qt.C, s string) values.Value {
 		env := environment.NewNamespace().Runtime()
@@ -181,8 +186,8 @@ func TestReadSyntaxRadixFractionPastFloat64RoundsTo256Bits(t *testing.T) {
 		c.Assert(err, qt.IsNil, qt.Commentf("%.40s", s))
 		return syn.Unwrap()
 	}
-	for _, tc := range tcs {
-		t.Run(tc.prefix+tc.digits[:4], func(t *testing.T) {
+	for i, tc := range tcs {
+		t.Run(fmt.Sprintf("%02d", i), func(t *testing.T) {
 			c := qt.New(t)
 			bf, ok := read(c, tc.prefix+tc.digits+".0").(*values.BigFloat)
 			c.Assert(ok, qt.IsTrue)
@@ -208,4 +213,67 @@ func TestReadSyntaxRadixFractionRoundsToFloat64Once(t *testing.T) {
 	f, ok := syn.Unwrap().(*values.Float)
 	c.Assert(ok, qt.IsTrue, qt.Commentf("%T", syn.Unwrap()))
 	c.Assert(f.Value, qt.Equals, 1.0000000000000002)
+}
+
+// TestReadSyntaxExactRadixFractionKeepsItsDigits pins #e over a radix fraction:
+// the digits, read exactly in their radix, are authoritative in either prefix
+// order, as a decimal's are. Past float64 range the fraction alone reads as a
+// 256-bit BigFloat, and converting that value dropped 16^256+1's trailing 1; in
+// range the float64 dropped #x1.00000000000000001's (it read as 1).
+func TestReadSyntaxExactRadixFractionKeepsItsDigits(t *testing.T) {
+	past := "1" + strings.Repeat("0", 255) + "1"
+	tcs := []struct{ src, want string }{
+		{"#e#x" + past + ".0", "#x" + past},
+		{"#x#e" + past + ".0", "#x" + past},
+		{"#e#x1.00000000000000001", "#x100000000000000001/100000000000000000"},
+		{"#x#e1.00000000000000001", "#x100000000000000001/100000000000000000"},
+		{"#e#b-101.101", "-45/8"},
+		{"#e#x1.8", "3/2"},
+		{"#x#e10.0", "16"},
+	}
+	read := func(c *qt.C, s string) values.Value {
+		env := environment.NewNamespace().Runtime()
+		syn, err := NewParser(env, true, strings.NewReader(s)).ReadSyntax(context.TODO())
+		c.Assert(err, qt.IsNil, qt.Commentf("%.40s", s))
+		return syn.Unwrap()
+	}
+	for i, tc := range tcs {
+		t.Run(fmt.Sprintf("%02d", i), func(t *testing.T) {
+			c := qt.New(t)
+			got := read(c, tc.src)
+			want := read(c, tc.want)
+			c.Assert(values.EqvNumber(got.(values.Number), want.(values.Number)), qt.IsTrue,
+				qt.Commentf("%.40s read as %.60s", tc.src, got.SchemeString()))
+		})
+	}
+}
+
+// TestRadixFractionRefusesDecimalExponent: in base 2 or 8 'e' is not a digit,
+// and big.ParseFloat would take it as a decimal exponent whose digits the
+// precision count mistook for mantissa digits ("1e100" in base 2 read as
+// 9.84e99). In base 16 'e' is a digit.
+func TestRadixFractionRefusesDecimalExponent(t *testing.T) {
+	for _, base := range []int{2, 8} {
+		for _, text := range []string{"1e100", "1.1E1"} {
+			_, err := ParseRealFloatStringWithBase(text, base)
+			qt.Assert(t, errors.Is(err, werr.ErrInvalidFormat), qt.IsTrue, qt.Commentf("%s base %d: %v", text, base, err))
+		}
+	}
+	n, err := ParseRealFloatStringWithBase("1e.8", 16)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, n.(*values.Float).Value, qt.Equals, 30.5)
+}
+
+// TestBigFloatExponentOverflowIsNamed: a well-formed literal whose exponent
+// big.Float cannot hold is refused with that reason, not as malformed.
+func TestBigFloatExponentOverflowIsNamed(t *testing.T) {
+	for _, src := range []string{"#m1e999999999999", "1l999999999999", "1e999999999999"} {
+		t.Run(src, func(t *testing.T) {
+			c := qt.New(t)
+			env := environment.NewNamespace().Runtime()
+			_, err := NewParser(env, true, strings.NewReader(src)).ReadSyntax(context.TODO())
+			c.Assert(errors.Is(err, werr.ErrInvalidFormat), qt.IsTrue, qt.Commentf("%v", err))
+			c.Assert(err, qt.ErrorMatches, ".*exponent overflow.*")
+		})
+	}
 }

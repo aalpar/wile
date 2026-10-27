@@ -305,15 +305,9 @@ func (p *Parser) parseBaseWithExactness(base int) (syntax.SyntaxValue, tokenizer
 	// Apply exactness if a trailing prefix was present.
 	switch exactness {
 	case 1:
-		// Decimal digits are authoritative for #e (#d#e0.1 is 1/10, as #e#d0.1
-		// is); other radixes defer to the value. See makeExactLiteral.
-		var exact syntax.SyntaxValue
-		var convErr error
-		if base == 10 {
-			exact, convErr = p.makeExactLiteral(q, tok)
-		} else {
-			exact, convErr = p.makeExact(q)
-		}
+		// The digits are authoritative for #e in every radix (#d#e0.1 is 1/10,
+		// as #e#d0.1 is). See makeExactLiteral.
+		exact, convErr := p.makeExactLiteral(q, tok)
 		if convErr != nil {
 			return nil, tok, NewParserErrorWithWrap(convErr, tok, "cannot convert to exact")
 		}
@@ -649,33 +643,17 @@ func (p *Parser) convertWrappedNumber(stx syntax.SyntaxValue, op string, convert
 	return p.rewrapSyntax(stx, result), nil
 }
 
-// makeExact converts a syntax-wrapped number to its exact representation,
-// implementing the reader's #e prefix. The conversion itself lives in
-// MakeExactNumber (number_string.go), shared with string->number; this method
-// contributes only the syntax unwrap/rewrap and the reader's error policy.
-func (p *Parser) makeExact(stx syntax.SyntaxValue) (syntax.SyntaxValue, error) {
-	return p.convertWrappedNumber(stx, "makeExact", MakeExactNumber)
-}
-
-// makeExactLiteral implements the reader's #e prefix on a bare (non-radix-
-// prefixed) datum, where the literal's source text is still available and
-// therefore authoritative: #e1e400 is 10^400, not the binary float 1e400 names.
-// See MakeExactFromLiteral. tok is the datum's own token, whose '#' digit
-// placeholders are substituted before the text is re-read.
-//
-// A non-decimal datum is routed to the value instead, because MakeExactFromLiteral
-// re-reads the text as a *decimal* rational: it would turn #e#x1.8 into 9/5 where
-// #x#e1.8 (the same prefix pair, the other order) gives 3/2. The two orders name
-// one number, so the digits path is only correct where the digits are decimal.
-// Bases 2, 8, and 16 lose nothing by it — they are powers of two, so the literal
-// is already exactly the float that was parsed.
+// makeExactLiteral implements the reader's #e prefix on a datum whose token
+// is still available, so the literal's digits are authoritative: #e1e400 is
+// 10^400, not the binary float 1e400 names, and #e#x1<255 zeros>1.0 is
+// 16^256+1, not the 256-bit BigFloat the fraction reads as. tok is the datum's
+// own token, whose radix selects how the digits are read and whose '#' digit
+// placeholders are substituted first. See MakeExactFromLiteralInBase, which
+// reads non-decimal digits in their own radix, so #e#x1.8 and #x#e1.8 are both
+// 3/2.
 func (p *Parser) makeExactLiteral(stx syntax.SyntaxValue, tok tokenizer.Token) (syntax.SyntaxValue, error) {
-	base := tok.Radix()
-	if base != 0 && base != 10 {
-		return p.makeExact(stx)
-	}
 	return p.convertWrappedNumber(stx, "makeExact", func(num values.Number) (values.Number, error) {
-		return MakeExactFromLiteral(replaceHashDigits(tok.String()), num)
+		return MakeExactFromLiteralInBase(replaceHashDigits(tok.String()), tok.Radix(), num)
 	})
 }
 

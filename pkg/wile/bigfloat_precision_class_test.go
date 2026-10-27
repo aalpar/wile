@@ -16,6 +16,7 @@ package wile_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -25,9 +26,10 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-func newPrecisionClassEngine(c *qt.C) *wile.Engine {
+func newPrecisionClassEngine(t *testing.T) *wile.Engine {
+	t.Helper()
 	engine, err := wile.NewEngine(context.Background(), wile.WithProfile(wile.KitchenSink))
-	c.Assert(err, qt.IsNil)
+	qt.Assert(t, err, qt.IsNil)
 	return engine
 }
 
@@ -63,6 +65,10 @@ func TestReaderBigFloatIsDefaultPrecision(t *testing.T) {
 		`(string->number "` + hexPast + `" 16)`,
 		`(string->number "#x` + hexPast + `")`,
 		`(read (open-input-string "` + digits100 + `l0"))`,
+		// the BigFloat parts of an l-marked complex
+		"(real-part " + digits100 + "l0+1i)",
+		"(imag-part 1+" + digits100 + "l0i)",
+		`(real-part (string->number "` + digits100 + `l0+1i"))`,
 		// primitives over reader-class operands stay in the class
 		"(sqrt #m2)",
 		"(/ #m1 3)",
@@ -72,14 +78,14 @@ func TestReaderBigFloatIsDefaultPrecision(t *testing.T) {
 		// the operand (1329 bits here before)
 		"(sqrt (- (expt 10 400) 1))",
 	}
-	for _, src := range tcs {
-		t.Run(src[:min(len(src), 30)], func(t *testing.T) {
+	for i, src := range tcs {
+		t.Run(fmt.Sprintf("%02d", i), func(t *testing.T) {
 			c := qt.New(t)
-			v, err := newPrecisionClassEngine(c).EvalMultiple(context.Background(), src)
-			c.Assert(err, qt.IsNil)
+			v, err := newPrecisionClassEngine(t).EvalMultiple(context.Background(), src)
+			c.Assert(err, qt.IsNil, qt.Commentf("%.60s", src))
 			bf, ok := v.Internal().(*values.BigFloat)
-			c.Assert(ok, qt.IsTrue, qt.Commentf("%T", v.Internal()))
-			c.Assert(bf.BigFloatValue().Prec(), qt.Equals, uint(values.DefaultBigFloatPrecision))
+			c.Assert(ok, qt.IsTrue, qt.Commentf("%.60s: %T", src, v.Internal()))
+			c.Assert(bf.BigFloatValue().Prec(), qt.Equals, uint(values.DefaultBigFloatPrecision), qt.Commentf("%.60s", src))
 		})
 	}
 }
@@ -101,14 +107,25 @@ func TestBigFloatWriteReadByEqv(t *testing.T) {
 		"(/ #m1 (expt 10 400))",
 		"(sqrt (- (expt 10 400) 1))",
 	}
-	for _, src := range tcs {
-		t.Run(src, func(t *testing.T) {
+	for i, src := range tcs {
+		t.Run(fmt.Sprintf("%02d", i), func(t *testing.T) {
 			c := qt.New(t)
 			code := "(let* ((x " + src + ") (s (number->string x)) (y (string->number s)) (z (read (open-input-string s))))" +
 				" (list (eqv? x y) (= x y) (eqv? x z) (= x z)))"
-			v, err := newPrecisionClassEngine(c).EvalMultiple(context.Background(), code)
+			v, err := newPrecisionClassEngine(t).EvalMultiple(context.Background(), code)
 			c.Assert(err, qt.IsNil)
-			c.Assert(v.SchemeString(), qt.Equals, "(#t #t #t #t)")
+			c.Assert(v.SchemeString(), qt.Equals, "(#t #t #t #t)", qt.Commentf("%.60s", src))
 		})
 	}
+}
+
+// TestSpelledOutPowerOfTenIsTheExponentForm pins docs/numeric/tower.md's
+// example: 1l120 and 1<120 zeros>.0l0 are the same 256-bit value. When
+// precision followed the digits, the spelled-out form read exactly (399 bits)
+// and the two compared unequal.
+func TestSpelledOutPowerOfTenIsTheExponentForm(t *testing.T) {
+	code := "(= 1l120 1" + strings.Repeat("0", 120) + ".0l0)"
+	v, err := newPrecisionClassEngine(t).EvalMultiple(context.Background(), code)
+	qt.Assert(t, err, qt.IsNil)
+	qt.Assert(t, v.Internal(), qt.Equals, values.TrueValue)
 }

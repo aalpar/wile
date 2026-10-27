@@ -828,3 +828,21 @@ func TestStringToNumberRadixFractionPastFloat64(t *testing.T) {
 		` (= (exact (string->number "#x` + digits + `.0")) (string->number "#x` + rounded + `")))`
 	c.Assert(eval(t, engine, code).SchemeString(), qt.Equals, "(#t #t)")
 }
+
+// TestStringToNumberExactRadixFractionKeepsItsDigits is the string->number half
+// of TestReadSyntaxExactRadixFractionKeepsItsDigits: #e reads a radix
+// fraction's digits exactly in either prefix order and with a radix argument,
+// past float64 range and in range.
+func TestStringToNumberExactRadixFractionKeepsItsDigits(t *testing.T) {
+	c := qt.New(t)
+	engine := newEngine(t)
+	past := "1" + strings.Repeat("0", 255) + "1"
+	code := `(let ((n (string->number "` + past + `" 16)) (r (/ (string->number "100000000000000001" 16) (expt 16 17))))` +
+		` (list (= (string->number "#e#x` + past + `.0") n)` +
+		` (= (string->number "#x#e` + past + `.0") n)` +
+		` (= (string->number "#e` + past + `.0" 16) n)` +
+		` (= (string->number "#e#x1.00000000000000001") r)` +
+		` (= (string->number "#x#e1.00000000000000001") r)` +
+		` (= (string->number "#e1.00000000000000001" 16) r)))`
+	c.Assert(eval(t, engine, code).SchemeString(), qt.Equals, "(#t #t #t #t #t #t)")
+}

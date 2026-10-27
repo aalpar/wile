@@ -18,6 +18,7 @@ import (
 	"math"
 	"math/big"
 	"math/rand"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -25,21 +26,23 @@ import (
 )
 
 // TestBigFloatFromStringIsFixedPrecisionAndRoundTrips pins the fixed precision
-// class: a decimal string of any length reads at DefaultBigFloatPrecision, and
-// the writer's shortest digits (Text('g', -1)) read back as the same value. A
-// precision derived from the digit count broke the second half: the 256-bit
-// value of a long literal printed with ~78 digits, which read back at ~260 bits
-// as a different value.
+// class: a decimal string of any length and exponent reads at
+// DefaultBigFloatPrecision, and the writer's shortest digits (Text('g', -1))
+// read back as the same value. A precision derived from the digit count broke
+// the second half: the 256-bit value of a long literal printed with ~78
+// digits, which read back at ~260 bits as a different value.
 func TestBigFloatFromStringIsFixedPrecisionAndRoundTrips(t *testing.T) {
 	rng := rand.New(rand.NewSource(192))
-	for n := 2; n <= 130; n++ {
-		for range 60 {
+	// Text('g', -1) is slow on a five-digit exponent, so the sample is sparse.
+	for n := 2; n <= 130; n += 4 {
+		for range 2 {
 			var b strings.Builder
 			b.WriteByte(byte('1' + rng.Intn(9)))
 			b.WriteByte('.')
 			for j := 1; j < n; j++ {
 				b.WriteByte(byte('0' + rng.Intn(10)))
 			}
+			b.WriteString("e" + strconv.Itoa(rng.Intn(40001)-20000))
 			in := b.String()
 			x := NewBigFloatFromString(in)
 			if x.value.Prec() != DefaultBigFloatPrecision {

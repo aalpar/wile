@@ -242,8 +242,7 @@ func widenOrNil(widen func(values.Value) (values.Number, error), n values.Number
 // applyExactness applies an #e (1) or #i (-1) prefix to n, read from text in
 // radix. Both conversions are the reader's, shared via pkg/parser so #e/#i
 // cannot mean one thing in a literal and another in a string. #e converts a
-// decimal literal from its digits (#e0.1 is 1/10) and anything else from its
-// value: re-reading non-decimal digits as decimal would make #x#e1.8 9/5. A
+// literal from its digits, read in its radix (#e0.1 is 1/10, #x#e1.8 is 3/2). A
 // magnitude with no exact representation (#e+inf.0) yields nil.
 func applyExactness(n values.Number, text string, radix, exactness int) values.Number {
 	if n == nil {
@@ -262,12 +261,9 @@ func applyExactness(n values.Number, text string, radix, exactness int) values.N
 	return n
 }
 
-// makeExact is the #e conversion, choosing the digits path for decimal text.
+// makeExact is the #e conversion, from the literal's digits in its radix.
 func makeExact(n values.Number, text string, radix int) (values.Number, error) {
-	if radix != 10 {
-		return parser.MakeExactNumber(n)
-	}
-	return parser.MakeExactFromLiteral(text, n)
+	return parser.MakeExactFromLiteralInBase(text, radix, n)
 }
 
 // parseStringToNumber parses a numeric string in the given radix.
