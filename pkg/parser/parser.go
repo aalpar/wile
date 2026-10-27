@@ -496,7 +496,7 @@ func (p *Parser) readQuoteForm(keyword string) (syntax.SyntaxValue, tokenizer.To
 //
 // convert receives the datum's own token as well as its value, because #e must
 // consult the literal's source text — it converts the number as written, and the
-// token's radix decides whether those digits are authoritative (makeExactLiteral).
+// token's radix selects how those digits are read (makeExactLiteral).
 // The other three ignore it.
 //
 // label names the marker in diagnostics, e.g. "exact number marker".

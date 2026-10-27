@@ -70,12 +70,12 @@ The rule, stated once: **contagion is a promotion question and the table owns it
 
 Big* arithmetic remains significantly slower (heap-allocated, no hardware acceleration), so keeping ordinary float arithmetic out of it matters.
 
-**The precision of a BigFloat result is the operands' (operand-max).** Every operation computes at the widest precision among its `BigFloat` operands, counting the `BigFloat` parts of a `BigComplex` (`values.OperandPrecision`):
+**The precision of a BigFloat result is the operands' (operand-max).** Every `BigFloat` the reader makes is 256 bits (see the reader section below), so in Scheme source every operand is; a wider one comes from an embedder (`values.NewBigFloat` takes any precision). Every operation computes at the widest precision among its `BigFloat` operands, counting the `BigFloat` parts of a `BigComplex` (`values.OperandPrecision`):
 
 - an exact operand meeting a `BigFloat` converts at that `BigFloat`'s precision, exactly when it fits and rounded otherwise (`promoteToBigFloatPair` in `pkg/values/promotion.go`; the unary `→BigFloat` promoters are not used by arithmetic);
 - the transcendentals (`exp`, `log`, the trigonometric family, one- and two-argument `atan`, `expt`, `magnitude`, `angle`, a `BigComplex`'s `sqrt`) take the same precision as their working precision;
-- `DefaultBigFloatPrecision` (256 bits) applies only when no operand carries a precision: `(exp 1/3)`, `(sqrt 2/3)`. The exception is `sqrt` of a non-square `BigInteger`, which rounds at its bit length when that is wider, so a wide integer keeps its digits;
-- the transcendental working precision is capped at `MaxBigFloatKernelPrecision` (16384 bits, about 4900 digits; `values.KernelPrecision`). The kernels cannot be interrupted, so `with-timeout` and a host context cannot stop one mid-call, and their cost is superlinear: one call takes about 0.1 s at 16384 bits and 1 to 2.5 s at 65536. With a 19,700-digit operand, `exp`, `log`, `sin`, `atan`, `(log u 3)` and `(expt u u)` each finish in under 0.4 s beyond the read. Arithmetic, `sqrt`, `magnitude` and `expt` with an exact integer exponent are not capped, so `(expt w 2)` and `(* w w)` agree at any width. The cap does not bound the trigonometric argument reduction, whose precision grows with the operand's binary exponent: `(sin (* #m1.5 (expt 2 60000)))` takes about 2 s at 256 bits.
+- `DefaultBigFloatPrecision` (256 bits) applies only when no operand carries a precision: `(exp 1/3)`, `(sqrt 2/3)`, and `sqrt` of a non-square `BigInteger` of any width;
+- the transcendental working precision is capped at `MaxBigFloatKernelPrecision` (16384 bits, about 4900 digits; `values.KernelPrecision`). The kernels cannot be interrupted, so `with-timeout` and a host context cannot stop one mid-call, and their cost is superlinear: one call takes about 0.1 s at 16384 bits and 1 to 2.5 s at 65536. With a 65452-bit operand, `exp`, `log`, `sin`, `atan`, `(log u 3)` and `(expt u u)` each finish in under 0.4 s. Arithmetic, `sqrt`, `magnitude` and `expt` with an exact integer exponent are not capped, so `(expt w 2)` and `(* w w)` agree at any width. The cap does not bound the trigonometric argument reduction, whose precision grows with the operand's binary exponent: `(sin (* #m1.5 (expt 2 60000)))` takes about 2 s at 256 bits.
 
 So beside a 256-bit `#m0`, the 333-bit `(+ (expt 10 100) 1)` still rounds, and `(exact (+ #m0 (+ (expt 10 100) 1)))` is `10^100`; beside a 403-bit `BigFloat` it converts exactly.
 
@@ -197,7 +197,7 @@ whatever the inner datum's prefixes decided.
 | `1.5`, `1e3` | `Float` | promotes to `BigFloat` past float64 range |
 | `#x1.8` | `Float` | radix-prefixed fraction: 1.5. Extension, see `docs/reference/r7rs-differences.md` |
 | `#z…` | `BigInteger` | datum must denote an exact integer |
-| `#m…` | `BigFloat` | datum must be real; precision is the value's |
+| `#m…` | `BigFloat` | datum must be real; 256 bits, as every reader `BigFloat` |
 | `1+2i` | `BigComplex` if both parts exact, else `Complex` | |
 
 A `#z` or `#m` numeral ends at a delimiter: the scan reads a decimal integer
@@ -226,23 +226,24 @@ BigFloat parts). The writer omits the marker inside a complex, so a `BigComplex`
 does not yet round-trip (`componentString` in `pkg/values/big_complex.go` says
 why).
 
+**A reader `BigFloat` is 256 bits** (`DefaultBigFloatPrecision`): an `l`
+literal, an unmarked decimal or radix fraction past float64 range, and `#m` in
+every form, through `read` and `string->number` alike. The precision comes from
+the class, never the spelling, so a literal longer than about 77 digits, or `#m`
+of a wider exact, rounds to 256 bits as a 20-digit decimal rounds to a float64's
+53. That is what makes write/read an identity on a 256-bit value: the writer prints a `BigFloat`'s
+shortest digits at its own precision, and the reader reads them back at that
+precision, so `(eqv? x (string->number (number->string x)))` holds for the
+256-bit `(/ #m1 3)`. The spelled-out `1<120 zeros>.0l0` and `1l120` are the same
+256-bit value, so `(= 1l120 1<120 zeros>.0l0)` is `#t`; `#e` reads the digits,
+not the `BigFloat`, when a power of ten must be exact.
+
 Two consequences worth stating, since they look like inconsistencies and are not:
 
-- **Precision is the value's, not the literal's, once an introducer is involved.**
-  `1.2345678901234567890123456789l0` is one token and keeps every digit;
+- **`#m` widens the value, not the spelling.**
+  `#m1.2345678901234567890123456789` is one token and rounds its digits once;
   `#m#d1.2345678901234567890123456789` widens an already-rounded float64.
 - **Markers are decimal-only.** `#x1e2` is 482, because `e` is a hex digit.
-- **A literal's precision is its significant digits, not its magnitude**,
-  floored at 256 bits and capped at `MaxBigFloatLiteralPrecision` (65536).
-  Integer-part zeros are digits and an exponent is not, so `(= 1l120 1<120
-  zeros>.0l0)` is `#f`: `1l120` is the 256-bit neighbour of 10^120 (5^120 needs
-  279 bits) and the spelled-out form is exact. Counting the exponent would break
-  the write/read round trip: the writer prints a BigFloat's shortest digits at
-  its own precision, so the 256-bit neighbour of 10^400 writes as `1l+400`, and
-  a reader that counted the exponent would read that text back as exact 10^400.
-  Spell the zeros out when a power of ten must be exact. A radix fraction past
-  float64 range (`#x1<255 zeros>1.0`) takes the bits its digits hold, on the same
-  floor and cap.
 
 ---
 

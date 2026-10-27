@@ -51,11 +51,11 @@ func ParseRealFloatString(s string) (values.Number, error) {
 	// already discarded the digits l exists to keep
 	// (TestReadSyntaxLongPrecisionMarkerPreservesDigits).
 	if hasLongPrecisionMarker(s) {
-		bf := values.NewBigFloatFromString(normalized)
-		if bf != nil {
-			return bf, nil
+		bf, err := values.ParseBigFloat(normalized)
+		if err != nil {
+			return nil, werr.WrapForeignErrorf(err, "ParseRealFloatString: invalid long-precision real number: %s", s)
 		}
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "ParseRealFloatString: invalid long-precision real number (malformed, or past the %d-bit precision limit): %s", values.MaxBigFloatLiteralPrecision, s)
+		return bf, nil
 	}
 	f, err := strconv.ParseFloat(normalized, 64)
 	if err == nil {
@@ -64,10 +64,11 @@ func ParseRealFloatString(s string) (values.Number, error) {
 
 	var numErr *strconv.NumError
 	if errors.As(err, &numErr) && errors.Is(numErr.Err, strconv.ErrRange) {
-		bf := values.NewBigFloatFromStringClamped(normalized)
-		if bf != nil {
-			return bf, nil
+		bf, bigErr := values.ParseBigFloat(normalized)
+		if bigErr != nil {
+			return nil, werr.WrapForeignErrorf(bigErr, "ParseRealFloatString: real number out of range: %s", s)
 		}
+		return bf, nil
 	}
 	return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat, "ParseRealFloatString: invalid real number: %s", s)
 }
@@ -95,50 +96,67 @@ func hasLongPrecisionMarker(s string) bool {
 // bare literal and every string->number call takes — stays exactly one
 // implementation. Only the non-decimal bases are new code.
 //
-// The 'p'/'P' rejection is not defensive clutter. big.ParseFloat accepts a
-// *binary* exponent in a non-decimal base, so "1.8p3" in base 16 is 12, a
-// grammar Scheme does not have. The reader cannot currently supply such a
-// string (the tokenizer stops the numeral at 'p'; see
-// requireDelimiterAfterRadixNumeral), but this function is exported next to
-// parsers string->number already calls, so the guard belongs on the function
-// rather than on its present caller. Note the asymmetry: 'e' is a hex *digit*,
-// so big.ParseFloat("1e2", 16) is 482 — which is precisely what
-// TestExponentMarkersStayDecimalOnly requires, and comes for free.
+// Exponent markers are refused in parseRadixFractionExact, which says why.
 func ParseRealFloatStringWithBase(text string, base int) (values.Number, error) {
 	if base == 10 {
 		return ParseRealFloatString(text)
 	}
-	if strings.ContainsAny(text, "pP") {
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
-			"ParseRealFloatStringWithBase: binary exponents are not Scheme notation: %s", text)
-	}
-	bf, _, err := big.ParseFloat(text, base, radixLiteralPrecision(text, base), big.ToNearestEven)
+	bf, err := parseRadixFractionExact(text, base)
 	if err != nil {
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
-			"ParseRealFloatStringWithBase: invalid base-%d real number: %s", base, text)
+		return nil, err
 	}
 	// Magnitudes beyond float64 range promote to BigFloat rather than saturating
-	// to ±Inf, matching ParseRealFloatString's ErrRange branch.
+	// to ±Inf, matching ParseRealFloatString's ErrRange branch, and at the same
+	// fixed DefaultBigFloatPrecision.
 	f, _ := bf.Float64()
 	if math.IsInf(f, 0) {
-		return values.NewBigFloat(bf), nil
+		return values.NewBigFloat(new(big.Float).SetPrec(values.DefaultBigFloatPrecision).Set(bf)), nil
 	}
 	return values.NewFloat(f), nil
 }
 
-// radixLiteralPrecision is decimalLiteralPrecision for a power-of-two radix:
-// the bits the literal's significant digits hold, floored at
-// DefaultBigFloatPrecision and clamped at MaxBigFloatLiteralPrecision, as an
-// unmarked decimal past float64 range is (NewBigFloatFromStringClamped). Only a
-// magnitude past float64 range keeps it; any other result rounds to a Float.
+// parseRadixFractionExact reads a fraction in base 2, 8 or 16 exactly: the
+// value its digits denote, before any rounding, which ParseRealFloatStringWithBase
+// rounds to its result and MakeExactFromLiteralInBase converts to a ratio.
+//
+// The 'p'/'P' and 'e'/'E' rejections are not defensive clutter. big.ParseFloat
+// accepts a binary exponent ('p') in any non-decimal base and a decimal
+// exponent ('e') in base 2 or 8, neither of which Scheme has: "1.8p3" in base 16
+// would be 12, and "1e100" in base 2 would count the exponent's digits as
+// mantissa digits. In base 16 'e' is a digit, so big.ParseFloat("1e2", 16) is
+// 482, which is what TestExponentMarkersStayDecimalOnly requires. The reader
+// cannot supply such a string (the tokenizer stops the numeral at the
+// marker; see requireDelimiterAfterRadixNumeral), but string->number with a
+// radix argument can.
+func parseRadixFractionExact(text string, base int) (*big.Float, error) {
+	if strings.ContainsAny(text, "pP") {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
+			"ParseRealFloatStringWithBase: binary exponents are not Scheme notation: %s", text)
+	}
+	if base != 16 && strings.ContainsAny(text, "eE") {
+		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
+			"ParseRealFloatStringWithBase: exponents are decimal-only, not base-%d notation: %s", base, text)
+	}
+	bf, _, err := big.ParseFloat(text, base, radixLiteralPrecision(text, base), big.ToNearestEven)
+	if err != nil {
+		return nil, werr.WrapForeignErrorWithCause(werr.ErrInvalidFormat, err,
+			"ParseRealFloatStringWithBase: invalid base-%d real number: %s", base, text)
+	}
+	return bf, nil
+}
+
+// radixLiteralPrecision is the bits a power-of-two-radix literal's significant
+// digits hold, so big.ParseFloat reads it exactly and the one rounding is the
+// result's (to float64, or to DefaultBigFloatPrecision past float64 range).
+// Parsing at the result's precision instead would round twice: a fraction
+// longer than 256 bits whose float64 rounding is decided by a bit past 256.
 func radixLiteralPrecision(text string, base int) uint {
 	digits := strings.TrimLeft(text, "+-")
 	if strings.Contains(digits, ".") {
 		digits = strings.TrimRight(digits, "0")
 	}
 	digits = strings.TrimLeft(strings.Replace(digits, ".", "", 1), "0")
-	needed := uint(len(digits) * bits.Len(uint(base-1)))
-	return min(max(uint(values.DefaultBigFloatPrecision), needed), values.MaxBigFloatLiteralPrecision)
+	return max(uint(len(digits)*bits.Len(uint(base-1))), 1)
 }
 
 // ParseSpecialFloat checks if s is +inf.0, -inf.0, +nan.0, or -nan.0
@@ -473,6 +491,28 @@ func MakeExactFromLiteral(text string, parsed values.Number) (values.Number, err
 	return MakeExactNumber(parsed)
 }
 
+// MakeExactFromLiteralInBase is MakeExactFromLiteral for a literal written in
+// base (2, 8, 10 or 16). A power-of-two radix converts its digits too, read
+// exactly (parseRadixFractionExact), so #e#x1<255 zeros>1.0 is 16^256+1 rather
+// than the 256-bit BigFloat the fraction reads as, and #e#x1.00000000000000001
+// is not the float64 1. Unlike re-reading the digits as decimal, this gives
+// #e#x1.8 and #x#e1.8 the same 3/2. Text that does not parse, and every shape
+// but Float and BigFloat, defers to MakeExactNumber.
+func MakeExactFromLiteralInBase(text string, base int, parsed values.Number) (values.Number, error) {
+	if base == 0 || base == 10 {
+		return MakeExactFromLiteral(text, parsed)
+	}
+	switch parsed.(type) {
+	case *values.Float, *values.BigFloat:
+		bf, err := parseRadixFractionExact(text, base)
+		if err == nil && !bf.IsInf() {
+			r, _ := bf.Rat(nil)
+			return values.Simplify(values.NewRationalFromRat(r)), nil
+		}
+	}
+	return MakeExactNumber(parsed)
+}
+
 // MakeInexactNumber returns the inexact representation of n, implementing the
 // #i prefix (R7RS §7.1.1), the '#' digit placeholder (§7.1.1), and the inexact
 // procedure (§6.2.6). Companion to MakeExactNumber and likewise the single
@@ -523,10 +563,10 @@ func WidenToBigInteger(v values.Value) (values.Number, error) {
 }
 
 // WidenToBigFloat is the value half of the reader's #m introducer
-// (Parser.widenToBigFloat, which documents the precision rule), shared with
-// string->number. A complex number has no BigFloat image and is an
-// ErrNotANumber, as is a non-number; an exact operand too wide for
-// MaxBigFloatLiteralPrecision is an ErrInvalidFormat.
+// (Parser.widenToBigFloat), shared with string->number. Every result is
+// DefaultBigFloatPrecision bits: an exact operand wider than that rounds, as an
+// exact operand of inexact rounds to a float64. A complex number has no
+// BigFloat image and is an ErrNotANumber, as is a non-number.
 func WidenToBigFloat(v values.Value) (values.Number, error) {
 	switch v := v.(type) {
 	case *values.BigFloat:
@@ -537,22 +577,11 @@ func WidenToBigFloat(v values.Value) (values.Number, error) {
 		bf := new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetInt64(v.Value)
 		return values.NewBigFloat(bf), nil
 	case *values.BigInteger:
-		n := v.BigInt()
-		prec := max(uint(values.DefaultBigFloatPrecision), uint(n.BitLen()))
-		if prec > values.MaxBigFloatLiteralPrecision {
-			return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
-				"WidenToBigFloat: #m operand needs %d bits, past the %d-bit limit", prec, values.MaxBigFloatLiteralPrecision)
-		}
-		return values.NewBigFloat(new(big.Float).SetPrec(prec).SetInt(n)), nil
+		bf := new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetInt(v.BigInt())
+		return values.NewBigFloat(bf), nil
 	case *values.Rational:
-		r := v.Rat()
-		bits := max(r.Num().BitLen(), r.Denom().BitLen())
-		prec := max(uint(values.DefaultBigFloatPrecision), uint(bits))
-		if prec > values.MaxBigFloatLiteralPrecision {
-			return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
-				"WidenToBigFloat: #m operand needs %d bits, past the %d-bit limit", prec, values.MaxBigFloatLiteralPrecision)
-		}
-		return values.NewBigFloat(new(big.Float).SetPrec(prec).SetRat(r)), nil
+		bf := new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetRat(v.Rat())
+		return values.NewBigFloat(bf), nil
 	default:
 		return nil, werr.WrapForeignErrorf(werr.ErrNotANumber,
 			"WidenToBigFloat: #m requires a real datum, got %T", v)
@@ -560,9 +589,10 @@ func WidenToBigFloat(v values.Value) (values.Number, error) {
 }
 
 // ParseBigFloatLiteral converts the digits of a one-token #m numeral (the text
-// after "#m"), keeping every digit the literal spells, which is what separates
-// #m1.2345678901234567890123456789 from #m applied to a float64. Shared by the
-// reader (Parser.parseBigFloat) and string->number.
+// after "#m") at DefaultBigFloatPrecision, rounding the digits once, which is
+// what separates #m1.2345678901234567890123456789 from #m applied to an
+// already-rounded float64. Shared by the reader (Parser.parseBigFloat) and
+// string->number.
 //
 // The tokenizer admits two spellings big.ParseFloat does not: an <infnan>
 // (#m+inf.0), converted through float64, whose NaN NewBigFloatFromFloat64 maps
@@ -578,10 +608,9 @@ func ParseBigFloatLiteral(s string) (values.Number, error) {
 	if ok {
 		return values.NewBigFloatFromFloat64(special.Value), nil
 	}
-	q := values.NewBigFloatFromString(schemeutil.NormalizeExponentMarker(s))
-	if q == nil {
-		return nil, werr.WrapForeignErrorf(werr.ErrInvalidFormat,
-			"big float literal: malformed, or past the %d-bit precision limit: %s", values.MaxBigFloatLiteralPrecision, s)
+	q, err := values.ParseBigFloat(schemeutil.NormalizeExponentMarker(s))
+	if err != nil {
+		return nil, werr.WrapForeignErrorf(err, "big float literal: %s", s)
 	}
 	return q, nil
 }

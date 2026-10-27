@@ -48,6 +48,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **A BigFloat round-trips through write and read (R7RS 6.2.6); BREAKING (Go API): `values.NewBigFloatFromString` and `wile.NewBigFloatFromString` keep their signatures but now round to 256 bits, and two `values` names are removed.** Every
+  `BigFloat` the reader or `string->number` makes is now exactly 256 bits: an
+  `l` literal of any length, `#m` in every form (a one-token literal, `#m` of an
+  Integer, BigInteger, Rational or Float), and a decimal or radix fraction past
+  float64 range. Precision used to grow with the literal's digit count, and
+  `#m` of a wide exact took its bit length, so the writer's shortest digits read
+  back at another precision as another value: `(let ((x (/ #m1 3))) (eqv? x
+  (string->number (number->string x))))` was `#f`, as was `(exp #m1)`. `sqrt`
+  of a non-square BigInteger is 256 bits too (it took the operand's bit length,
+  and `(sqrt (+ 3 (expt 10 401)))` did not round-trip). The cost is accepted: a
+  literal longer than about 77 digits, or `#m` of a wider exact, now rounds to
+  256 bits, as a 20-digit decimal rounds to a float64, so `(= 1l120 1<120
+  zeros>.0l0)` is `#t`. The 65536-bit literal refusal is gone (a long `l`
+  literal rounds), and with it `values.MaxBigFloatLiteralPrecision` and
+  `values.NewBigFloatFromStringClamped`. `wile.NewBigFloatFromString` and
+  `values.NewBigFloatFromString` compile unchanged but silently round a long
+  string to 256 bits, where they kept its digits; the new
+  `values.ParseBigFloat` returns the reason a string is refused, so an
+  exponent overflow (`1l999999999999`) is reported as one rather than as
+  "malformed". A wider `BigFloat` an embedder builds with `values.NewBigFloat`
+  keeps operand-max precision in arithmetic, as before. `#e` over a radix
+  fraction reads its digits in their radix, so `#e#x1.00000000000000001` is
+  exact (it was the float64 1), and `parser.ParseRealFloatStringWithBase` in
+  base 2 or 8 refuses an `e` exponent (it read `"1e100"` as a binary mantissa).
+
 - **BREAKING (Go API): a later import of a library whose body exited through a
   continuation or an abort fails with the new `werr.ErrLibraryInstantiationEscaped`,
   not `werr.ErrContinuationBarrier`.** The body runs once and its exit is

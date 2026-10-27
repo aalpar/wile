@@ -800,12 +800,13 @@ numeral (see "A related consequence" below), with its own message. `#z1/2`,
 `#m1/2`, `#m2+3i`, `#z12abc` and `#z1'a` are read errors; they used to read as
 two data (`(#m2+3i)` was the list `(2.0l0 0+3i)`).
 
-**`#m`'s precision is the value's, not the literal's.** `#m1.2345678901234567890123456789`
-keeps every digit, because it is one token the BigFloat reader sees whole.
-`#m#d1.2345678901234567890123456789` goes through the introducer path, so it
-widens an already-rounded `float64`. For arbitrary precision use the unprefixed
-decimal spelling or the `l` marker (see below); `#m` over a prefixed datum is a
-type coercion.
+**`#m` is always 256 bits, and widens the value, not the spelling.**
+`#m1.2345678901234567890123456789` is one token the BigFloat reader sees whole,
+so its digits round once, at 256 bits. `#m#d1.2345678901234567890123456789` goes
+through the introducer path, so it widens an already-rounded `float64`; `#m` over
+a prefixed datum is a type coercion. Every reader `BigFloat` (`#m`, the `l`
+marker, a decimal past float64 range) is 256 bits whatever its length, so a
+longer literal, or `#m` of a wider exact, rounds (`docs/numeric/tower.md`).
 
 **Note:** R7RS requires implementations to support arbitrarily large exact integers (§6.2.3). Wile satisfies this via automatic overflow promotion from `Integer` (int64) to `BigInteger` — the `#z` prefix is a convenience for explicit construction, not a conformance requirement. Standard R7RS programs never need `#z` or `#m`.
 

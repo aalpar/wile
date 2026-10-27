@@ -18,63 +18,39 @@ import (
 	"math"
 	"math/big"
 	"math/rand"
+	"strconv"
 	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 )
 
-func TestDecimalLiteralPrecision(t *testing.T) {
-	tcs := []struct {
-		in   string
-		want uint
-	}{
-		{"1.5", DefaultBigFloatPrecision},
-		{"1e400", DefaultBigFloatPrecision},
-		{"0." + strings.Repeat("0", 200) + "1", DefaultBigFloatPrecision},
-		{strings.Repeat("7", 100), 334},
-		{"1." + strings.Repeat("0", 5000), DefaultBigFloatPrecision},
-		{"1" + strings.Repeat("0", 300), 1001},
-		{"-1." + strings.Repeat("7", 99) + "e5", 334},
-	}
-	for _, tc := range tcs {
-		t.Run(tc.in[:min(len(tc.in), 20)], func(t *testing.T) {
-			c := qt.New(t)
-			c.Assert(decimalLiteralPrecision(tc.in), qt.Equals, tc.want)
-		})
-	}
-}
-
-// TestDecimalLiteralPrecisionIntegersAreExact checks the formula against the
-// oracle rather than a constant: an n-digit integer must parse exactly.
-func TestDecimalLiteralPrecisionIntegersAreExact(t *testing.T) {
-	c := qt.New(t)
-	for n := 1; n <= 2000; n++ {
-		s := strings.Repeat("9", n)
-		want, _ := new(big.Int).SetString(s, 10)
-		got, acc := NewBigFloatFromString(s).BigFloatValue().Int(nil)
-		c.Assert(acc, qt.Equals, big.Exact, qt.Commentf("n=%d", n))
-		c.Assert(got.Cmp(want), qt.Equals, 0, qt.Commentf("n=%d", n))
-	}
-}
-
-// TestLongDecimalFractionRoundTrips pins the Matula margin: fractions with a
-// leading 8 or 9 fail a +1 bound for some digit strings.
-func TestLongDecimalFractionRoundTrips(t *testing.T) {
+// TestBigFloatFromStringIsFixedPrecisionAndRoundTrips pins the fixed precision
+// class: a decimal string of any length and exponent reads at
+// DefaultBigFloatPrecision, and the writer's shortest digits (Text('g', -1))
+// read back as the same value. A precision derived from the digit count broke
+// the second half: the 256-bit value of a long literal printed with ~78
+// digits, which read back at ~260 bits as a different value.
+func TestBigFloatFromStringIsFixedPrecisionAndRoundTrips(t *testing.T) {
 	rng := rand.New(rand.NewSource(192))
-	for n := 78; n <= 130; n++ {
-		for range 60 {
+	// Text('g', -1) is slow on a five-digit exponent, so the sample is sparse.
+	for n := 2; n <= 130; n += 4 {
+		for range 2 {
 			var b strings.Builder
-			b.WriteByte(byte('8' + rng.Intn(2)))
+			b.WriteByte(byte('1' + rng.Intn(9)))
 			b.WriteByte('.')
-			for j := 1; j < n-1; j++ {
+			for j := 1; j < n; j++ {
 				b.WriteByte(byte('0' + rng.Intn(10)))
 			}
-			b.WriteByte(byte('1' + rng.Intn(9)))
+			b.WriteString("e" + strconv.Itoa(rng.Intn(40001)-20000))
 			in := b.String()
-			got := NewBigFloatFromString(in).value.Text('g', -1)
-			if got != in {
-				t.Fatalf("n=%d: %s read back as %s", n, in, got)
+			x := NewBigFloatFromString(in)
+			if x.value.Prec() != DefaultBigFloatPrecision {
+				t.Fatalf("n=%d: %s read at %d bits", n, in, x.value.Prec())
+			}
+			written := x.value.Text('g', -1)
+			if NewBigFloatFromString(written).value.Cmp(x.value) != 0 {
+				t.Fatalf("n=%d: %s wrote as %s, which reads back as another value", n, in, written)
 			}
 		}
 	}

@@ -41,20 +41,10 @@
     (test 1.7320508075688772935274463415058723669428052538103806280558069794519330169088l0
           (imag-part (sqrt #m-3)))))
 
-;; A 120-significant-digit literal is wider than the default 256 bits. Both arms
-;; must keep the operand's precision: a result rounded to the default differs
-;; from the golden text, and a negative arm that delegated to the BigComplex
-;; square root would differ from the positive arm.
-(test-group "wider than the default precision"
-  (with-exact-comparison
-    (test "1.4572085605747537190458491165921673542867757439927436248464565622923209398775715433421430030375202786347858342742204472055l0"
-          (number->string (sqrt #m2.123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890)))
-    (test (sqrt #m2.123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890)
-          (imag-part (sqrt #m-2.123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890)))))
-
-;; A non-square BigInteger or Rational root is a BigFloat: a Rational's at the
-;; default 256 bits, a BigInteger's at the default or at its bit length when
-;; that is wider. Neither arm goes through float64, where 10^400 overflows.
+;; A non-square BigInteger or Rational root is a BigFloat at the default 256
+;; bits, whatever the operand's width, so it survives write/read. Neither arm
+;; goes through float64, where 10^400 overflows. A BigFloat wider than 256 bits
+;; cannot be read, so the operand-precision rows are Go's (TestSqrtBigFloat).
 ;; racket and petite agree on the leading digits.
 (test-group "unbounded exact operands"
   (with-exact-comparison
@@ -63,7 +53,9 @@
     (test 1l-200 (sqrt (/ 1 (+ 1 (expt 10 400)))))
     (test #m0 (real-part (sqrt (- 1 (expt 10 400)))))
     (test (sqrt (- (expt 10 400) 1)) (imag-part (sqrt (- 1 (expt 10 400)))))
-    (test (sqrt 2/3) (imag-part (sqrt -2/3)))))
+    (test (sqrt 2/3) (imag-part (sqrt -2/3)))
+    (let ((r (sqrt (+ 3 (expt 10 401)))))
+      (test r (string->number (number->string r))))))
 
 (test-group "non-finite"
   (with-exact-comparison

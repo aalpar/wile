@@ -99,7 +99,8 @@ func TestReadSyntaxExponentMarkerPrecision(t *testing.T) {
 // TestReadSyntaxLongPrecisionMarkerPreservesDigits is the discriminator behind
 // the type split: l has to buy actual precision, not just a different type tag.
 // The same mantissa is read twice, once with d and once with l, and the two
-// must disagree — d rounds to the nearest float64, l keeps every digit.
+// must disagree: d rounds to the nearest float64, l to 256 bits, which keeps
+// all 29 digits.
 //
 // Without this, an implementation that routed l to BigFloat *after* parsing
 // through float64 would satisfy TestReadSyntaxExponentMarkerPrecision while
@@ -123,7 +124,7 @@ func TestReadSyntaxLongPrecisionMarkerPreservesDigits(t *testing.T) {
 	c.Assert(bf.BigFloatValue().Cmp(want), qt.Equals, 0,
 		qt.Commentf("long precision must keep the digits as written: got %v, want %v", bf.BigFloatValue(), want))
 
-	// The double-precision twin must still round, or "l keeps every digit" is
+	// The double-precision twin must still round, or "l keeps the digits" is
 	// not saying anything about l.
 	dblEnv := environment.NewNamespace().Runtime()
 	dblSyn, err := NewParser(dblEnv, true, strings.NewReader(mantissa+"d0")).ReadSyntax(context.TODO())
@@ -191,14 +192,16 @@ func TestBigFloatWriteReadRoundTrip(t *testing.T) {
 		"1.2345678901234567890123456789",
 	}
 
-	// Values the reader's text-derived precision would not reproduce if it
-	// counted an exponent: a 256-bit power of ten writes as 1l+k, which must read
-	// back as the same 256-bit neighbour, not as exact 10^k.
+	// A 256-bit power of ten writes as 1l+k, which must read back as the same
+	// 256-bit neighbour, not as exact 10^k.
 	ten := func(k int64) *values.BigFloat {
 		n := new(big.Int).Exp(big.NewInt(10), big.NewInt(k), nil)
 		return values.NewBigFloat(new(big.Float).SetPrec(values.DefaultBigFloatPrecision).SetInt(n))
 	}
-	built := map[string]*values.BigFloat{"256-bit 10^120": ten(120), "256-bit 10^400": ten(400)}
+	// The 256-bit 1/3 writes 81 digits; a reader deriving precision from the
+	// digit count read them back at 271 bits as another value.
+	third := values.NewBigFloat(new(big.Float).SetPrec(values.DefaultBigFloatPrecision).Quo(big.NewFloat(1), big.NewFloat(3)))
+	built := map[string]*values.BigFloat{"256-bit 10^120": ten(120), "256-bit 10^400": ten(400), "256-bit 1/3": third}
 	for _, tc := range tcs {
 		built[tc] = values.NewBigFloatFromString(tc)
 	}
@@ -220,6 +223,8 @@ func TestBigFloatWriteReadRoundTrip(t *testing.T) {
 			c.Assert(ok, qt.IsTrue, qt.Commentf("round trip through %q: expected BigFloat, got %T: %v", written, got, got))
 			c.Assert(back.BigFloatValue().Cmp(bf.BigFloatValue()), qt.Equals, 0,
 				qt.Commentf("round trip through %q changed the value", written))
+			c.Assert(back.BigFloatValue().Prec(), qt.Equals, bf.BigFloatValue().Prec(),
+				qt.Commentf("round trip through %q changed the precision", written))
 		})
 	}
 }
